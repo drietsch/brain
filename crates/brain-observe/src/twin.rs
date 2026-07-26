@@ -204,9 +204,188 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
         if !bindings.is_empty() {
             store.bind_many(bindings)?;
         }
+
+        // Record the totals series on the repo entity: files/symbols/relations
+        // over time, guarded so an unchanged codebase writes nothing. This is
+        // what makes insights *continuous* — trends persist in the graph and
+        // travel with replication.
+        let mut post = MemIndex::new();
+        replay(store, &mut post)?;
+        let ins = insights_with(store, &post, prefix)?;
+        let totals = [
+            ("files_present", ins.files),
+            ("symbols_total", ins.symbols),
+            ("relations_total", ins.relations),
+        ];
+        let mut any_changed = false;
+        for (prop, value) in totals {
+            if latest(&post, store, &repo_sid, prop)?.as_deref() != Some(value.to_string().as_str())
+            {
+                any_changed = true;
+            }
+        }
+        // Write all three together so every series point is complete.
+        if any_changed {
+            for (prop, value) in totals {
+                observe(store, &repo_sid, prop, &value.to_string(), now)?;
+            }
+        }
     }
 
     Ok(report)
+}
+
+// ---------------------------------------------------------------------------
+// Insights: a synthesized picture of the software under a twin prefix
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Default)]
+pub struct Insights {
+    pub files: usize,
+    pub deleted_files: usize,
+    pub symbols: usize,
+    pub relations: usize,
+    /// External dependencies (unresolved imports): (module, importer count).
+    pub external_modules: Vec<(String, usize)>,
+    /// Most-edited files since twinning: (path, observed versions > 1).
+    pub churn: Vec<(String, usize)>,
+    /// Most-imported files: (path, importer count).
+    pub hubs: Vec<(String, usize)>,
+    /// Largest files by declared symbols: (path, symbol count).
+    pub largest: Vec<(String, usize)>,
+    /// Most recent agent notes: (at_ms, entity path, text), newest first.
+    pub notes: Vec<(u64, String, String)>,
+    pub git_commit: Option<String>,
+    pub git_branch: Option<String>,
+    /// Growth series from the repo entity, oldest first: (at_ms, files,
+    /// symbols, relations) — one point per refresh that changed the totals.
+    pub series: Vec<(u64, usize, usize, usize)>,
+}
+
+const TOP: usize = 5;
+
+pub fn insights(store: &Store, prefix: &str) -> Result<Insights, StoreError> {
+    let mut index = MemIndex::new();
+    replay(store, &mut index)?;
+    insights_with(store, &index, prefix)
+}
+
+pub fn insights_with(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+) -> Result<Insights, StoreError> {
+    let mut ins = Insights::default();
+    let ns = store.namespace()?;
+    let mut file_sids: Vec<(String, StableId)> = Vec::new();
+
+    for (name, node) in &ns {
+        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
+        if let Ok(Object::Entity { id, entity_kind, .. }) = store.get(node) {
+            if entity_kind == "source_file" {
+                file_sids.push((rel.to_string(), id));
+            }
+        }
+    }
+
+    let mut churn: Vec<(String, usize)> = Vec::new();
+    let mut hubs: Vec<(String, usize)> = Vec::new();
+    let mut largest: Vec<(String, usize)> = Vec::new();
+    let mut modules: BTreeMap<String, usize> = BTreeMap::new();
+
+    for (rel, sid) in &file_sids {
+        if latest(index, store, sid, "present")?.as_deref() == Some("false") {
+            ins.deleted_files += 1;
+            continue;
+        }
+        ins.files += 1;
+
+        let versions = index
+            .observations_of(sid)
+            .iter()
+            .filter_map(|id| store.get(id).ok())
+            .filter(|o| matches!(o, Object::Observation { property, .. } if property == "content_b3"))
+            .count();
+        if versions > 1 {
+            churn.push((rel.clone(), versions));
+        }
+
+        let contains = index.relations_from(sid, "contains").len();
+        ins.relations += contains;
+        if contains > 0 {
+            largest.push((rel.clone(), contains));
+        }
+        ins.symbols += contains;
+
+        let importers = index.relations_to(sid, "imports").len();
+        if importers > 0 {
+            hubs.push((rel.clone(), importers));
+        }
+
+        for id in index.relations_from(sid, "imports") {
+            ins.relations += 1;
+            if let Object::Relation { to, .. } = store.get(&id)? {
+                for node in index.entity_nodes(&to) {
+                    if let Ok(Object::Entity { entity_kind, labels, .. }) = store.get(&node) {
+                        if entity_kind == "module" {
+                            let name = labels.get("name").cloned().unwrap_or_default();
+                            *modules.entry(name).or_default() += 1;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    let top = |mut v: Vec<(String, usize)>| {
+        v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        v.truncate(TOP);
+        v
+    };
+    ins.churn = top(churn);
+    ins.hubs = top(hubs);
+    ins.largest = top(largest);
+    ins.external_modules = top(modules.into_iter().collect());
+
+    // Notes across all twinned files plus the repo entity, newest first.
+    let repo_sid = StableId::derive(&["repo", prefix]);
+    let mut note_subjects = file_sids.clone();
+    note_subjects.push((prefix.to_string(), repo_sid.clone()));
+    let mut all_notes: Vec<(u64, String, String)> = Vec::new();
+    for (rel, sid) in &note_subjects {
+        for (at, text) in notes(index, store, sid)? {
+            all_notes.push((at, rel.clone(), text));
+        }
+    }
+    all_notes.sort_by(|a, b| b.0.cmp(&a.0));
+    all_notes.truncate(TOP);
+    ins.notes = all_notes;
+
+    ins.git_commit = latest(index, store, &repo_sid, "git_commit")?;
+    ins.git_branch = latest(index, store, &repo_sid, "git_branch")?;
+
+    // Growth series: pair up the repo entity's totals observations by time.
+    let mut points: BTreeMap<u64, (usize, usize, usize)> = BTreeMap::new();
+    for id in index.observations_of(&repo_sid) {
+        if let Object::Observation { property, value, observed_at_ms, .. } = store.get(&id)? {
+            let Ok(n) = value.parse::<usize>() else { continue };
+            let point = points.entry(observed_at_ms).or_insert((0, 0, 0));
+            match property.as_str() {
+                "files_present" => point.0 = n,
+                "symbols_total" => point.1 = n,
+                "relations_total" => point.2 = n,
+                _ => {}
+            }
+        }
+    }
+    ins.series = points
+        .into_iter()
+        .filter(|(_, (f, s, r))| *f + *s + *r > 0)
+        .map(|(at, (f, s, r))| (at, f, s, r))
+        .collect();
+
+    Ok(ins)
 }
 
 fn observe(
@@ -544,6 +723,54 @@ mod tests {
             latest(&index, &store, &util, "present").unwrap().as_deref(),
             Some("true")
         );
+    }
+
+    #[test]
+    fn insights_synthesize_churn_hubs_and_growth_series() {
+        let (src, store_dir) = fixture();
+        let store = Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        let ins = insights(&store, "twin/app").unwrap();
+        assert_eq!(ins.files, 6);
+        assert_eq!(ins.deleted_files, 0);
+        assert!(ins.symbols >= 8);
+        assert!(ins.external_modules.iter().any(|(m, _)| m == "os"));
+        // app.js imports util.js; main.rs imports util.rs -> both are hubs.
+        assert!(ins.hubs.iter().any(|(f, n)| f == "web/util.js" && *n == 1));
+        assert!(ins.hubs.iter().any(|(f, n)| f == "src/util.rs" && *n == 1));
+        assert!(ins.churn.is_empty(), "nothing edited yet");
+        assert_eq!(ins.series.len(), 1, "first totals point recorded");
+
+        // Edit a file twice across refreshes: churn appears, series grows.
+        fs::write(src.path().join("run.py"), "import os\ndef main():\n    return 1\n").unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        fs::write(
+            src.path().join("run.py"),
+            "import os\ndef main():\n    return 2\ndef extra():\n    pass\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(
+            ins.churn.iter().any(|(f, n)| f == "run.py" && *n == 3),
+            "churn should count content versions: {:?}",
+            ins.churn
+        );
+        assert!(ins.series.len() >= 2, "symbol growth adds a series point");
+
+        // Idempotent refresh adds no series point.
+        let points = ins.series.len();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert_eq!(ins.series.len(), points);
+
+        // Notes surface in insights.
+        let sid = StableId::derive(&["file", "run.py"]);
+        add_note(&store, &sid, "agent: rewrote main twice while iterating").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.notes.iter().any(|(_, e, t)| e == "run.py" && t.contains("rewrote")));
     }
 
     #[test]

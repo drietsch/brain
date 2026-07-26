@@ -29,6 +29,8 @@ cargo run -p brain-cli -- twin refresh . --prefix twin/self   # the brain twins 
 cargo run -p brain-cli -- twin symbols twin/self/crates/brain-core/src/object.rs
 cargo run -p brain-cli -- twin rdeps twin/self/crates/brain-observe/src/symbols.rs
 cargo run -p brain-cli -- note twin/self/README.md "docs entry point"
+cargo run -p brain-cli -- twin insights twin/self   # churn, hubs, growth, notes
+scripts/twin_watch.sh . twin/self 60               # continuous refresh + insights
 cargo run -p brain-cli -- status
 cargo run -p brain-cli -- names
 cargo run -p brain-cli -- refs demo/answer            # reverse edges

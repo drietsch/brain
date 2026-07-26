@@ -35,6 +35,7 @@ fn usage() -> &'static str {
        brain twin files <prefix>                 twinned files with freshness\n\
        brain twin symbols|imports|rdeps <name>   structure queries on a twinned file\n\
        brain twin search <substring>             find twinned entities by name\n\
+       brain twin insights <prefix>              synthesized picture: churn, hubs, growth\n\
        brain note <name> <text...>        attach a durable note to an entity\n\
        brain notes <name>                 read an entity's notes\n\
        brain ingest <dir> [--prefix <p>]  alias for twin refresh\n\
@@ -344,7 +345,7 @@ fn entity_label(store: &Store, index: &MemIndex, sid: &brain_core::ids::StableId
 }
 
 fn cmd_twin(args: &[String]) -> Result<(), String> {
-    let usage = "usage: brain twin refresh|status|files|symbols|imports|rdeps|search ...";
+    let usage = "usage: brain twin refresh|status|files|symbols|imports|rdeps|search|insights ...";
     match args.first().map(String::as_str) {
         Some("refresh") => cmd_twin_refresh(&args[1..], true),
         Some("status") => cmd_twin_refresh(&args[1..], false),
@@ -420,6 +421,47 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             }
             for from in froms {
                 println!("{}", entity_label(&store, &index, &from));
+            }
+            Ok(())
+        }
+        Some("insights") => {
+            let prefix = args.get(1).ok_or("usage: brain twin insights <prefix>")?;
+            let store = open_store()?;
+            let ins = brain_observe::twin::insights(&store, prefix).map_err(|e| e.to_string())?;
+            let now = now_ms();
+            println!("== twin insights: {prefix} ==");
+            println!(
+                "files: {} present, {} deleted   symbols: {}   relations: {}",
+                ins.files, ins.deleted_files, ins.symbols, ins.relations
+            );
+            if let (Some(branch), Some(commit)) = (&ins.git_branch, &ins.git_commit) {
+                println!("git: {branch} @ {}", &commit[..commit.len().min(12)]);
+            }
+            let list = |title: &str, items: &[(String, usize)], unit: &str| {
+                if !items.is_empty() {
+                    println!("{title}:");
+                    for (name, n) in items {
+                        println!("  {n:>4} {unit}  {name}");
+                    }
+                }
+            };
+            list("churn (most edited)", &ins.churn, "versions");
+            list("hubs (most imported)", &ins.hubs, "importers");
+            list("largest (symbols declared)", &ins.largest, "symbols");
+            list("external deps (unresolved imports)", &ins.external_modules, "uses");
+            if !ins.notes.is_empty() {
+                println!("recent notes:");
+                for (at, entity, text) in &ins.notes {
+                    let age = now.saturating_sub(*at) / 1000;
+                    println!("  [{age}s ago] {entity}: {text}");
+                }
+            }
+            if ins.series.len() > 1 {
+                println!("growth (files/symbols/relations over refreshes):");
+                for (at, f, s, r) in &ins.series {
+                    let age = now.saturating_sub(*at) / 1000;
+                    println!("  -{age:>6}s  {f} files  {s} symbols  {r} relations");
+                }
             }
             Ok(())
         }

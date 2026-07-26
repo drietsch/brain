@@ -92,6 +92,31 @@ is agents recording what they learned (*"this module is the entry point"*,
 *"tests here are flaky because of X"*) so the next session starts oriented
 instead of from zero.
 
+## Continuous insights
+
+`brain twin insights <prefix>` synthesizes the twin into a picture of the
+software — built for watching what agents build:
+
+- **Churn**: most-edited files since twinning (content versions observed) —
+  where agent activity concentrates.
+- **Hubs**: most-imported files — where a change has the widest blast radius.
+- **Largest**: most symbols declared — complexity concentrations.
+- **External deps**: unresolved imports tallied by use.
+- **Recent notes**: the memory agents left behind, newest first.
+- **Growth series**: files/symbols/relations over time. Every refresh that
+  changes the totals records one complete series point on the repo entity —
+  so trends are graph objects: they persist, replicate with `brain pull`,
+  and are queryable like everything else (`brain observations <prefix>`).
+
+For true continuity, run the loop beside your agent sessions:
+
+```bash
+scripts/twin_watch.sh . twin/self 60   # refresh + insights every 60s
+```
+
+or wire `brain twin refresh` into a git post-commit hook / session-start
+hook and read `brain twin insights` whenever you want the picture.
+
 ## Relation to the founding architecture
 
 The twin is the "describe → observe" half of the adoption gradient in
