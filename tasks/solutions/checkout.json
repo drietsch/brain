@@ -1,0 +1,142 @@
+{
+  "op": "lam",
+  "param": "cart",
+  "body": {
+    "op": "let",
+    "name": "s1",
+    "value": {
+      "op": "foreign",
+      "symbol": "core/mul",
+      "arg": {
+        "op": "record",
+        "fields": {
+          "a": { "op": "field", "record": { "op": "field", "record": { "op": "var", "name": "cart" }, "field": "i1" }, "field": "qty" },
+          "b": { "op": "field", "record": { "op": "field", "record": { "op": "var", "name": "cart" }, "field": "i1" }, "field": "price" }
+        }
+      }
+    },
+    "body": {
+      "op": "let",
+      "name": "s2",
+      "value": {
+        "op": "foreign",
+        "symbol": "core/mul",
+        "arg": {
+          "op": "record",
+          "fields": {
+            "a": { "op": "field", "record": { "op": "field", "record": { "op": "var", "name": "cart" }, "field": "i2" }, "field": "qty" },
+            "b": { "op": "field", "record": { "op": "field", "record": { "op": "var", "name": "cart" }, "field": "i2" }, "field": "price" }
+          }
+        }
+      },
+      "body": {
+        "op": "let",
+        "name": "s3",
+        "value": {
+          "op": "foreign",
+          "symbol": "core/mul",
+          "arg": {
+            "op": "record",
+            "fields": {
+              "a": { "op": "field", "record": { "op": "field", "record": { "op": "var", "name": "cart" }, "field": "i3" }, "field": "qty" },
+              "b": { "op": "field", "record": { "op": "field", "record": { "op": "var", "name": "cart" }, "field": "i3" }, "field": "price" }
+            }
+          }
+        },
+        "body": {
+          "op": "let",
+          "name": "subtotal",
+          "value": {
+            "op": "foreign",
+            "symbol": "core/add",
+            "arg": {
+              "op": "record",
+              "fields": {
+                "a": {
+                  "op": "foreign",
+                  "symbol": "core/add",
+                  "arg": {
+                    "op": "record",
+                    "fields": {
+                      "a": { "op": "var", "name": "s1" },
+                      "b": { "op": "var", "name": "s2" }
+                    }
+                  }
+                },
+                "b": { "op": "var", "name": "s3" }
+              }
+            }
+          },
+          "body": {
+            "op": "let",
+            "name": "after",
+            "value": {
+              "op": "foreign",
+              "symbol": "core/if",
+              "arg": {
+                "op": "record",
+                "fields": {
+                  "cond": {
+                    "op": "foreign",
+                    "symbol": "core/lt",
+                    "arg": {
+                      "op": "record",
+                      "fields": {
+                        "a": { "op": "var", "name": "subtotal" },
+                        "b": { "op": "lit", "value": { "type": "int", "value": 100 } }
+                      }
+                    }
+                  },
+                  "then": { "op": "var", "name": "subtotal" },
+                  "else": {
+                    "op": "foreign",
+                    "symbol": "core/sub",
+                    "arg": {
+                      "op": "record",
+                      "fields": {
+                        "a": { "op": "var", "name": "subtotal" },
+                        "b": { "op": "lit", "value": { "type": "int", "value": 10 } }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "body": {
+              "op": "foreign",
+              "symbol": "core/if",
+              "arg": {
+                "op": "record",
+                "fields": {
+                  "cond": {
+                    "op": "foreign",
+                    "symbol": "core/lt",
+                    "arg": {
+                      "op": "record",
+                      "fields": {
+                        "a": { "op": "var", "name": "after" },
+                        "b": { "op": "lit", "value": { "type": "int", "value": 50 } }
+                      }
+                    }
+                  },
+                  "then": {
+                    "op": "foreign",
+                    "symbol": "core/add",
+                    "arg": {
+                      "op": "record",
+                      "fields": {
+                        "a": { "op": "var", "name": "after" },
+                        "b": { "op": "lit", "value": { "type": "int", "value": 5 } }
+                      }
+                    }
+                  },
+                  "else": { "op": "var", "name": "after" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

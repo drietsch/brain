@@ -1,0 +1,209 @@
+{
+  "op": "lam",
+  "param": "date",
+  "body": {
+    "op": "let",
+    "name": "m",
+    "value": { "op": "field", "record": { "op": "var", "name": "date" }, "field": "m" },
+    "body": {
+      "op": "let",
+      "name": "d",
+      "value": { "op": "field", "record": { "op": "var", "name": "date" }, "field": "d" },
+      "body": {
+        "op": "let",
+        "name": "days",
+        "value": {
+          "op": "foreign",
+          "symbol": "core/if",
+          "arg": {
+            "op": "record",
+            "fields": {
+              "cond": {
+                "op": "foreign",
+                "symbol": "core/eq",
+                "arg": {
+                  "op": "record",
+                  "fields": {
+                    "a": { "op": "var", "name": "m" },
+                    "b": { "op": "lit", "value": { "type": "int", "value": 2 } }
+                  }
+                }
+              },
+              "then": { "op": "lit", "value": { "type": "int", "value": 28 } },
+              "else": {
+                "op": "foreign",
+                "symbol": "core/if",
+                "arg": {
+                  "op": "record",
+                  "fields": {
+                    "cond": {
+                      "op": "foreign",
+                      "symbol": "core/eq",
+                      "arg": {
+                        "op": "record",
+                        "fields": {
+                          "a": { "op": "var", "name": "m" },
+                          "b": { "op": "lit", "value": { "type": "int", "value": 4 } }
+                        }
+                      }
+                    },
+                    "then": { "op": "lit", "value": { "type": "int", "value": 30 } },
+                    "else": {
+                      "op": "foreign",
+                      "symbol": "core/if",
+                      "arg": {
+                        "op": "record",
+                        "fields": {
+                          "cond": {
+                            "op": "foreign",
+                            "symbol": "core/eq",
+                            "arg": {
+                              "op": "record",
+                              "fields": {
+                                "a": { "op": "var", "name": "m" },
+                                "b": { "op": "lit", "value": { "type": "int", "value": 6 } }
+                              }
+                            }
+                          },
+                          "then": { "op": "lit", "value": { "type": "int", "value": 30 } },
+                          "else": {
+                            "op": "foreign",
+                            "symbol": "core/if",
+                            "arg": {
+                              "op": "record",
+                              "fields": {
+                                "cond": {
+                                  "op": "foreign",
+                                  "symbol": "core/eq",
+                                  "arg": {
+                                    "op": "record",
+                                    "fields": {
+                                      "a": { "op": "var", "name": "m" },
+                                      "b": { "op": "lit", "value": { "type": "int", "value": 9 } }
+                                    }
+                                  }
+                                },
+                                "then": { "op": "lit", "value": { "type": "int", "value": 30 } },
+                                "else": {
+                                  "op": "foreign",
+                                  "symbol": "core/if",
+                                  "arg": {
+                                    "op": "record",
+                                    "fields": {
+                                      "cond": {
+                                        "op": "foreign",
+                                        "symbol": "core/eq",
+                                        "arg": {
+                                          "op": "record",
+                                          "fields": {
+                                            "a": { "op": "var", "name": "m" },
+                                            "b": { "op": "lit", "value": { "type": "int", "value": 11 } }
+                                          }
+                                        }
+                                      },
+                                      "then": { "op": "lit", "value": { "type": "int", "value": 30 } },
+                                      "else": { "op": "lit", "value": { "type": "int", "value": 31 } }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "body": {
+          "op": "foreign",
+          "symbol": "core/if",
+          "arg": {
+            "op": "record",
+            "fields": {
+              "cond": {
+                "op": "foreign",
+                "symbol": "core/lt",
+                "arg": {
+                  "op": "record",
+                  "fields": {
+                    "a": { "op": "var", "name": "m" },
+                    "b": { "op": "lit", "value": { "type": "int", "value": 1 } }
+                  }
+                }
+              },
+              "then": { "op": "lit", "value": { "type": "bool", "value": false } },
+              "else": {
+                "op": "foreign",
+                "symbol": "core/if",
+                "arg": {
+                  "op": "record",
+                  "fields": {
+                    "cond": {
+                      "op": "foreign",
+                      "symbol": "core/lt",
+                      "arg": {
+                        "op": "record",
+                        "fields": {
+                          "a": { "op": "lit", "value": { "type": "int", "value": 12 } },
+                          "b": { "op": "var", "name": "m" }
+                        }
+                      }
+                    },
+                    "then": { "op": "lit", "value": { "type": "bool", "value": false } },
+                    "else": {
+                      "op": "foreign",
+                      "symbol": "core/if",
+                      "arg": {
+                        "op": "record",
+                        "fields": {
+                          "cond": {
+                            "op": "foreign",
+                            "symbol": "core/lt",
+                            "arg": {
+                              "op": "record",
+                              "fields": {
+                                "a": { "op": "var", "name": "d" },
+                                "b": { "op": "lit", "value": { "type": "int", "value": 1 } }
+                              }
+                            }
+                          },
+                          "then": { "op": "lit", "value": { "type": "bool", "value": false } },
+                          "else": {
+                            "op": "foreign",
+                            "symbol": "core/if",
+                            "arg": {
+                              "op": "record",
+                              "fields": {
+                                "cond": {
+                                  "op": "foreign",
+                                  "symbol": "core/lt",
+                                  "arg": {
+                                    "op": "record",
+                                    "fields": {
+                                      "a": { "op": "var", "name": "days" },
+                                      "b": { "op": "var", "name": "d" }
+                                    }
+                                  }
+                                },
+                                "then": { "op": "lit", "value": { "type": "bool", "value": false } },
+                                "else": { "op": "lit", "value": { "type": "bool", "value": true } }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

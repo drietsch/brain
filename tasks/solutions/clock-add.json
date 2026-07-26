@@ -1,0 +1,99 @@
+{
+  "op": "lam",
+  "param": "clock",
+  "body": {
+    "op": "let",
+    "name": "m2",
+    "value": {
+      "op": "foreign",
+      "symbol": "core/add",
+      "arg": {
+        "op": "record",
+        "fields": {
+          "a": { "op": "field", "record": { "op": "var", "name": "clock" }, "field": "m" },
+          "b": { "op": "field", "record": { "op": "var", "name": "clock" }, "field": "add" }
+        }
+      }
+    },
+    "body": {
+      "op": "foreign",
+      "symbol": "core/if",
+      "arg": {
+        "op": "record",
+        "fields": {
+          "cond": {
+            "op": "foreign",
+            "symbol": "core/lt",
+            "arg": {
+              "op": "record",
+              "fields": {
+                "a": { "op": "var", "name": "m2" },
+                "b": { "op": "lit", "value": { "type": "int", "value": 60 } }
+              }
+            }
+          },
+          "then": {
+            "op": "record",
+            "fields": {
+              "h": { "op": "field", "record": { "op": "var", "name": "clock" }, "field": "h" },
+              "m": { "op": "var", "name": "m2" }
+            }
+          },
+          "else": {
+            "op": "let",
+            "name": "h2",
+            "value": {
+              "op": "foreign",
+              "symbol": "core/add",
+              "arg": {
+                "op": "record",
+                "fields": {
+                  "a": { "op": "field", "record": { "op": "var", "name": "clock" }, "field": "h" },
+                  "b": { "op": "lit", "value": { "type": "int", "value": 1 } }
+                }
+              }
+            },
+            "body": {
+              "op": "record",
+              "fields": {
+                "h": {
+                  "op": "foreign",
+                  "symbol": "core/if",
+                  "arg": {
+                    "op": "record",
+                    "fields": {
+                      "cond": {
+                        "op": "foreign",
+                        "symbol": "core/lt",
+                        "arg": {
+                          "op": "record",
+                          "fields": {
+                            "a": { "op": "var", "name": "h2" },
+                            "b": { "op": "lit", "value": { "type": "int", "value": 24 } }
+                          }
+                        }
+                      },
+                      "then": { "op": "var", "name": "h2" },
+                      "else": { "op": "lit", "value": { "type": "int", "value": 0 } }
+                    }
+                  }
+                },
+                "m": {
+                  "op": "foreign",
+                  "symbol": "core/sub",
+                  "arg": {
+                    "op": "record",
+                    "fields": {
+                      "a": { "op": "var", "name": "m2" },
+                      "b": { "op": "lit", "value": { "type": "int", "value": 60 } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

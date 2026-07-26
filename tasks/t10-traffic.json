@@ -1,0 +1,11 @@
+{
+  "name": "traffic",
+  "description": "A traffic light state machine. Input is a record {state, event}: state is a variant red|green|yellow (unit payloads), event is a variant tick|emergency (unit payloads). On emergency the next state is red regardless of current state. On tick the light cycles red -> green -> yellow -> red. Return the next state as a variant.",
+  "spec": { "input": "record{state: variant<red|green|yellow>, event: variant<tick|emergency>}", "output": "variant<red|green|yellow>" },
+  "cases": [
+    { "arg": { "state": { "$variant": "red", "payload": null }, "event": { "$variant": "tick", "payload": null } }, "expect": { "variant": "green", "payload": null } },
+    { "arg": { "state": { "$variant": "green", "payload": null }, "event": { "$variant": "tick", "payload": null } }, "expect": { "variant": "yellow", "payload": null } },
+    { "arg": { "state": { "$variant": "yellow", "payload": null }, "event": { "$variant": "tick", "payload": null } }, "expect": { "variant": "red", "payload": null } },
+    { "arg": { "state": { "$variant": "green", "payload": null }, "event": { "$variant": "emergency", "payload": null } }, "expect": { "variant": "red", "payload": null } }
+  ]
+}

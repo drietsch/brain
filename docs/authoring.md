@@ -90,6 +90,30 @@ protocol run by an agent that has never seen this repository, on tasks it has
 never seen — and at larger program sizes, where emission validity is likelier
 to degrade.
 
+## Run 2 — scaling to larger programs (2026-07-26)
+
+The corpus was extended with a size ladder — `t08`–`t13` plus one edit task
+with a large base — and the in-session coding agent authored all of them
+first-attempt (emissions in `runs/2026-07-26-coding-agent-large/`):
+
+| Task | Nodes | Shape exercised | Result |
+|---|---:|---|---|
+| traffic | 15 | nested match, variant construction | pass |
+| tax | 31 | 3-way piecewise arithmetic | pass |
+| clock-add | 37 | carry logic, record output | pass |
+| checkout | 59 | chained lets over nested records | pass |
+| checkout-promo (edit) | 59 | two-literal change in a 59-node base | pass, locality 0.886 |
+| valid-date | 73 | 10 nested conditionals, bool output | pass |
+| triangle | 92 | validation chain + classification, str output | pass |
+
+16/16 across both runs, zero repairs, with no validity degradation up to ~90
+nodes. Same caveat as Run 1 (subject = corpus author), plus one observation
+worth keeping: at this size the JSON encoding is punishing to write — the
+92-node triangle term is ~250 lines of JSON for what a text syntax would say
+in 10. Emission *validity* did not degrade, but the verbosity cost is real
+and is the first concrete data point for the Stage 3 question of whether the
+wire encoding should stay JSON or move to something denser.
+
 ## Task format
 
 ```json

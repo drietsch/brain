@@ -1,0 +1,12 @@
+{
+  "name": "tax",
+  "description": "Progressive fee on an integer income: the first 10 units are free; units from 10 up to (but not including) 50 cost 2 each; units from 50 upward cost 3 each. Examples: income 30 pays (30-10)*2 = 40; income 60 pays 40*2 + 10*3 = 110.",
+  "spec": { "input": "int", "output": "int" },
+  "cases": [
+    { "arg": 5, "expect": 0 },
+    { "arg": 10, "expect": 0 },
+    { "arg": 30, "expect": 40 },
+    { "arg": 50, "expect": 80 },
+    { "arg": 60, "expect": 110 }
+  ]
+}

@@ -143,6 +143,20 @@ def check(task_path: pathlib.Path, term_path: pathlib.Path) -> tuple[bool, str]:
     return proc.returncode == 0, (proc.stdout + proc.stderr).strip()
 
 
+def term_nodes(term) -> int:
+    """Number of calculus nodes (dicts with an "op") in a term — the size ladder."""
+    n = 0
+    if isinstance(term, dict):
+        if "op" in term:
+            n += 1
+        for v in term.values():
+            n += term_nodes(v)
+    elif isinstance(term, list):
+        for v in term:
+            n += term_nodes(v)
+    return n
+
+
 def subtree_multiset(term) -> Counter:
     """Multiset of canonicalized subtrees, for the edit-locality heuristic."""
     out: Counter = Counter()
@@ -274,6 +288,7 @@ def main() -> int:
         try:
             parsed = json.loads(extract_json(text))
             row["valid_json"] = True
+            row["term_nodes"] = term_nodes(parsed)
         except json.JSONDecodeError as e:
             parsed = None
             row["detail"] = f"invalid JSON: {e}"

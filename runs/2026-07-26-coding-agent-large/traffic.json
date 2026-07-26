@@ -1,0 +1,51 @@
+{
+  "op": "lam",
+  "param": "input",
+  "body": {
+    "op": "match",
+    "scrutinee": { "op": "field", "record": { "op": "var", "name": "input" }, "field": "event" },
+    "arms": {
+      "emergency": {
+        "bind": "_",
+        "body": {
+          "op": "variant",
+          "tag": "red",
+          "payload": { "op": "lit", "value": { "type": "unit" } }
+        }
+      },
+      "tick": {
+        "bind": "_",
+        "body": {
+          "op": "match",
+          "scrutinee": { "op": "field", "record": { "op": "var", "name": "input" }, "field": "state" },
+          "arms": {
+            "red": {
+              "bind": "_",
+              "body": {
+                "op": "variant",
+                "tag": "green",
+                "payload": { "op": "lit", "value": { "type": "unit" } }
+              }
+            },
+            "green": {
+              "bind": "_",
+              "body": {
+                "op": "variant",
+                "tag": "yellow",
+                "payload": { "op": "lit", "value": { "type": "unit" } }
+              }
+            },
+            "yellow": {
+              "bind": "_",
+              "body": {
+                "op": "variant",
+                "tag": "red",
+                "payload": { "op": "lit", "value": { "type": "unit" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

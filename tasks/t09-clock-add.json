@@ -1,0 +1,11 @@
+{
+  "name": "clock-add",
+  "description": "Given a 24-hour clock time as a record {h, m} and a minute delta {add} between 0 and 59, return the new time as a record {h, m}, carrying minutes into hours and wrapping hour 24 to 0.",
+  "spec": { "input": "record{h: int, m: int, add: int}", "output": "record{h: int, m: int}" },
+  "cases": [
+    { "arg": { "h": 9, "m": 30, "add": 15 }, "expect": { "h": 9, "m": 45 } },
+    { "arg": { "h": 9, "m": 50, "add": 20 }, "expect": { "h": 10, "m": 10 } },
+    { "arg": { "h": 23, "m": 45, "add": 30 }, "expect": { "h": 0, "m": 15 } },
+    { "arg": { "h": 0, "m": 0, "add": 0 }, "expect": { "h": 0, "m": 0 } }
+  ]
+}

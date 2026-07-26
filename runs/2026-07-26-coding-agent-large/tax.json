@@ -1,0 +1,97 @@
+{
+  "op": "lam",
+  "param": "income",
+  "body": {
+    "op": "foreign",
+    "symbol": "core/if",
+    "arg": {
+      "op": "record",
+      "fields": {
+        "cond": {
+          "op": "foreign",
+          "symbol": "core/lt",
+          "arg": {
+            "op": "record",
+            "fields": {
+              "a": { "op": "var", "name": "income" },
+              "b": { "op": "lit", "value": { "type": "int", "value": 10 } }
+            }
+          }
+        },
+        "then": { "op": "lit", "value": { "type": "int", "value": 0 } },
+        "else": {
+          "op": "foreign",
+          "symbol": "core/if",
+          "arg": {
+            "op": "record",
+            "fields": {
+              "cond": {
+                "op": "foreign",
+                "symbol": "core/lt",
+                "arg": {
+                  "op": "record",
+                  "fields": {
+                    "a": { "op": "var", "name": "income" },
+                    "b": { "op": "lit", "value": { "type": "int", "value": 50 } }
+                  }
+                }
+              },
+              "then": {
+                "op": "foreign",
+                "symbol": "core/mul",
+                "arg": {
+                  "op": "record",
+                  "fields": {
+                    "a": {
+                      "op": "foreign",
+                      "symbol": "core/sub",
+                      "arg": {
+                        "op": "record",
+                        "fields": {
+                          "a": { "op": "var", "name": "income" },
+                          "b": { "op": "lit", "value": { "type": "int", "value": 10 } }
+                        }
+                      }
+                    },
+                    "b": { "op": "lit", "value": { "type": "int", "value": 2 } }
+                  }
+                }
+              },
+              "else": {
+                "op": "foreign",
+                "symbol": "core/add",
+                "arg": {
+                  "op": "record",
+                  "fields": {
+                    "a": { "op": "lit", "value": { "type": "int", "value": 80 } },
+                    "b": {
+                      "op": "foreign",
+                      "symbol": "core/mul",
+                      "arg": {
+                        "op": "record",
+                        "fields": {
+                          "a": {
+                            "op": "foreign",
+                            "symbol": "core/sub",
+                            "arg": {
+                              "op": "record",
+                              "fields": {
+                                "a": { "op": "var", "name": "income" },
+                                "b": { "op": "lit", "value": { "type": "int", "value": 50 } }
+                              }
+                            }
+                          },
+                          "b": { "op": "lit", "value": { "type": "int", "value": 3 } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

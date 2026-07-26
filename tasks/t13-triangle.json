@@ -1,0 +1,13 @@
+{
+  "name": "triangle",
+  "description": "Classify a triangle given side lengths as a record {a, b, c}. Return a string: \"invalid\" if any side is less than 1 or the sides violate the strict triangle inequality (each side must be less than the sum of the other two); otherwise \"equilateral\" (all sides equal), \"isosceles\" (exactly two sides equal), or \"scalene\" (all sides different).",
+  "spec": { "input": "record{a: int, b: int, c: int}", "output": "str" },
+  "cases": [
+    { "arg": { "a": 3, "b": 3, "c": 3 }, "expect": "equilateral" },
+    { "arg": { "a": 3, "b": 3, "c": 5 }, "expect": "isosceles" },
+    { "arg": { "a": 3, "b": 4, "c": 5 }, "expect": "scalene" },
+    { "arg": { "a": 1, "b": 2, "c": 10 }, "expect": "invalid" },
+    { "arg": { "a": 0, "b": 1, "c": 1 }, "expect": "invalid" },
+    { "arg": { "a": 5, "b": 3, "c": 3 }, "expect": "isosceles" }
+  ]
+}

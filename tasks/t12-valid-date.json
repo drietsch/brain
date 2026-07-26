@@ -1,0 +1,14 @@
+{
+  "name": "valid-date",
+  "description": "Given a record {y, m, d}, return a bool: whether it is a valid calendar date, ignoring leap years (February always has 28 days). Months 1-12; month lengths are the usual 31/30/28.",
+  "spec": { "input": "record{y: int, m: int, d: int}", "output": "bool" },
+  "cases": [
+    { "arg": { "y": 2026, "m": 7, "d": 26 }, "expect": true },
+    { "arg": { "y": 2026, "m": 2, "d": 29 }, "expect": false },
+    { "arg": { "y": 2026, "m": 2, "d": 28 }, "expect": true },
+    { "arg": { "y": 2026, "m": 13, "d": 1 }, "expect": false },
+    { "arg": { "y": 2026, "m": 4, "d": 31 }, "expect": false },
+    { "arg": { "y": 2026, "m": 12, "d": 31 }, "expect": true },
+    { "arg": { "y": 2026, "m": 6, "d": 0 }, "expect": false }
+  ]
+}

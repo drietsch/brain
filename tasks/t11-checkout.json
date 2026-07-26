@@ -1,0 +1,11 @@
+{
+  "name": "checkout",
+  "description": "Compute a checkout total. Input is a record {i1, i2, i3}, each item a record {qty, price}. Subtotal is the sum of qty*price over the three items. If the subtotal is at least 100, subtract a discount of 10. If the resulting amount is below 50, add shipping of 5. Return the final integer amount.",
+  "spec": { "input": "record{i1: record{qty, price}, i2: record{qty, price}, i3: record{qty, price}}", "output": "int" },
+  "cases": [
+    { "arg": { "i1": { "qty": 2, "price": 30 }, "i2": { "qty": 1, "price": 40 }, "i3": { "qty": 2, "price": 10 } }, "expect": 110 },
+    { "arg": { "i1": { "qty": 1, "price": 10 }, "i2": { "qty": 2, "price": 10 }, "i3": { "qty": 1, "price": 10 } }, "expect": 45 },
+    { "arg": { "i1": { "qty": 5, "price": 10 }, "i2": { "qty": 5, "price": 10 }, "i3": { "qty": 0, "price": 99 } }, "expect": 90 },
+    { "arg": { "i1": { "qty": 1, "price": 60 }, "i2": { "qty": 0, "price": 5 }, "i3": { "qty": 0, "price": 5 } }, "expect": 60 }
+  ]
+}
