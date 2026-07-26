@@ -270,7 +270,7 @@ brain twin stale twin/app     # doc -> which files changed since it was written
 Derived at query time, never written; surfaced in insights the moment rot
 happens instead of when a reader trips over it.
 
-**Generated docs as projections.** `scripts/docsgen/generate.sh` regenerates
+**Generated docs as projections.** `brain docs generate` regenerates
 `docs/generated/` wholesale from live graph queries:
 
 - `tour.md` — insights, feature matrix, decisions, tests, protocols,
@@ -284,7 +284,7 @@ happens instead of when a reader trips over it.
 
 TTS backend: **Qwen3-TTS-12Hz-0.6B-Base** when its stack is available
 (`pip install torch soundfile transformers`; weights fetch on first use —
-see `scripts/docsgen/tts.py`), with espeak-ng as the offline fallback, so
+see `crates/brain-cli/assets/tts.py`, embedded in the binary), with espeak-ng as the offline fallback, so
 the pipeline degrades gracefully instead of failing.
 
 The generated artifacts are themselves twinned (media extensions are

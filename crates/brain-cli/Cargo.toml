@@ -1,8 +1,8 @@
 [package]
-name = "brain-cli"
+name = "brain"
 version.workspace = true
 edition.workspace = true
-description = "Command-line surface of the brain substrate"
+description = "Agent-native semantic substrate: one graph for code, twin, decisions, tests, and docs"
 
 [[bin]]
 name = "brain"

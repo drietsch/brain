@@ -35,7 +35,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "brain-cli"
+name = "brain"
 version = "0.1.0"
 dependencies = [
  "brain-core",

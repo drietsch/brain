@@ -25,3 +25,9 @@ brain-store = { path = "crates/brain-store" }
 brain-runtime = { path = "crates/brain-runtime" }
 brain-observe = { path = "crates/brain-observe" }
 brain-index = { path = "crates/brain-index" }
+
+# The monolithic `brain` binary ships lean: one file, symbols stripped.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

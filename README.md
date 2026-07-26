@@ -7,6 +7,23 @@ no files above the semantic line.
 **Status: scaffold.** The kernel compiles, is tested, and exercises the full
 governed loop end to end, but everything here is deliberately minimal.
 
+## Install (one command)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/drietsch/brain/main/install.sh | sh
+```
+
+or, with a Rust toolchain already present:
+
+```bash
+cargo install --locked --git https://github.com/drietsch/brain brain
+```
+
+Either way you get one monolithic `brain` binary — store, twin, templates,
+features, test protocols, and the docs pipeline included (the docs media
+steps use node/playwright, python3, and ffmpeg when present, and skip
+gracefully when not).
+
 ## The idea in three sentences
 
 Software is not stored as files; it lives as immutable, content-addressed
@@ -23,36 +40,36 @@ native implementations without re-modeling.
 
 ```bash
 cargo test                 # 67 tests, including crash recovery
-cargo run -p brain-cli -- init
-cargo run -p brain-cli -- demo            # author -> store -> bind -> run
-cargo run -p brain-cli -- twin refresh . --prefix twin/self   # the brain twins itself
-cargo run -p brain-cli -- twin symbols twin/self/crates/brain-core/src/object.rs
-cargo run -p brain-cli -- twin rdeps twin/self/crates/brain-observe/src/symbols.rs
-cargo run -p brain-cli -- note twin/self/README.md "docs entry point"
-cargo run -p brain-cli -- plan add ~/.claude/plans/feature.md --prefix twin/self  # Claude Code plans
-cargo run -p brain-cli -- adr list twin/self       # decisions (auto-captured from docs/adr/)
-cargo run -p brain-cli -- skill list twin/self     # agent skills (SKILL.md, auto-captured)
-cargo run -p brain-cli -- agentcfg list twin/self  # CLAUDE.md/AGENTS.md/.cursorrules/settings
-cargo run -p brain-cli -- deliverable new adr --title "Use X"  # scaffold from graph template
-cargo run -p brain-cli -- feature matrix twin/self # definition-of-done as a rendered query
-cargo test 2>&1 | cargo run -p brain-cli -- testrun import - --prefix twin/self  # protocol -> graph
-cargo run -p brain-cli -- twin tests twin/self     # frameworks, covers-relations, failing
-cargo run -p brain-cli -- twin stale twin/self     # docs invalidated by later file changes
-scripts/docsgen/generate.sh . twin/self            # regenerate docs: md + screenshots + narrated screencast
-cargo run -p brain-cli -- twin insights twin/self   # churn, hubs, growth, notes, decisions
-scripts/twin_watch.sh . twin/self 60               # continuous refresh + insights
-cargo run -p brain-cli -- status
-cargo run -p brain-cli -- names
-cargo run -p brain-cli -- refs demo/answer            # reverse edges
-cargo run -p brain-cli -- deps <b3:hash>              # forward edges
-cargo run -p brain-cli -- observations twin/self/README.md
-cargo run -p brain-cli -- task check tasks/t01-increment.json tasks/solutions/increment.json
-cargo run -p brain-cli -- notation tasks/solutions/abs.json   # project to compact notation
-cargo run -p brain-cli -- recover         # marks pending intents indeterminate
+cargo run -p brain -- init
+cargo run -p brain -- demo            # author -> store -> bind -> run
+cargo run -p brain -- twin refresh . --prefix twin/self   # the brain twins itself
+cargo run -p brain -- twin symbols twin/self/crates/brain-core/src/object.rs
+cargo run -p brain -- twin rdeps twin/self/crates/brain-observe/src/symbols.rs
+cargo run -p brain -- note twin/self/README.md "docs entry point"
+cargo run -p brain -- plan add ~/.claude/plans/feature.md --prefix twin/self  # Claude Code plans
+cargo run -p brain -- adr list twin/self       # decisions (auto-captured from docs/adr/)
+cargo run -p brain -- skill list twin/self     # agent skills (SKILL.md, auto-captured)
+cargo run -p brain -- agentcfg list twin/self  # CLAUDE.md/AGENTS.md/.cursorrules/settings
+cargo run -p brain -- deliverable new adr --title "Use X"  # scaffold from graph template
+cargo run -p brain -- feature matrix twin/self # definition-of-done as a rendered query
+cargo test 2>&1 | cargo run -p brain -- testrun import - --prefix twin/self  # protocol -> graph
+cargo run -p brain -- twin tests twin/self     # frameworks, covers-relations, failing
+cargo run -p brain -- twin stale twin/self     # docs invalidated by later file changes
+brain docs generate            # regenerate docs: md + screenshots + narrated screencast
+cargo run -p brain -- twin insights twin/self   # churn, hubs, growth, notes, decisions
+cargo run -p brain -- watch . --prefix twin/self --interval 60   # continuous loop, built in
+cargo run -p brain -- status
+cargo run -p brain -- names
+cargo run -p brain -- refs demo/answer            # reverse edges
+cargo run -p brain -- deps <b3:hash>              # forward edges
+cargo run -p brain -- observations twin/self/README.md
+cargo run -p brain -- task check tasks/t01-increment.json tasks/solutions/increment.json
+cargo run -p brain -- notation tasks/solutions/abs.json   # project to compact notation
+cargo run -p brain -- recover         # marks pending intents indeterminate
 
 # Replication: code moves as content-addressed sync, with its evidence
-BRAIN_STORE=/tmp/brain2 cargo run -p brain-cli -- init
-BRAIN_STORE=/tmp/brain2 cargo run -p brain-cli -- pull .brain
+BRAIN_STORE=/tmp/brain2 cargo run -p brain -- init
+BRAIN_STORE=/tmp/brain2 cargo run -p brain -- pull .brain
 ```
 
 The demo stores two programs in the graph, runs the pure one (42), shows the
@@ -68,7 +85,7 @@ leaves the intent/receipt trail in the store for inspection.
 | `brain-runtime` | Fuel-metered interpreter; capabilities checked before effects; effects only through the intent/receipt boundary. |
 | `brain-observe` | Reflective mode — the twin: drift-aware observation of external software with symbols, import relations, agent notes, decisions/plans (ADRs), skills and agent configuration. See `docs/twin.md`. |
 | `brain-index` | The system-of-query seam: derived, disposable indexes rebuilt by replaying the event log. `MemIndex` is the reference backend; embedded graph engines can implement the same trait. |
-| `brain-cli` | Projection instrument; holds no state of its own. |
+| `brain` (in `crates/brain-cli`) | The monolithic binary: projection instrument plus the embedded docs pipeline; holds no state of its own. |
 
 ## Invariants the scaffold already enforces
 

@@ -8,7 +8,7 @@ only below the semantic line. Read `README.md` first, then
 ## Build and test
 
 - `cargo test` — the whole workspace; every crate has its own suite.
-- `cargo build -p brain-cli` before running `target/debug/brain` — `cargo
+- `cargo build -p brain` before running `target/debug/brain` — `cargo
   test` does NOT rebuild the CLI binary, and a stale binary has caused
   confusing demos twice.
 - The local store lives in `.brain/` (gitignored). `BRAIN_STORE=<dir>`
@@ -40,6 +40,6 @@ target/debug/brain notes twin/self             # what previous sessions learned
 - After a test run: `cargo test 2>&1 | brain testrun import - --prefix
   twin/self` — protocols belong in the graph.
 - Before finishing: `brain twin stale twin/self` (fix rotted docs) and
-  `scripts/docsgen/generate.sh . twin/self` (docs/generated/ is a
+  `brain docs generate` (docs/generated/ is a
   projection — regenerate, never edit).
 - Leave `brain note` breadcrumbs for the next session.

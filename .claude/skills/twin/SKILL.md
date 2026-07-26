@@ -10,7 +10,7 @@ Use the graph as persistent memory across sessions.
 ## Start of session
 
 ```bash
-cargo build -p brain-cli -q
+cargo build -p brain -q
 target/debug/brain twin refresh . --prefix twin/self   # record drift since last session
 target/debug/brain twin insights twin/self             # churn, hubs, decisions, plans, notes
 target/debug/brain notes twin/self                     # repo-level breadcrumbs

@@ -3,6 +3,7 @@
 //! The CLI is a projection instrument: it renders and drives the graph, but
 //! holds no state of its own. All state lives in the store (default `.brain/`).
 
+mod docsgen;
 mod notation;
 mod tasks;
 
@@ -63,6 +64,9 @@ fn usage() -> &'static str {
        brain deps <name|b3:hash>          what this node references (forward edges)\n\
        brain observations <name>          observations about a twinned entity\n\
        brain task check <task.json> <term.json>   check a solution, record evidence\n\
+       brain docs generate [dir] [--prefix p] [--out d]   regenerate docs from the graph\n\
+       brain watch [dir] [--prefix p] [--interval s] [--docs]   continuous refresh loop\n\
+       brain version                      print the version\n\
        brain demo                         run the end-to-end demonstration\n"
 }
 
@@ -95,6 +99,12 @@ fn main() -> ExitCode {
         Some("feature") => cmd_feature(&args[1..]),
         Some("done") => cmd_done(&args[1..]),
         Some("testrun") => cmd_testrun(&args[1..]),
+        Some("docs") => docsgen::cmd_docs(&args[1..], open_store),
+        Some("watch") => cmd_watch(&args[1..]),
+        Some("version") | Some("--version") | Some("-V") => {
+            println!("brain {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
         Some("pull") => cmd_sync(&args[1..], true),
         Some("push") => cmd_sync(&args[1..], false),
         Some("refs") => cmd_refs(&args[1..]),
@@ -1126,6 +1136,51 @@ fn cmd_done(args: &[String]) -> Result<(), String> {
     println!("{}: {}", slug, if report.done { "DONE" } else { "not done" });
     features::record_done(&store, &index, prefix, slug, &report).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// `brain watch` — the continuous loop, built in: refresh + insights on an
+/// interval, optionally regenerating docs each round. Replaces the shell
+/// wrapper so the monolithic binary needs no scripts.
+fn cmd_watch(args: &[String]) -> Result<(), String> {
+    let mut dir = ".".to_string();
+    let mut prefix = "twin/self".to_string();
+    let mut interval = 60u64;
+    let mut docs = false;
+    let mut it = args.iter();
+    let mut positional = false;
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--prefix" => prefix = it.next().cloned().ok_or("--prefix needs a value")?,
+            "--interval" => {
+                interval = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--interval needs seconds")?
+            }
+            "--docs" => docs = true,
+            other if !other.starts_with("--") && !positional => {
+                dir = other.to_string();
+                positional = true;
+            }
+            other => return Err(format!("unexpected argument '{other}'")),
+        }
+    }
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    loop {
+        println!("--- watch: refresh {prefix} ---");
+        for cmd in [
+            vec!["twin", "refresh", dir.as_str(), "--prefix", prefix.as_str()],
+            vec!["twin", "insights", prefix.as_str()],
+        ] {
+            let _ = std::process::Command::new(&exe).args(&cmd).status();
+        }
+        if docs {
+            let _ = std::process::Command::new(&exe)
+                .args(["docs", "generate", dir.as_str(), "--prefix", prefix.as_str()])
+                .status();
+        }
+        std::thread::sleep(std::time::Duration::from_secs(interval));
+    }
 }
 
 /// `brain testrun ...` — test protocols in the graph.

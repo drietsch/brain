@@ -30,7 +30,7 @@ Two ways to supply the model:
   `--dry-run` prints the prompts and exits (also useful as the exact prompt
   to hand an agent in mode 1).
 
-Build the checker first: `cargo build -p brain-cli` (or set BRAIN_BIN).
+Build the checker first: `cargo build -p brain` (or set BRAIN_BIN).
 
 Note: schema-constrained decoding is deliberately NOT used. The term schema is
 recursive (a term contains terms), and the structured-outputs feature does not
@@ -130,7 +130,7 @@ def brain_cmd() -> list[str]:
     built = ROOT / "target" / "debug" / "brain"
     if built.exists():
         return [str(built)]
-    return ["cargo", "run", "-q", "-p", "brain-cli", "--"]
+    return ["cargo", "run", "-q", "-p", "brain", "--"]
 
 
 def check(task_path: pathlib.Path, term_path: pathlib.Path) -> tuple[bool, str]:

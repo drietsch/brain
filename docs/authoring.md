@@ -10,7 +10,7 @@ calculus gets redesigned while redesign is still cheap.
 ## Running it
 
 The driver is `scripts/authoring_experiment.py` (requires `ANTHROPIC_API_KEY`
-or an `ant auth login` profile; `cargo build -p brain-cli` first):
+or an `ant auth login` profile; `cargo build -p brain` first):
 
 ```bash
 python3 scripts/authoring_experiment.py tasks/t0*.json                 # author mode
