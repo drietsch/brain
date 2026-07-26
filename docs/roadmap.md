@@ -30,9 +30,10 @@ verification-level → authority-ceiling rule enforced rather than recorded.
 alpha-normalization), ~~compact authoring notation~~ (done: 10-20x denser,
 provably projection-level), semantic diff between namespace steps,
 `(spec, implementation, evidence)` triples linked and queried (evidence
-queries exist: `brain evidence <name>`), evidence-keyed test caching (a test
-result is a fact about a hash, forever), embedding annotations beside hashes
-for similarity retrieval. The `brain-index` trait seam exists; this stage
+queries exist: `brain evidence <name>`), ~~evidence-keyed test caching~~
+(done: the checker consults the graph and skips evaluation when passing
+evidence attests the (code hash, task content) pair; failures always re-run),
+embedding annotations beside hashes for similarity retrieval. The `brain-index` trait seam exists; this stage
 benchmarks embedded graph-database backends (OverGraph, Graph_D) against
 `MemIndex` on real twin data and adopts one only if it wins.
 

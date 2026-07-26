@@ -45,6 +45,7 @@ dependencies = [
  "brain-store",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

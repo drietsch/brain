@@ -15,6 +15,7 @@
 //! Arrays are unsupported until the calculus earns lists.
 
 use brain_core::object::{Literal, Object, Term, VerificationLevel};
+use brain_index::{replay, Index, MemIndex};
 use brain_runtime::{eval_closed, value_to_json, DenyEffects, EvalCtx, Registry};
 use brain_store::Store;
 use serde::Deserialize;
@@ -79,13 +80,50 @@ pub struct CheckReport {
     pub evidence_id: brain_core::ids::NodeId,
     pub results: Vec<CaseResult>,
     pub all_passed: bool,
+    /// True when prior passing evidence for this exact (code, task) pair was
+    /// found in the graph and evaluation was skipped entirely.
+    pub cached: bool,
 }
 
 /// Check a candidate term against a task and persist the outcome as evidence.
-pub fn check(store: &Store, task: &TaskDef, solution: &Term) -> Result<CheckReport, String> {
+///
+/// `task_key` must identify the task *content* (a hash of the task file), so
+/// the evidence cache key is the (code hash, task content) pair — editing a
+/// task's cases invalidates its cached verdicts automatically. Because the
+/// store alpha-normalizes code, a re-authored solution that normalizes to an
+/// already-attested hash skips evaluation: a test result is a fact about a
+/// hash, forever. Only *passing* evidence short-circuits; failures re-run.
+pub fn check(
+    store: &Store,
+    task: &TaskDef,
+    task_key: &str,
+    solution: &Term,
+) -> Result<CheckReport, String> {
     let code_id = store
         .put(&Object::Code { term: solution.clone() })
         .map_err(|e| e.to_string())?;
+    let method = format!("task:{}@{}", task.name, task_key);
+
+    let mut index = MemIndex::new();
+    replay(store, &mut index).map_err(|e| e.to_string())?;
+    for ev_id in index.evidence_for(&code_id) {
+        if let Object::Evidence { method: m, passed: true, .. } =
+            store.get(&ev_id).map_err(|e| e.to_string())?
+        {
+            if m == method {
+                store
+                    .bind(&format!("task/{}/latest", task.name), code_id)
+                    .map_err(|e| e.to_string())?;
+                return Ok(CheckReport {
+                    code_id,
+                    evidence_id: ev_id,
+                    results: Vec::new(),
+                    all_passed: true,
+                    cached: true,
+                });
+            }
+        }
+    }
 
     let registry = Registry::with_builtins();
     let mut results = Vec::new();
@@ -134,7 +172,7 @@ pub fn check(store: &Store, task: &TaskDef, solution: &Term) -> Result<CheckRepo
     let evidence = Object::Evidence {
         subject: code_id,
         level: VerificationLevel::Behavioral,
-        method: format!("task:{}", task.name),
+        method,
         passed: all_passed,
         detail: if all_passed {
             format!("{} case(s) passed", results.len())
@@ -147,5 +185,73 @@ pub fn check(store: &Store, task: &TaskDef, solution: &Term) -> Result<CheckRepo
         .bind(&format!("task/{}/latest", task.name), code_id)
         .map_err(|e| e.to_string())?;
 
-    Ok(CheckReport { code_id, evidence_id, results, all_passed })
+    Ok(CheckReport { code_id, evidence_id, results, all_passed, cached: false })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn increment_task() -> TaskDef {
+        TaskDef {
+            name: "inc".to_string(),
+            description: "add one".to_string(),
+            spec: json!(null),
+            cases: vec![
+                Case { arg: json!(1), expect: json!(2) },
+                Case { arg: json!(41), expect: json!(42) },
+            ],
+        }
+    }
+
+    fn increment_solution(param: &str) -> Term {
+        let mut fields = BTreeMap::new();
+        fields.insert("a".to_string(), Term::Var { name: param.to_string() });
+        fields.insert(
+            "b".to_string(),
+            Term::Lit { value: Literal::Int { value: 1 } },
+        );
+        Term::Lam {
+            param: param.to_string(),
+            body: Box::new(Term::Foreign {
+                symbol: "core/add".to_string(),
+                arg: Box::new(Term::Record { fields }),
+            }),
+        }
+    }
+
+    #[test]
+    fn passing_evidence_caches_across_alpha_equivalent_solutions() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let task = increment_task();
+
+        let first = check(&store, &task, "tkey1", &increment_solution("n")).unwrap();
+        assert!(!first.cached && first.all_passed);
+
+        // Same task, alpha-renamed solution: normalizes to the same hash,
+        // prior evidence attests it, evaluation is skipped.
+        let second = check(&store, &task, "tkey1", &increment_solution("x")).unwrap();
+        assert!(second.cached && second.all_passed);
+        assert_eq!(first.code_id, second.code_id);
+        assert_eq!(first.evidence_id, second.evidence_id);
+
+        // Different task content (new key): the cache must NOT apply.
+        let third = check(&store, &task, "tkey2", &increment_solution("n")).unwrap();
+        assert!(!third.cached);
+    }
+
+    #[test]
+    fn failing_evidence_never_caches() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let mut task = increment_task();
+        task.cases[0].expect = json!(999); // unsatisfiable
+
+        let first = check(&store, &task, "tkey", &increment_solution("n")).unwrap();
+        assert!(!first.all_passed && !first.cached);
+        let second = check(&store, &task, "tkey", &increment_solution("n")).unwrap();
+        assert!(!second.cached, "failures must re-run, not cache");
+    }
 }

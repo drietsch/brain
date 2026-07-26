@@ -65,6 +65,10 @@ leaves the intent/receipt trail in the store for inspection.
    even when capabilities are granted.
 6. Reflective-mode facts are observations — sourced, timestamped, expiring
    into staleness — never eternal truths.
+7. A test result is a fact about a hash: the checker skips evaluation when
+   passing evidence already attests the (code hash, task content) pair —
+   and alpha-normalization means a re-authored solution in any encoding,
+   with any variable names, hits that cache if it means the same program.
 
 See `docs/architecture.md` for the design, `docs/calculus.md` for the term
 language, `docs/schema/term.schema.json` for the shape agents author against,

@@ -33,10 +33,13 @@ experiment exists to measure. If validity turns out poor, a non-recursive
 1. Give the model a task description (see `tasks/*.json`), the term schema,
    and the builtin foreign-symbol table from `docs/calculus.md`.
 2. The model emits a term as plain JSON (see the finding above).
-3. Check with `brain task check <task.json> <emitted-term.json>`. The checker
-   runs the term against the task's cases in simulation posture (pure,
-   fuel-bounded, effects denied) and records the outcome in the graph as
-   `Evidence` at the `Behavioral` level, attached to the term's content hash.
+3. Check with `brain task check <task.json> <emitted-term>` (`.json` or
+   `.term`). The checker runs the term against the task's cases in simulation
+   posture (pure, fuel-bounded, effects denied) and records the outcome in
+   the graph as `Evidence` at the `Behavioral` level, attached to the term's
+   content hash. If passing evidence already attests the (code hash, task
+   content) pair, evaluation is skipped — alpha-normalization means any
+   re-authoring of the same program, in either encoding, hits this cache.
 4. On failure, the driver feeds the checker output back for one repair
    attempt (the repair-rate metric).
 5. For *edit* trials (`tasks/edits/*.json`): the task carries a `base_term`

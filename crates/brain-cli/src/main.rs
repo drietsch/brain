@@ -362,18 +362,27 @@ fn cmd_task(args: &[String]) -> Result<(), String> {
         [sub, task, term] if sub == "check" => (task, term),
         _ => return Err("usage: brain task check <task.json> <term.json>".to_string()),
     };
-    let task: tasks::TaskDef = serde_json::from_str(
-        &std::fs::read_to_string(task_path).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| format!("invalid task: {e}"))?;
+    let task_text = std::fs::read_to_string(task_path).map_err(|e| e.to_string())?;
+    let task: tasks::TaskDef =
+        serde_json::from_str(&task_text).map_err(|e| format!("invalid task: {e}"))?;
+    // Cache key = task CONTENT, so editing a task invalidates its cached verdicts.
+    let task_value: serde_json::Value =
+        serde_json::from_str(&task_text).map_err(|e| e.to_string())?;
+    let task_key = brain_core::canonical::hash_value(&task_value)
+        .map_err(|e| e.to_string())?
+        .to_hex()[..12]
+        .to_string();
     let term = load_term(term_path)?;
 
     let store = open_store()?;
-    let report = tasks::check(&store, &task, &term)?;
+    let report = tasks::check(&store, &task, &task_key, &term)?;
 
     println!("task: {}  —  {}", task.name, task.description);
     if !task.spec.is_null() {
         println!("spec: {}", task.spec);
+    }
+    if report.cached {
+        println!("  cached: prior evidence attests this (code, task) pair — evaluation skipped");
     }
     for (i, r) in report.results.iter().enumerate() {
         let mark = if r.passed { "pass" } else { "FAIL" };
