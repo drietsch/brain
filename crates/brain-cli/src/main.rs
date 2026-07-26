@@ -45,6 +45,12 @@ fn usage() -> &'static str {
        brain skill add <SKILL.md> --prefix <p>       record an agent skill\n\
        brain agentcfg add <file> --prefix <p> [--agent A] [--role R]   record agent config\n\
        brain skill|agentcfg list <prefix> | show <prefix> <slug>       browse them\n\
+       brain template seed|list|show <slug>          the deliverable contract, in the graph\n\
+       brain deliverable new <template> [--title T]  instantiate a scaffold to stdout\n\
+       brain feature add <prefix> <slug> [--title T] [--status S]      register a feature\n\
+       brain feature link <prefix> <slug> <predicate> <target>         link into the graph\n\
+       brain feature list|matrix <prefix>            registry / rendered DoD matrix\n\
+       brain done <prefix> <slug>                    evaluate a feature against the DoD\n\
        brain ingest <dir> [--prefix <p>]  alias for twin refresh\n\
        brain pull <store-root>            replicate another store into this one\n\
        brain push <store-root>            replicate this store into another\n\
@@ -80,6 +86,10 @@ fn main() -> ExitCode {
         Some("plan") => cmd_doc(&args[1..], brain_observe::docs::DocKind::Plan),
         Some("skill") => cmd_agent_doc(&args[1..], brain_observe::agents::AgentDocKind::Skill),
         Some("agentcfg") => cmd_agent_doc(&args[1..], brain_observe::agents::AgentDocKind::Config),
+        Some("template") => cmd_template(&args[1..]),
+        Some("deliverable") => cmd_deliverable(&args[1..]),
+        Some("feature") => cmd_feature(&args[1..]),
+        Some("done") => cmd_done(&args[1..]),
         Some("pull") => cmd_sync(&args[1..], true),
         Some("push") => cmd_sync(&args[1..], false),
         Some("refs") => cmd_refs(&args[1..]),
@@ -132,7 +142,14 @@ fn print_sync_report(report: &brain_store::sync::SyncReport) {
 
 fn cmd_init() -> Result<(), String> {
     let store = open_store()?;
+    let seeded = brain_observe::templates::seed(&store).map_err(|e| e.to_string())?;
     println!("store ready at {}", store.root().display());
+    if seeded > 0 {
+        println!(
+            "seeded {} deliverable templates under brain/templates/",
+            brain_observe::templates::DEFAULTS.len()
+        );
+    }
     Ok(())
 }
 
@@ -494,6 +511,18 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     println!("  [{agent}] {slug} ({role})");
                 }
             }
+            if !ins.features.is_empty() {
+                println!("features (DoD progress):");
+                for (slug, status, fraction) in &ins.features {
+                    println!("  [{status}] {slug}  {fraction}");
+                }
+            }
+            if !ins.nonconforming.is_empty() {
+                println!("nonconforming docs (template contract):");
+                for (slug, kind, missing) in &ins.nonconforming {
+                    println!("  {slug} ({kind}): missing {missing}");
+                }
+            }
             if !ins.notes.is_empty() {
                 println!("recent notes:");
                 for (at, entity, text) in &ins.notes {
@@ -813,6 +842,199 @@ fn cmd_agent_doc(args: &[String], kind: brain_observe::agents::AgentDocKind) -> 
         }
         _ => Err(usage),
     }
+}
+
+/// `brain template ...` — the deliverable contract, defined in the graph.
+fn cmd_template(args: &[String]) -> Result<(), String> {
+    use brain_observe::{templates, twin};
+    let usage = "usage: brain template seed | list | show <slug>";
+    match args.first().map(String::as_str) {
+        Some("seed") => {
+            let store = open_store()?;
+            let n = templates::seed(&store).map_err(|e| e.to_string())?;
+            println!(
+                "{} templates present; {n} observation(s) written",
+                templates::DEFAULTS.len()
+            );
+            Ok(())
+        }
+        Some("list") => {
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            for (applies, (sid, requires)) in
+                templates::by_kind(&store, &index).map_err(|e| e.to_string())?
+            {
+                let title = twin::latest(&index, &store, &sid, "title")
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or_default();
+                println!("{applies:<12} requires [{}]  — {title}", requires.join(", "));
+            }
+            Ok(())
+        }
+        Some("show") => {
+            let slug = args.get(1).ok_or(usage)?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = templates::template_sid(slug);
+            let content = twin::latest(&index, &store, &sid, "content")
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("no template '{slug}' (run: brain template seed)"))?;
+            print!("{content}");
+            Ok(())
+        }
+        _ => Err(usage.to_string()),
+    }
+}
+
+/// `brain deliverable new <template>` — instantiate a scaffold to stdout.
+fn cmd_deliverable(args: &[String]) -> Result<(), String> {
+    use brain_observe::{templates, twin};
+    let usage = "usage: brain deliverable new <template-slug> [--title T]";
+    if args.first().map(String::as_str) != Some("new") {
+        return Err(usage.to_string());
+    }
+    let slug = args.get(1).ok_or(usage)?;
+    let mut title = "Untitled".to_string();
+    let mut it = args[2..].iter();
+    while let Some(a) = it.next() {
+        if a == "--title" {
+            if let Some(t) = it.next() {
+                title = t.clone();
+            }
+        }
+    }
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let sid = templates::template_sid(slug);
+    let content = twin::latest(&index, &store, &sid, "content")
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("no template '{slug}' (run: brain template seed)"))?;
+    print!("{}", templates::instantiate(&content, &title));
+    Ok(())
+}
+
+/// `brain feature ...` — the registry: features as entities, links as edges.
+fn cmd_feature(args: &[String]) -> Result<(), String> {
+    use brain_observe::features;
+    let usage = "usage: brain feature add <prefix> <slug> [--title T] [--status S] | \
+                 feature link <prefix> <slug> <predicate> <target> | \
+                 feature list <prefix> | feature matrix <prefix>";
+    match args.first().map(String::as_str) {
+        Some("add") => {
+            let (prefix, slug) = match (args.get(1), args.get(2)) {
+                (Some(p), Some(s)) => (p, s),
+                _ => return Err(usage.to_string()),
+            };
+            let mut title = slug.clone();
+            let mut status = "planned".to_string();
+            let mut it = args[3..].iter();
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--title" => title = it.next().cloned().unwrap_or(title),
+                    "--status" => status = it.next().cloned().unwrap_or(status),
+                    other => return Err(format!("unexpected argument '{other}'\n{usage}")),
+                }
+            }
+            let store = open_store()?;
+            let (_, wrote) = features::add(&store, prefix, slug, &title, &status)
+                .map_err(|e| e.to_string())?;
+            let state = if wrote { "recorded" } else { "unchanged" };
+            println!("feature '{slug}' {state} under {prefix} (status: {status})");
+            Ok(())
+        }
+        Some("link") => {
+            let (prefix, slug, predicate, target) =
+                match (args.get(1), args.get(2), args.get(3), args.get(4)) {
+                    (Some(p), Some(s), Some(pr), Some(t)) => (p, s, pr, t),
+                    _ => return Err(usage.to_string()),
+                };
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let (target_sid, kind) = features::resolve_target(&index, prefix, target)
+                .ok_or_else(|| {
+                    format!("no twinned entity matches '{target}' (file path, or a decision/plan/skill/feature slug)")
+                })?;
+            let wrote = features::link(&store, prefix, slug, predicate, &target_sid)
+                .map_err(|e| e.to_string())?;
+            let state = if wrote { "linked" } else { "already linked" };
+            println!("{slug} -{predicate}-> {target} ({kind}): {state}");
+            Ok(())
+        }
+        Some("list") => {
+            let prefix = args.get(1).ok_or(usage)?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let rows = features::list(&store, &index, prefix).map_err(|e| e.to_string())?;
+            if rows.is_empty() {
+                println!("no features under {prefix}");
+            }
+            for row in rows {
+                let report = features::evaluate(&store, &index, prefix, &row.slug)
+                    .map_err(|e| e.to_string())?;
+                let met = report.checks.iter().filter(|c| c.count > 0).count();
+                let done = if report.done { " ✓ done" } else { "" };
+                println!(
+                    "[{}] {}: {}  ({met}/{}{done})",
+                    row.status,
+                    row.slug,
+                    row.title,
+                    report.checks.len()
+                );
+            }
+            Ok(())
+        }
+        Some("matrix") => {
+            let prefix = args.get(1).ok_or(usage)?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let dod = features::dod(&store, &index).map_err(|e| e.to_string())?;
+            let rows = features::list(&store, &index, prefix).map_err(|e| e.to_string())?;
+            if rows.is_empty() {
+                println!("no features under {prefix}");
+                return Ok(());
+            }
+            let width = rows.iter().map(|r| r.slug.len()).max().unwrap_or(8).max(8);
+            let header: Vec<String> = dod.iter().map(|d| d.replace("_by", "")).collect();
+            println!("{:<width$}  {}  done", "feature", header.join("  "));
+            for row in rows {
+                let report = features::evaluate(&store, &index, prefix, &row.slug)
+                    .map_err(|e| e.to_string())?;
+                let cells: Vec<String> = report
+                    .checks
+                    .iter()
+                    .zip(&header)
+                    .map(|(c, h)| {
+                        let mark = if c.count > 0 { "✓" } else { "✗" };
+                        format!("{mark:^w$}", w = h.len().max(1))
+                    })
+                    .collect();
+                let done = if report.done { "✓" } else { "✗" };
+                println!("{:<width$}  {}  {done}", row.slug, cells.join("  "));
+            }
+            Ok(())
+        }
+        _ => Err(usage.to_string()),
+    }
+}
+
+/// `brain done <prefix> <slug>` — evaluate a feature against the DoD and
+/// record the outcome as a guarded observation.
+fn cmd_done(args: &[String]) -> Result<(), String> {
+    use brain_observe::features;
+    let (prefix, slug) = match (args.first(), args.get(1)) {
+        (Some(p), Some(s)) => (p, s),
+        _ => return Err("usage: brain done <prefix> <feature-slug>".to_string()),
+    };
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let report = features::evaluate(&store, &index, prefix, slug).map_err(|e| e.to_string())?;
+    for check in &report.checks {
+        let mark = if check.count > 0 { "✓" } else { "✗" };
+        println!("{mark} {}  ({} link(s))", check.predicate, check.count);
+    }
+    println!("{}: {}", slug, if report.done { "DONE" } else { "not done" });
+    features::record_done(&store, &index, prefix, slug, &report).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Resolve a CLI argument that may be a bound name or a literal b3: hash.

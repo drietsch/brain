@@ -69,6 +69,11 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
     let mut bindings: Vec<(String, NodeId)> = Vec::new();
     let mut written_relations: BTreeSet<(StableId, String, StableId)> = BTreeSet::new();
 
+    // Entity kinds governed by a seeded template: captured documents of
+    // these kinds need a conformance pass even when otherwise unchanged.
+    let tmpl_kinds: BTreeSet<String> =
+        crate::templates::by_kind(store, &index)?.keys().cloned().collect();
+
     for rel in &files {
         let content = fs::read(root.join(rel))?;
         let hash = blake3::hash(&content).to_hex().to_string();
@@ -110,13 +115,23 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
         // capture existed (no `content` observation on the doc entity yet).
         let doc_meta = docs::parse_doc(rel, &text);
         let doc_missing = match &doc_meta {
-            Some(m) => latest(&index, store, &doc_sid(prefix, m), "content")?.is_none(),
+            Some(m) => {
+                let dsid = doc_sid(prefix, m);
+                latest(&index, store, &dsid, "content")?.is_none()
+                    || (tmpl_kinds.contains(m.kind.as_str())
+                        && latest(&index, store, &dsid, "conforms")?.is_none())
+            }
             None => false,
         };
         // And for skills / agent configuration.
         let agent_meta = agents::parse_agent_doc(rel, &text);
         let agent_missing = match &agent_meta {
-            Some(a) => latest(&index, store, &agent_doc_sid(prefix, a), "content")?.is_none(),
+            Some(a) => {
+                let asid = agent_doc_sid(prefix, a);
+                latest(&index, store, &asid, "content")?.is_none()
+                    || (tmpl_kinds.contains(a.kind.as_str())
+                        && latest(&index, store, &asid, "conforms")?.is_none())
+            }
             None => false,
         };
         if !changed && !structure_missing && !doc_missing && !agent_missing {
@@ -329,6 +344,10 @@ pub struct Insights {
     pub skills: Vec<(String, String, String)>,
     /// Agent configuration under the prefix: (slug, agent, role).
     pub agent_configs: Vec<(String, String, String)>,
+    /// Documents that fail their template's contract: (slug, kind, missing).
+    pub nonconforming: Vec<(String, String, String)>,
+    /// Features under the prefix: (slug, status, done-fraction like "3/4").
+    pub features: Vec<(String, String, String)>,
 }
 
 const TOP: usize = 5;
@@ -421,6 +440,31 @@ pub fn insights_with(
         } else {
             ins.agent_configs = rows;
         }
+    }
+
+    // Documents failing their template contract (recorded, never enforced).
+    for kind in ["decision", "plan", "skill", "agent_config"] {
+        let mut seen: BTreeSet<StableId> = BTreeSet::new();
+        for node in index.entities_by_kind(kind) {
+            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+            if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone())
+            {
+                continue;
+            }
+            if latest(index, store, &id, "conforms")?.as_deref() == Some("false") {
+                let slug = labels.get("slug").cloned().unwrap_or_default();
+                let missing = latest(index, store, &id, "missing")?.unwrap_or_default();
+                ins.nonconforming.push((slug, kind.to_string(), missing));
+            }
+        }
+    }
+    ins.nonconforming.sort();
+
+    // Features: done-ness evaluated live against the definition of done.
+    for row in crate::features::list(store, index, prefix)? {
+        let report = crate::features::evaluate(store, index, prefix, &row.slug)?;
+        let met = report.checks.iter().filter(|c| c.count > 0).count();
+        ins.features.push((row.slug, row.status, format!("{met}/{}", report.checks.len())));
     }
 
     let mut churn: Vec<(String, usize)> = Vec::new();
@@ -543,7 +587,7 @@ fn observe(
     observe_src(store, subject, property, value, "twin", at)
 }
 
-fn observe_src(
+pub(crate) fn observe_src(
     store: &Store,
     subject: &StableId,
     property: &str,
@@ -561,7 +605,7 @@ fn observe_src(
 }
 
 /// Write a relation unless the graph (or this run) already has it.
-fn relate(
+pub(crate) fn relate(
     store: &Store,
     index: &MemIndex,
     written: &mut BTreeSet<(StableId, String, StableId)>,
@@ -843,6 +887,28 @@ fn record_entity_doc(
             outcome.relations += 1;
         }
         outcome.mentions.push(cand.clone());
+    }
+
+    // Conformance against the graph-defined template for this kind, when
+    // one is seeded: recorded as observations, never enforcement.
+    if let Some((tmpl_sid, requires)) = crate::templates::by_kind(store, index)?.get(entity_kind) {
+        let missing = crate::templates::check(content, requires);
+        let conforms = if missing.is_empty() { "true" } else { "false" };
+        if latest(index, store, &sid, "conforms")?.as_deref() != Some(conforms) {
+            observe_src(store, &sid, "conforms", conforms, source, now)?;
+            outcome.wrote = true;
+        }
+        let missing_val = missing.join(",");
+        let prior = latest(index, store, &sid, "missing")?;
+        if prior.as_deref() != Some(missing_val.as_str())
+            && (!missing_val.is_empty() || prior.is_some())
+        {
+            observe_src(store, &sid, "missing", &missing_val, source, now)?;
+            outcome.wrote = true;
+        }
+        if relate(store, index, written_relations, &sid, "conforms_to", tmpl_sid, now)? {
+            outcome.relations += 1;
+        }
     }
     if outcome.relations > 0 {
         outcome.wrote = true;
@@ -1353,6 +1419,94 @@ mod tests {
         )));
         let ins = insights(&store, "twin/app").unwrap();
         assert!(ins.plans.iter().any(|(s, t)| s == "session-plan" && t == "The session plan"));
+    }
+
+    #[test]
+    fn templates_record_conformance_and_features_evaluate_done() {
+        let (src, store_dir) = fixture();
+        let store = Store::open(store_dir.path()).unwrap();
+        crate::templates::seed(&store).unwrap();
+        fs::create_dir_all(src.path().join("docs/adr")).unwrap();
+        // One ADR honors the contract, one is missing its status.
+        fs::write(
+            src.path().join("docs/adr/adr-001-good.md"),
+            "# Good decision\n\nStatus: accepted\n\nBecause src/main.rs needed it.\n",
+        )
+        .unwrap();
+        fs::write(src.path().join("docs/adr/adr-002-bare.md"), "prose without contract\n")
+            .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        let index = fresh_index(&store);
+        let good = StableId::derive(&["decision", "twin/app", "adr-001-good"]);
+        let bare = StableId::derive(&["decision", "twin/app", "adr-002-bare"]);
+        assert_eq!(latest(&index, &store, &good, "conforms").unwrap().as_deref(), Some("true"));
+        assert_eq!(latest(&index, &store, &bare, "conforms").unwrap().as_deref(), Some("false"));
+        assert_eq!(
+            latest(&index, &store, &bare, "missing").unwrap().as_deref(),
+            Some("title,status")
+        );
+        assert_eq!(index.relations_from(&good, "conforms_to").len(), 1);
+
+        // Insights surface the violation; fixing the file clears it.
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.nonconforming.iter().any(|(s, k, m)| {
+            s == "adr-002-bare" && k == "decision" && m.contains("status")
+        }));
+        fs::write(
+            src.path().join("docs/adr/adr-002-bare.md"),
+            "# Now titled\n\nStatus: proposed\n\nprose with contract\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let index = fresh_index(&store);
+        assert_eq!(latest(&index, &store, &bare, "conforms").unwrap().as_deref(), Some("true"));
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.nonconforming.is_empty());
+
+        // Refresh stays idempotent with templates seeded.
+        let before = store.count_objects().unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(store.count_objects().unwrap(), before, "no graph growth");
+
+        // Feature registry: register, link, evaluate done against the DoD.
+        let (fsid, wrote) =
+            crate::features::add(&store, "twin/app", "render", "Rendering", "building").unwrap();
+        assert!(wrote);
+        let index = fresh_index(&store);
+        let (main_sid, kind) =
+            crate::features::resolve_target(&index, "twin/app", "src/main.rs").unwrap();
+        assert_eq!(kind, "file");
+        crate::features::link(&store, "twin/app", "render", "implemented_by", &main_sid).unwrap();
+        let (adr_sid, kind) =
+            crate::features::resolve_target(&index, "twin/app", "adr-001-good").unwrap();
+        assert_eq!(kind, "decision");
+        crate::features::link(&store, "twin/app", "render", "decided_by", &adr_sid).unwrap();
+
+        let index = fresh_index(&store);
+        let report = crate::features::evaluate(&store, &index, "twin/app", "render").unwrap();
+        assert!(!report.done, "2 of 4 DoD predicates met");
+        assert_eq!(report.checks.len(), 4, "DoD comes from the seeded feature template");
+        assert_eq!(report.checks.iter().filter(|c| c.count > 0).count(), 2);
+        assert!(crate::features::record_done(&store, &index, "twin/app", "render", &report)
+            .unwrap());
+        let index = fresh_index(&store);
+        assert!(!crate::features::record_done(&store, &index, "twin/app", "render", &report)
+            .unwrap(), "unchanged done state writes nothing");
+        assert_eq!(latest(&index, &store, &fsid, "done").unwrap().as_deref(), Some("false"));
+
+        // Complete the DoD: the feature flips to done.
+        let test_sid = StableId::derive(&["file", "run.py"]);
+        crate::features::link(&store, "twin/app", "render", "tested_by", &test_sid).unwrap();
+        let readme = StableId::derive(&["file", "web/app.js"]);
+        crate::features::link(&store, "twin/app", "render", "documented_in", &readme).unwrap();
+        let index = fresh_index(&store);
+        let report = crate::features::evaluate(&store, &index, "twin/app", "render").unwrap();
+        assert!(report.done);
+
+        // Insights render the matrix fraction.
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.features.iter().any(|(s, st, f)| s == "render" && st == "building" && f == "4/4"));
     }
 
     #[test]

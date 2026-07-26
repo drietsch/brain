@@ -176,6 +176,45 @@ Mentions-scanning applies here too: a skill whose text names twinned files
 gets `mentions` relations to them, so "which skills touch this file?" is a
 reverse-relation query.
 
+## Templates, the definition of done, and the feature registry
+
+The deliverable contract itself lives in the graph. `brain init` (or `brain
+template seed`) writes `template` entities under `brain/templates/` — each
+with a `content` scaffold, machine-checkable `requires` fields, and the
+entity kind it `applies_to`. Because templates are graph objects:
+
+- they **version through observations** and evolve per store (a local edit
+  to `requires` wins over the shipped default and survives re-seeding);
+- they **replicate** with `brain pull` — the team's working contract
+  travels with the software;
+- agents ask the graph, not a wiki: `brain template list`,
+  `brain deliverable new adr --title "..."` emits the scaffold.
+
+**Conformance is recorded, never enforced.** During refresh every captured
+decision/plan/skill is checked against its template's required fields; the
+result is a `conforms` observation (with `missing` when false) plus a
+`conforms_to` relation. Violations surface in insights as "nonconforming
+docs" — the reflective mode stays descriptive; enforcement belongs to the
+governed mode.
+
+**Definition of done = the `feature` template's `requires`.** Its fields
+are relation predicates, not text checks: `implemented_by`, `tested_by`,
+`decided_by`, `documented_in` by default. A feature is an explicit
+declaration linked into the graph, and done-ness is a query:
+
+```bash
+brain feature add  twin/app checkout --title "Checkout flow" --status building
+brain feature link twin/app checkout implemented_by src/checkout.rs
+brain feature link twin/app checkout decided_by adr-007-payments
+brain done twin/app checkout          # ✓/✗ per predicate; records the outcome
+brain feature matrix twin/app         # the registry as a rendered query
+```
+
+Re-running `feature add` with a new `--status` updates it (guarded, so it
+is also the status-change mechanism); `done` flips are observations — a
+feature that regresses out of done-ness is a recorded event, not a silent
+cell change in a spreadsheet.
+
 ## Continuous insights
 
 `brain twin insights <prefix>` synthesizes the twin into a picture of the
@@ -189,6 +228,8 @@ software — built for watching what agents build:
 - **Recent notes**: the memory agents left behind, newest first.
 - **Decisions and plans**: the newest ADRs (with status) and plans; churn
   entries covered by a decision are tagged `[decided]`.
+- **Features**: DoD progress per feature; **nonconforming docs**: template
+  contract violations.
 - **Growth series**: files/symbols/relations over time. Every refresh that
   changes the totals records one complete series point on the repo entity —
   so trends are graph objects: they persist, replicate with `brain pull`,

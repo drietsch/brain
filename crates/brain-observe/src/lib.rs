@@ -12,13 +12,19 @@
 //!   documents captured alongside structure.
 //! - [`agents`] — parsing for skills and agent configuration (CLAUDE.md,
 //!   AGENTS.md, .cursorrules, subagents, settings): *how it is built*.
+//! - [`templates`] — the deliverable contract as graph data: scaffolds,
+//!   required fields, and recorded (never enforced) conformance.
+//! - [`features`] — the feature registry: done-ness as a graph query
+//!   against the template-defined definition of done.
 //!
 //! Observers are sense organs, meant to run continuously; re-ingesting
 //! refreshes observations and surfaces drift as new nodes, never overwrites.
 
 pub mod agents;
 pub mod docs;
+pub mod features;
 pub mod symbols;
+pub mod templates;
 pub mod twin;
 
 use std::fs;
