@@ -34,6 +34,9 @@ target/debug/brain notes twin/self             # what previous sessions learned
 
 ## Conventions
 
+- Git hooks are installed (`brain hook install`): every commit/push
+  refreshes the twin automatically and prints stale-doc warnings — read
+  them.
 - After an approved plan: `brain plan add <plan.md> --prefix twin/self`.
 - After a significant decision: write an ADR into `docs/adr/` — the next
   refresh captures it.

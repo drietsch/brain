@@ -61,8 +61,11 @@ brain observations twin/app/src/main.rs      # full observation timeline
   unchanged.
 - **Repo-level facts:** the prefix itself binds to a `repo` entity carrying
   `git_commit` / `git_branch` observations (skipped outside git repos).
-- **Continuous by design:** run it from cron, a git post-commit hook, or a
-  session-start hook — the observer is a sense organ, not an importer.
+- **Continuous by design:** `brain hook install` wires refresh into git —
+  every commit and push triggers the brain (post-commit / pre-push, with
+  stale-doc and failing-test warnings at the moment of change; `--docs`
+  regenerates projections on push). Hooks are fail-open: a sense organ,
+  never a gate. `brain watch` covers the between-commits interval.
 
 ## Languages and precision (honest limits)
 

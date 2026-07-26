@@ -4,6 +4,7 @@
 //! holds no state of its own. All state lives in the store (default `.brain/`).
 
 mod docsgen;
+mod hooks;
 mod notation;
 mod tasks;
 
@@ -66,6 +67,8 @@ fn usage() -> &'static str {
        brain task check <task.json> <term.json>   check a solution, record evidence\n\
        brain docs generate [dir] [--prefix p] [--out d]   regenerate docs from the graph\n\
        brain watch [dir] [--prefix p] [--interval s] [--docs]   continuous refresh loop\n\
+       brain hook install [dir] [--prefix p] [--docs]   refresh the twin on every commit/push\n\
+       brain hook status|uninstall [dir]  inspect or remove the git hooks\n\
        brain version                      print the version\n\
        brain demo                         run the end-to-end demonstration\n"
 }
@@ -100,6 +103,7 @@ fn main() -> ExitCode {
         Some("done") => cmd_done(&args[1..]),
         Some("testrun") => cmd_testrun(&args[1..]),
         Some("docs") => docsgen::cmd_docs(&args[1..], open_store),
+        Some("hook") => hooks::cmd_hook(&args[1..], open_store),
         Some("watch") => cmd_watch(&args[1..]),
         Some("version") | Some("--version") | Some("-V") => {
             println!("brain {}", env!("CARGO_PKG_VERSION"));
