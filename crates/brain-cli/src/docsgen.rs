@@ -145,6 +145,9 @@ fn generate(store: &Store, dir: &Path, prefix: &str, out: &Path) -> Result<(), S
     let _ = fs::remove_file(out.join(".sections.json"));
     let _ = fs::remove_dir_all(&tmp);
 
+    // The man page is a projection of the same registry as usage().
+    fs::write(out.join("brain.1"), crate::manual::man_page()).map_err(|e| e.to_string())?;
+
     // The artifacts become part of the twin — marked as generated, so
     // attention and churn know their edits are projections, not work.
     twin::refresh(store, dir, prefix).map_err(|e| e.to_string())?;

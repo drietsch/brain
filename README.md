@@ -39,11 +39,12 @@ native implementations without re-modeling.
 ## Quickstart
 
 ```bash
-cargo test                 # 88 tests, including crash recovery
+cargo test                 # 90 tests, including crash recovery
 cargo run -p brain -- init
 cargo run -p brain -- demo            # author -> store -> bind -> run
 cargo run -p brain -- twin refresh . --prefix twin/self   # the brain twins itself
 cargo run -p brain -- hook install --tests   # every commit: refresh + run tests + import protocol
+cargo run -p brain -- man --install    # then: man brain — projected from the same registry as --help
 cargo run -p brain -- twin symbols twin/self/crates/brain-core/src/object.rs
 cargo run -p brain -- twin rdeps twin/self/crates/brain-observe/src/symbols.rs --transitive  # blast radius
 cargo run -p brain -- twin at twin/self 2h        # the twin as it was (also takes a git hash)

@@ -5,6 +5,7 @@
 
 mod docsgen;
 mod hooks;
+mod manual;
 mod notation;
 mod tasks;
 
@@ -21,68 +22,30 @@ use std::process::ExitCode;
 
 const DEFAULT_FUEL: u64 = 1_000_000;
 
-fn usage() -> &'static str {
-    "brain — agent-native semantic substrate (scaffold)\n\
-     \n\
-     Usage:\n\
-       brain init                         create a store in ./.brain\n\
-       brain status                       objects, namespace, intent states\n\
-       brain names                        list name -> node bindings\n\
-       brain put-code <name> <term>       store a term (.json or .term) and bind it\n\
-       brain notation <file>              convert term between .term notation and JSON\n\
-       brain run <name> [--cap <c>]...    evaluate the code bound to a name\n\
-       brain recover                      mark pending intents indeterminate\n\
-       brain twin refresh <dir> [--prefix <p>]   observe a source tree, record drift\n\
-       brain twin status <dir> [--prefix <p>]    report drift without writing\n\
-       brain twin files <prefix>                 twinned files with freshness\n\
-       brain twin symbols|imports|rdeps <name> [--transitive]   structure queries (recursive walk)\n\
-       brain twin at <prefix> <ms|30m|2h|git-hash>   the twin as it was (bi-temporal read)\n\
-       brain twin backfill <dir> [--prefix p] [--max-commits N]   replay git history into the twin\n\
-       brain bench index                  cortex vs cold replay: the earn-adoption gate\n\
-       brain twin search <substring>             find twinned entities by name\n\
-       brain twin insights <prefix>              synthesized picture: churn, hubs, growth\n\
-       brain note <name> <text...>        attach a durable note to an entity\n\
-       brain notes <name>                 read an entity's notes\n\
-       brain adr add <md-file> --prefix <p> [--title T] [--status S]   record a decision\n\
-       brain plan add <md-file> --prefix <p> [--title T]               record a plan\n\
-       brain adr|plan list <prefix>       decisions/plans under a prefix\n\
-       brain adr|plan show <prefix> <slug>   full document, status timeline, mentions\n\
-       brain skill add <SKILL.md> --prefix <p>       record an agent skill\n\
-       brain agentcfg add <file> --prefix <p> [--agent A] [--role R]   record agent config\n\
-       brain skill|agentcfg list <prefix> | show <prefix> <slug>       browse them\n\
-       brain template seed|list|show <slug>          the deliverable contract, in the graph\n\
-       brain template set <slug> --applies-to k --capture <globs> [--fields spec]   teach a new kind\n\
-       brain artifact list|show <prefix> <kind> [slug]   browse artifacts of any kind\n\
-       brain deliverable new <template> [--title T]  instantiate a scaffold to stdout\n\
-       brain feature add <prefix> <slug> [--title T] [--status S]      register a feature\n\
-       brain feature link <prefix> <slug> <predicate> <target>         link into the graph\n\
-       brain feature list|matrix <prefix>            registry / rendered DoD matrix\n\
-       brain done <prefix> <slug>                    evaluate a feature against the DoD\n\
-       brain testrun import <report> --prefix <p>    ingest cargo-test output or JUnit XML\n\
-       brain testrun list <prefix>                   imported protocols, newest first\n\
-       brain twin tests <prefix>                     test files, frameworks, failing cases\n\
-       brain twin stale <prefix>                     docs invalidated by later file changes\n\
-       brain attend <prefix> [--top N]               attention: what matters now, ranked\n\
-       brain sleep <prefix>                          consolidate history into durable memory\n\
-       brain related <name> [--top N]                association: what is related, and why\n\
-       brain change propose <prefix> <path> --from <file> --reason R   governed change (graph only)\n\
-       brain change apply|revert <prefix> <slug> --cap fs [--dir d]    through intent/receipt\n\
-       brain change verify <prefix> <slug> [--dir d]                   run tests, grade the change\n\
-       brain change list|show <prefix> [slug]        the change ledger\n\
-       brain ingest <dir> [--prefix <p>]  alias for twin refresh\n\
-       brain pull <store-root>            replicate another store into this one\n\
-       brain push <store-root>            replicate this store into another\n\
-       brain refs <name|b3:hash>          who references this node (reverse edges)\n\
-       brain evidence <name|b3:hash>      verification claims about a node\n\
-       brain deps <name|b3:hash>          what this node references (forward edges)\n\
-       brain observations <name>          observations about a twinned entity\n\
-       brain task check <task.json> <term.json>   check a solution, record evidence\n\
-       brain docs generate [dir] [--prefix p] [--out d]   regenerate docs from the graph\n\
-       brain watch [dir] [--prefix p] [--interval s] [--docs]   continuous refresh loop\n\
-       brain hook install [dir] [--prefix p] [--docs] [--tests] [--test-cmd c]   git triggers the brain\n\
-       brain hook status|uninstall [dir]  inspect or remove the git hooks\n\
-       brain version                      print the version\n\
-       brain demo                         run the end-to-end demonstration\n"
+fn usage() -> String {
+    manual::usage_text()
+}
+
+/// `brain man` — the manual, projected from the same registry as usage().
+fn cmd_man(args: &[String]) -> Result<(), String> {
+    let page = manual::man_page();
+    if let Some(i) = args.iter().position(|a| a == "--out") {
+        let path = args.get(i + 1).ok_or("--out needs a path")?;
+        std::fs::write(path, &page).map_err(|e| e.to_string())?;
+        println!("wrote {path}");
+        return Ok(());
+    }
+    if args.iter().any(|a| a == "--install") {
+        let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
+        let dir = std::path::Path::new(&home).join(".local/share/man/man1");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let path = dir.join("brain.1");
+        std::fs::write(&path, &page).map_err(|e| e.to_string())?;
+        println!("installed {} — try: man brain", path.display());
+        return Ok(());
+    }
+    print!("{page}");
+    Ok(())
 }
 
 fn main() -> ExitCode {
@@ -123,6 +86,7 @@ fn main() -> ExitCode {
         Some("docs") => docsgen::cmd_docs(&args[1..], open_store),
         Some("hook") => hooks::cmd_hook(&args[1..], open_store),
         Some("watch") => cmd_watch(&args[1..]),
+        Some("man") => cmd_man(&args[1..]),
         Some("version") | Some("--version") | Some("-V") => {
             println!("brain {}", env!("CARGO_PKG_VERSION"));
             Ok(())

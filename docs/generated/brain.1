@@ -1,0 +1,252 @@
+.TH BRAIN 1 "" "brain 0.1.0" "User Commands"
+.SH NAME
+brain \- agent\-native semantic substrate: one graph for code, twin, decisions, tests, and docs
+.SH SYNOPSIS
+.B brain
+.I command
+.RI [ args ]
+.SH DESCRIPTION
+brain keeps software knowledge in a content\-addressed graph: what the software is (files, symbols, imports), why it is that way (decisions, plans), how it is built (skills, agent configuration), what done means (templates, a definition of done), what happened (test protocols, timelines), and what matters now (attention). Facts are immutable, sourced, timestamped observations \- history is the data model, not a feature. Git hooks keep the graph fresh on every commit; replication moves truth between stores as a set union.
+.SH STORE
+The system of record: a content\-addressed graph in .brain/ \(em immutable objects, an append\-only event log, namespace lineage as version control.
+.TP
+.B brain init
+create a store in ./.brain and seed the deliverable templates
+.TP
+.B brain status
+objects, namespace size, HEAD, intent states
+.TP
+.B brain names
+list name \-> node bindings
+.TP
+.B brain pull \fI<store\-root>\fR
+replicate another store into this one (set union, conflicts preserved)
+.TP
+.B brain push \fI<store\-root>\fR
+replicate this store into another
+.SH TWIN
+Reflective mode: a persistent, queryable semantic model of existing software. Observations are sourced and timestamped; only drift is recorded.
+.TP
+.B brain twin refresh \fI<dir> [\-\-prefix <p>] [\-\-full]\fR
+observe a source tree, record only drift; \-\-full reprocesses every file after extractor upgrades
+.TP
+.B brain twin status \fI<dir> [\-\-prefix <p>]\fR
+the same comparison, read\-only
+.TP
+.B brain twin backfill \fI<dir> [\-\-prefix <p>] [\-\-max\-commits N]\fR
+replay git history into the twin with historical timestamps (brownfield minute\-one)
+.TP
+.B brain twin files \fI<prefix>\fR
+twinned files with language, symbols, freshness
+.TP
+.B brain twin symbols \fI<name>\fR
+what a file declares, with line numbers
+.TP
+.B brain twin imports \fI<name> [\-\-transitive]\fR
+what a file depends on; \-\-transitive walks the closure
+.TP
+.B brain twin rdeps \fI<name> [\-\-transitive]\fR
+who depends on a file; \-\-transitive is the blast radius
+.TP
+.B brain twin at \fI<prefix> <ms|30m|2h|1d|git\-hash>\fR
+the twin as it was: bi\-temporal read at a moment or commit
+.TP
+.B brain twin search \fI<substring>\fR
+find twinned entities by name
+.TP
+.B brain twin insights \fI<prefix>\fR
+the synthesized picture: churn, hubs, tests, decisions, growth, last sleep
+.TP
+.B brain twin tests \fI<prefix>\fR
+test files, frameworks, covers\-relations, failing cases
+.TP
+.B brain twin stale \fI<prefix>\fR
+docs invalidated by later changes to files they mention
+.TP
+.B brain ingest \fI<dir> [\-\-prefix <p>]\fR
+alias for twin refresh
+.TP
+.B brain note \fI<name> <text...>\fR
+attach a durable note to any entity
+.TP
+.B brain notes \fI<name>\fR
+read an entity's notes, in true order
+.TP
+.B brain observations \fI<name>\fR
+an entity's full observation timeline
+.SH DOCUMENTS
+The why and the contract: decisions (ADRs), plans, skills, agent configuration, templates with conformance, and artifacts of graph\-taught kinds.
+.TP
+.B brain adr add \fI<md\-file> \-\-prefix <p> [\-\-title T] [\-\-status S]\fR
+record a decision from any markdown file
+.TP
+.B brain adr list|show \fI<prefix> [slug]\fR
+decisions with status; show prints text, status timeline, mentions
+.TP
+.B brain plan add|list|show \fI...\fR
+the same for plans (e.g. Claude Code plan files)
+.TP
+.B brain skill add|list|show \fI...\fR
+agent skills (SKILL.md), auto\-captured or added explicitly
+.TP
+.B brain agentcfg add|list|show \fI...\fR
+agent configuration: CLAUDE.md, AGENTS.md, .cursorrules, settings, MCP
+.TP
+.B brain template seed|list|show \fI[slug]\fR
+the deliverable contract as graph data
+.TP
+.B brain template set \fI<slug> \-\-applies\-to k \-\-capture <globs> [\-\-fields spec] [\-\-requires a,b]\fR
+teach the store a new artifact kind \(em capture rules as data, no code
+.TP
+.B brain artifact list|show \fI<prefix> <kind> [slug]\fR
+browse artifacts of any kind, built\-in or taught
+.TP
+.B brain deliverable new \fI<template> [\-\-title T]\fR
+instantiate a scaffold from the graph to stdout
+.SH TESTS
+Tests as graph citizens: framework classification and covers\-relations at refresh; imported run protocols with per\-case result timelines.
+.TP
+.B brain testrun import \fI<report|\-> \-\-prefix <p>\fR
+ingest cargo\-test output or JUnit XML as a content\-addressed protocol
+.TP
+.B brain testrun list \fI<prefix>\fR
+imported protocols, newest first
+.SH FEATURES
+The registry: features as entities, the definition of done as relation predicates, done\-ness as a query.
+.TP
+.B brain feature add \fI<prefix> <slug> [\-\-title T] [\-\-status S]\fR
+register (or update) a feature
+.TP
+.B brain feature link \fI<prefix> <slug> <predicate> <target>\fR
+link a feature to files, tests, decisions, docs
+.TP
+.B brain feature list|matrix \fI<prefix>\fR
+the registry; matrix renders the definition of done as a query
+.TP
+.B brain done \fI<prefix> <slug>\fR
+evaluate a feature against the DoD and record the outcome
+.SH BRAIN FUNCTIONS
+The functional organs: attention (what matters now), consolidation (distill history into memory), association (what is related, and why).
+.TP
+.B brain attend \fI<prefix> [\-\-top N]\fR
+attention: what deserves attention now, ranked with reasons
+.TP
+.B brain sleep \fI<prefix>\fR
+consolidation: distill activity since last sleep into durable memory
+.TP
+.B brain related \fI<name> [\-\-top N]\fR
+association: what is related (co\-change, co\-mention, shared imports)
+.SH GOVERNED CHANGES
+The motor system: mutations to twinned software through the durable intent/receipt boundary, with explicit capability and full provenance.
+.TP
+.B brain change propose \fI<prefix> <path> \-\-from <file> [\-\-reason R]\fR
+propose a change: pure graph write, disk untouched
+.TP
+.B brain change apply|revert \fI<prefix> <slug> \-\-cap fs\fR
+through intent \-> write \-> receipt; refused without the capability
+.TP
+.B brain change verify \fI<prefix> <slug>\fR
+run the repo's test command, link the protocol, grade the change
+.TP
+.B brain change list|show \fI<prefix> [slug]\fR
+the change ledger with status timelines
+.TP
+.B brain recover
+mark pending intents indeterminate and reconcile changes \(em never retries
+.SH AUTOMATION
+Git triggers the brain: fail\-open hooks on commit and push, an in\-binary watch loop, and regenerated documentation projections.
+.TP
+.B brain hook install \fI[dir] [\-\-prefix p] [\-\-docs] [\-\-tests] [\-\-test\-cmd c]\fR
+every git commit/push refreshes the twin; \-\-tests runs and imports the suite
+.TP
+.B brain hook status|uninstall \fI[dir]\fR
+inspect or remove the hooks (foreign hooks respected)
+.TP
+.B brain watch \fI[dir] [\-\-prefix p] [\-\-interval s] [\-\-docs]\fR
+continuous refresh + insights loop, built into the binary
+.TP
+.B brain docs generate \fI[dir] [\-\-prefix p] [\-\-out d]\fR
+regenerate docs/generated/: tour, screenshots, narrated screencast, man page
+.SH NATIVE CODE
+The substrate's own calculus: content\-addressed programs, capability\-gated effects, evidence\-cached task checking.
+.TP
+.B brain put\-code \fI<name> <term>\fR
+store a term (.json or .term notation) and bind it
+.TP
+.B brain notation \fI<file>\fR
+convert a term between compact notation and JSON
+.TP
+.B brain run \fI<name> [\-\-cap <c>]...\fR
+evaluate bound code; effects require capabilities
+.TP
+.B brain task check \fI<task.json> <term>\fR
+check a solution, record evidence (cached across alpha\-equivalents)
+.TP
+.B brain demo
+the end\-to\-end demonstration
+.SH UTILITIES
+Replication, graph inspection, recovery, and the manual itself.
+.TP
+.B brain refs \fI<name|b3:hash>\fR
+reverse edges: who references this node
+.TP
+.B brain deps \fI<name|b3:hash>\fR
+forward edges: what this node references
+.TP
+.B brain evidence \fI<name|b3:hash>\fR
+verification claims about a node
+.TP
+.B brain bench index \fI[\-\-prefix <p>]\fR
+cortex vs cold replay \(em answers verified identical before timing
+.TP
+.B brain man \fI[\-\-install] [\-\-out <file>]\fR
+this manual (troff); \-\-install writes to ~/.local/share/man
+.TP
+.B brain version
+print the version
+.SH ENVIRONMENT
+.TP
+.B BRAIN_STORE
+store directory (default ./.brain)
+.TP
+.B BRAIN_INDEX
+set to 'mem' to force a cold reference\-backend rebuild instead of the cortex checkpoint
+.TP
+.B BRAIN_TTS_MODEL
+TTS model for docs narration (default Qwen/Qwen3\-TTS\-12Hz\-0.6B\-Base; espeak\-ng is the fallback)
+.SH FILES
+.TP
+.B .brain/objects/
+immutable content\-addressed objects (canonical JSON; identity = BLAKE3 of bytes)
+.TP
+.B .brain/events.jsonl
+append\-only event log \(em the WAL every derived index replays
+.TP
+.B .brain/intents.jsonl
+durable intent/receipt state for the effect boundary
+.TP
+.B .brain/HEAD
+NodeId of the current namespace object
+.TP
+.B .brain/cortex.json
+the cortex checkpoint \(em derived, disposable, rebuilt if missing
+.SH EXAMPLES
+.SS Brownfield minute\-one
+.nf
+brain init
+brain twin backfill . \-\-prefix twin/app
+brain twin refresh  . \-\-prefix twin/app
+brain hook install \-\-tests
+brain attend twin/app
+.fi
+.SS The session rhythm
+.nf
+brain attend twin/app          # wake: what matters now
+...work; commits refresh the twin and run the suite...
+brain twin stale twin/app      # fix rotted docs
+brain sleep twin/app           # consolidate before you go
+.fi
+.SH EXIT STATUS
+0 on success, 1 on error, 2 on usage error.
+.SH SEE ALSO
+docs/twin.md, docs/architecture.md, docs/calculus.md, and the ADRs under docs/adr/ \- all captured in the graph itself (\fBbrain adr list twin/self\fR).
