@@ -37,6 +37,7 @@ fn usage() -> &'static str {
        brain twin files <prefix>                 twinned files with freshness\n\
        brain twin symbols|imports|rdeps <name> [--transitive]   structure queries (recursive walk)\n\
        brain twin at <prefix> <ms|30m|2h|git-hash>   the twin as it was (bi-temporal read)\n\
+       brain twin backfill <dir> [--prefix p] [--max-commits N]   replay git history into the twin\n\
        brain bench index                  cortex vs cold replay: the earn-adoption gate\n\
        brain twin search <substring>             find twinned entities by name\n\
        brain twin insights <prefix>              synthesized picture: churn, hubs, growth\n\
@@ -521,6 +522,37 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             for t in targets {
                 println!("{}", entity_label(&store, &index, &t));
             }
+            Ok(())
+        }
+        Some("backfill") => {
+            let dir = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .ok_or("usage: brain twin backfill <dir> [--prefix <p>] [--max-commits N]")?;
+            let prefix = parse_prefix(&args[2..]);
+            let max = args
+                .iter()
+                .position(|a| a == "--max-commits")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+            let store = open_store()?;
+            let report = brain_observe::backfill::backfill(
+                &store,
+                std::path::Path::new(dir),
+                &prefix,
+                max,
+            )
+            .map_err(|e| e.to_string())?;
+            println!(
+                "backfilled {} commit(s): {} file version(s), {} deletion(s), {} blob(s) skipped, {} object(s) written",
+                report.commits,
+                report.file_versions,
+                report.deletions,
+                report.skipped_blobs,
+                report.objects_written
+            );
+            println!("history is in the graph: churn, `twin at <old-commit>`, and co-change now reach the past");
             Ok(())
         }
         Some("at") => {

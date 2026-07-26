@@ -71,6 +71,35 @@ brain observations twin/app/src/main.rs      # full observation timeline
   fail-open: a sense organ, never a gate. `brain watch` covers the
   between-commits interval.
 
+## Brownfield adoption: backfill the past
+
+A twin normally accrues history from the day it starts observing. For
+existing repos, `brain twin backfill <dir>` replays git history into the
+graph first — every commit's changed files become `content_b3`
+observations stamped with the **commit's time**, deletions become
+`present=false`, resurrections restore presence, and every commit lands
+as a `git_commit` observation on the repo entity. So a brownfield repo
+arrives with:
+
+- **churn that reflects its real life**, not just post-adoption edits;
+- **`brain twin at <any-old-commit>`** working across all history;
+- **co-change association** for every commit ever made (one commit = one
+  timestamp = one batch).
+
+Deliberate limits: file-level facts only (no historical symbol/import
+reconstruction — the current refresh covers the present), blobs over 4 MB
+skipped, facts sourced `"backfill"`. Idempotent by construction:
+identical historical facts are content-addressed no-ops, so re-running
+writes zero objects. The intended brownfield minute-one:
+
+```bash
+brain init
+brain twin backfill . --prefix twin/app     # the past
+brain twin refresh  . --prefix twin/app     # the present (structure, docs, tests)
+brain hook install --tests                  # the future
+brain attend twin/app                       # where to look first
+```
+
 ## Languages and precision (honest limits)
 
 Symbol/import extraction is **line-based and best-effort** — orientation, not

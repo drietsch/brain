@@ -6,22 +6,22 @@
 ## Insights (`brain twin insights`)
 ```
 == twin insights: twin/self ==
-last sleep (46s ago): 0 added, 16 changed file(s); 1 doc update(s); 1 protocol(s); last run 87/87 ok; 0 note(s); 14 memory digest(s); attention: crates/brain-observe/src/twin.rs, README.md, crates/brain-cli/src/main.rs
-files: 119 present, 9 deleted   symbols: 508   relations: 797
-git: claude/aztechement-detailed-review-upo8tb @ 3b2e615bb166
-tests: 0 test file(s), 88 declared; last run 533s ago: ok (87/87 passed, 0 failed)
+last sleep (2s ago): 2 added, 16 changed file(s); 1 doc update(s); 1 protocol(s); last run 88/88 ok; 0 note(s); 40 memory digest(s); attention: README.md, crates/brain-cli/src/main.rs, docs/twin.md
+files: 121 present, 9 deleted   symbols: 521   relations: 821
+git: claude/aztechement-detailed-review-upo8tb @ 8ba2b1e01634
+tests: 0 test file(s), 89 declared; last run 467s ago: ok (88/88 passed, 0 failed)
 churn (most edited):
-    17 versions  README.md
-    17 versions  crates/brain-cli/src/main.rs
-    17 versions  docs/generated/tour.md
-    16 versions  docs/generated/img/decisions.png
-    16 versions  docs/generated/img/insights.png
+    40 versions  README.md
+    40 versions  crates/brain-cli/src/main.rs
+    32 versions  docs/twin.md
+    22 versions  crates/brain-observe/src/twin.rs  [decided]
+    19 versions  crates/brain-observe/src/lib.rs
 hubs (most imported):
-    19 importers  crates/brain-core/src/ids.rs
-    18 importers  crates/brain-core/src/object.rs
-    16 importers  crates/brain-store/src/lib.rs
-    13 importers  crates/brain-index/src/lib.rs
-     8 importers  crates/brain-observe/src/twin.rs
+    20 importers  crates/brain-core/src/ids.rs
+    19 importers  crates/brain-core/src/object.rs
+    17 importers  crates/brain-store/src/lib.rs
+    14 importers  crates/brain-index/src/lib.rs
+     9 importers  crates/brain-observe/src/twin.rs
 untested hubs (imported, no tests):
      4 importers  crates/brain-core/src/lib.rs
      4 importers  crates/brain-observe/src/lib.rs
@@ -33,17 +33,17 @@ largest (symbols declared):
     29 symbols  crates/brain-index/src/lib.rs
     29 symbols  crates/brain-store/src/lib.rs
 external deps (unresolved imports):
-    23 uses  super::*
+    24 uses  super::*
     12 uses  brain_index
     12 uses  brain_store
-    11 uses  std::fs
-    10 uses  std::collections
+    12 uses  std::fs
+    11 uses  std::collections
 decisions (ADRs):
+  [accepted] adr-012-backfill-history-with-historical-timestamps: Backfilled history carries historical timestamps
   [accepted] adr-011-cortex: cortex: our own persistent graph-query engine
   [accepted] adr-011-braingraf: braingraf: our own persistent graph-query engine
   [accepted] adr-010-governed-mode: Governed mode: changes to twinned software go through the effect boundary
   [accepted] adr-009-functional-brain-not-structural: A functional brain, not a structural one
-  [accepted] adr-008-capture-rules-in-the-graph: Capture rules live in the graph
 plans:
   what-are-the-next-cached-flask: Twin v2.1 — braingraf: our own persistent graph-query engine, learned from minigraf
 agent skills:
@@ -62,39 +62,41 @@ features (DoD progress):
   [shipped] governed-mode  4/4
   [shipped] monolithic-install  4/4
   [shipped] test-protocols  4/4
+  [shipped] twin-backfill  4/4
 possibly stale docs (mentioned files changed since):
   adr-001-relation-predicate-field (decision): crates/brain-index/src/lib.rs
-  adr-003-templates-in-the-graph (decision): crates/brain-observe/src/templates.rs
-  adr-005-docs-as-projections (decision): crates/brain-observe/src/twin.rs
-  adr-006-monolithic-binary (decision): crates/brain-cli/src/docsgen.rs
-  adr-007-git-triggers-the-brain (decision): Cargo.toml, crates/brain-cli/src/hooks.rs
+  adr-003-templates-in-the-graph (decision): crates/brain-observe/src/features.rs, crates/brain-observe/src/templates.rs
+  adr-004-tests-in-the-graph (decision): crates/brain-observe/src/testing.rs
+  adr-005-docs-as-projections (decision): crates/brain-observe/src/twin.rs, scripts/docsgen/generate.sh, scripts/docsgen/tts.py
+  adr-006-monolithic-binary (decision): crates/brain-cli/assets/capture.mjs, crates/brain-cli/assets/tts.py, crates/brain-cli/src/docsgen.rs, install.sh, scripts/twin_watch.sh
 recent notes:
-  [7936s ago] twin/self: v1.2-1.5 in one session: docs, agent config, templates/DoD/features, test protocols. Static tests_declared (66) matched the imported cargo run exactly - the two views cross-validate.
-  [17112s ago] twin/self: twin v1.1: insights engine added on user request for continuous visibility
-  [17406s ago] crates/brain-observe/src/twin.rs: drift engine; latest() resolves ties by log order, not timestamp sort
+  [8495s ago] twin/self: v1.2-1.5 in one session: docs, agent config, templates/DoD/features, test protocols. Static tests_declared (66) matched the imported cargo run exactly - the two views cross-validate.
+  [17672s ago] twin/self: twin v1.1: insights engine added on user request for continuous visibility
+  [17965s ago] crates/brain-observe/src/twin.rs: drift engine; latest() resolves ties by log order, not timestamp sort
 growth (files/symbols/relations over refreshes):
-  - 17113s  78 files  299 symbols  402 relations
-  - 10121s  81 files  321 symbols  427 relations
-  -  9241s  84 files  339 symbols  448 relations
-  -  8510s  87 files  368 symbols  492 relations
-  -  7988s  89 files  391 symbols  528 relations
-  -  7269s  94 files  397 symbols  543 relations
-  -  7246s  96 files  397 symbols  543 relations
-  -  7170s  103 files  397 symbols  543 relations
-  -  7044s  104 files  397 symbols  543 relations
-  -  6978s  103 files  397 symbols  543 relations
-  -  6926s  104 files  397 symbols  543 relations
-  -  6345s  105 files  408 symbols  558 relations
-  -  6333s  107 files  408 symbols  558 relations
-  -  6158s  105 files  408 symbols  558 relations
-  -  5851s  107 files  421 symbols  578 relations
-  -  5351s  107 files  428 symbols  590 relations
-  -  3533s  109 files  440 symbols  602 relations
-  -  2682s  113 files  460 symbols  647 relations
-  -  2568s  114 files  460 symbols  647 relations
-  -  1948s  116 files  478 symbols  676 relations
-  -   920s  119 files  505 symbols  715 relations
-  -   126s  119 files  508 symbols  797 relations
+  - 17672s  78 files  299 symbols  402 relations
+  - 10681s  81 files  321 symbols  427 relations
+  -  9801s  84 files  339 symbols  448 relations
+  -  9070s  87 files  368 symbols  492 relations
+  -  8547s  89 files  391 symbols  528 relations
+  -  7829s  94 files  397 symbols  543 relations
+  -  7805s  96 files  397 symbols  543 relations
+  -  7730s  103 files  397 symbols  543 relations
+  -  7604s  104 files  397 symbols  543 relations
+  -  7537s  103 files  397 symbols  543 relations
+  -  7485s  104 files  397 symbols  543 relations
+  -  6904s  105 files  408 symbols  558 relations
+  -  6893s  107 files  408 symbols  558 relations
+  -  6718s  105 files  408 symbols  558 relations
+  -  6411s  107 files  421 symbols  578 relations
+  -  5910s  107 files  428 symbols  590 relations
+  -  4092s  109 files  440 symbols  602 relations
+  -  3241s  113 files  460 symbols  647 relations
+  -  3128s  114 files  460 symbols  647 relations
+  -  2507s  116 files  478 symbols  676 relations
+  -  1480s  119 files  505 symbols  715 relations
+  -   685s  119 files  508 symbols  797 relations
+  -     3s  121 files  521 symbols  821 relations
 ```
 
 ## Feature matrix — definition of done (`brain feature matrix`)
@@ -109,22 +111,24 @@ git-hooks                   ✓         ✓        ✓           ✓        ✓
 governed-mode               ✓         ✓        ✓           ✓        ✓
 monolithic-install          ✓         ✓        ✓           ✓        ✓
 test-protocols              ✓         ✓        ✓           ✓        ✓
+twin-backfill               ✓         ✓        ✓           ✓        ✓
 ```
 
 ## Decisions (`brain adr list`)
 ```
-[accepted] adr-010-governed-mode: Governed mode: changes to twinned software go through the effect boundary  (1948s ago, 1 mention(s))
-[accepted] adr-003-templates-in-the-graph: Deliverable templates live in the graph  (8510s ago, 3 mention(s))
-[accepted] adr-005-docs-as-projections: Documentation is a projection of the graph  (6926s ago, 3 mention(s))
-[accepted] adr-002-alpha-normalization-at-store-boundary: Alpha-normalization happens at the store boundary  (10121s ago, 4 mention(s))
-[accepted] adr-011-braingraf: braingraf: our own persistent graph-query engine  (920s ago, 0 mention(s))
-[accepted] adr-006-monolithic-binary: brain ships as one monolithic binary, installed with one command  (6345s ago, 5 mention(s))
-[accepted] adr-011-cortex: cortex: our own persistent graph-query engine  (126s ago, 0 mention(s))
-[accepted] adr-009-functional-brain-not-structural: A functional brain, not a structural one  (2682s ago, 3 mention(s))
-[accepted] adr-008-capture-rules-in-the-graph: Capture rules live in the graph  (3533s ago, 3 mention(s))
-[accepted] adr-004-tests-in-the-graph: Tests and test protocols are graph citizens  (7988s ago, 1 mention(s))
-[accepted] adr-007-git-triggers-the-brain: Every git commit and push triggers the brain  (5351s ago, 2 mention(s))
-[accepted] adr-001-relation-predicate-field: Relation's edge label is a field named `predicate`, not `kind`  (10121s ago, 3 mention(s))
+[accepted] adr-010-governed-mode: Governed mode: changes to twinned software go through the effect boundary  (2507s ago, 1 mention(s))
+[accepted] adr-003-templates-in-the-graph: Deliverable templates live in the graph  (9070s ago, 3 mention(s))
+[accepted] adr-005-docs-as-projections: Documentation is a projection of the graph  (7485s ago, 3 mention(s))
+[accepted] adr-002-alpha-normalization-at-store-boundary: Alpha-normalization happens at the store boundary  (10681s ago, 4 mention(s))
+[accepted] adr-011-braingraf: braingraf: our own persistent graph-query engine  (1480s ago, 0 mention(s))
+[accepted] adr-006-monolithic-binary: brain ships as one monolithic binary, installed with one command  (6904s ago, 5 mention(s))
+[accepted] adr-011-cortex: cortex: our own persistent graph-query engine  (686s ago, 0 mention(s))
+[accepted] adr-009-functional-brain-not-structural: A functional brain, not a structural one  (3241s ago, 3 mention(s))
+[accepted] adr-008-capture-rules-in-the-graph: Capture rules live in the graph  (4092s ago, 3 mention(s))
+[accepted] adr-004-tests-in-the-graph: Tests and test protocols are graph citizens  (8547s ago, 1 mention(s))
+[accepted] adr-012-backfill-history-with-historical-timestamps: Backfilled history carries historical timestamps  (4s ago, 1 mention(s))
+[accepted] adr-007-git-triggers-the-brain: Every git commit and push triggers the brain  (5910s ago, 2 mention(s))
+[accepted] adr-001-relation-predicate-field: Relation's edge label is a field named `predicate`, not `kind`  (10681s ago, 3 mention(s))
 ```
 
 ## Tests (`brain twin tests`)
@@ -140,6 +144,7 @@ crates/brain-index/src/lib.rs  [rust] 3 test(s), inline tests
 crates/brain-observe/src/agents.rs  [rust] 3 test(s), inline tests
 crates/brain-observe/src/assoc.rs  [rust] 1 test(s), inline tests
 crates/brain-observe/src/attention.rs  [rust] 1 test(s), inline tests
+crates/brain-observe/src/backfill.rs  [rust] 1 test(s), inline tests
 crates/brain-observe/src/docs.rs  [rust] 4 test(s), inline tests
 crates/brain-observe/src/govern.rs  [rust] 4 test(s), inline tests
 crates/brain-observe/src/sleep.rs  [rust] 1 test(s), inline tests
@@ -157,31 +162,32 @@ crates/cortex/src/lib.rs  [rust] 3 test(s), inline tests
 
 ## Test protocols (`brain testrun list`)
 ```
-[   533s ago] ok: 87/87 passed, 0 failed (cargo)
-[   827s ago] ok: 87/87 passed, 0 failed (cargo)
-[  1843s ago] ok: 83/83 passed, 0 failed (cargo)
-[  1968s ago] ok: 83/83 passed, 0 failed (cargo)
-[  2544s ago] ok: 79/79 passed, 0 failed (cargo)
-[  3419s ago] ok: 76/76 passed, 0 failed (cargo)
-[  5350s ago] ok: 72/72 passed, 0 failed (cargo)
-[  5771s ago] ok: 70/70 passed, 0 failed (cargo)
-[  6116s ago] ok: 68/68 passed, 0 failed (cargo)
-[  6809s ago] ok: 67/67 passed, 0 failed (cargo)
-[  7985s ago] ok: 66/66 passed, 0 failed (cargo)
+[   467s ago] ok: 88/88 passed, 0 failed (cargo)
+[  1093s ago] ok: 87/87 passed, 0 failed (cargo)
+[  1386s ago] ok: 87/87 passed, 0 failed (cargo)
+[  2403s ago] ok: 83/83 passed, 0 failed (cargo)
+[  2527s ago] ok: 83/83 passed, 0 failed (cargo)
+[  3103s ago] ok: 79/79 passed, 0 failed (cargo)
+[  3978s ago] ok: 76/76 passed, 0 failed (cargo)
+[  5909s ago] ok: 72/72 passed, 0 failed (cargo)
+[  6330s ago] ok: 70/70 passed, 0 failed (cargo)
+[  6676s ago] ok: 68/68 passed, 0 failed (cargo)
+[  7369s ago] ok: 67/67 passed, 0 failed (cargo)
+[  8544s ago] ok: 66/66 passed, 0 failed (cargo)
 ```
 
 ## Attention (`brain attend`)
 ```
- 1. [ 52] crates/brain-observe/src/twin.rs (file)  — churn 12, hub 8
- 2. [ 51] README.md (file)  — churn 17
- 3. [ 51] crates/brain-cli/src/main.rs (file)  — churn 17
- 4. [ 51] docs/generated/tour.md (file)  — churn 17
- 5. [ 48] docs/generated/img/decisions.png (file)  — churn 16
- 6. [ 48] docs/generated/img/insights.png (file)  — churn 16
- 7. [ 48] docs/generated/img/protocols.png (file)  — churn 16
- 8. [ 47] crates/brain-observe/src/lib.rs (file)  — churn 9, hub 4, untested hub
- 9. [ 45] docs/generated/tour.webm (file)  — churn 15
-10. [ 45] docs/twin.md (file)  — churn 15
+ 1. [120] README.md (file)  — churn 40
+ 2. [120] crates/brain-cli/src/main.rs (file)  — churn 40
+ 3. [ 96] docs/twin.md (file)  — churn 32
+ 4. [ 84] crates/brain-observe/src/twin.rs (file)  — churn 22, hub 9
+ 5. [ 77] crates/brain-observe/src/lib.rs (file)  — churn 19, hub 4, untested hub
+ 6. [ 53] crates/brain-core/src/object.rs (file)  — churn 5, hub 19
+ 7. [ 52] crates/brain-index/src/lib.rs (file)  — churn 8, hub 14
+ 8. [ 49] crates/brain-store/src/lib.rs (file)  — churn 5, hub 17
+ 9. [ 46] crates/brain-core/src/ids.rs (file)  — churn 2, hub 20
+10. [ 36] crates/brain-cli/Cargo.toml (file)  — churn 12
 ```
 
 ## Doc staleness (`brain twin stale`)
@@ -189,18 +195,32 @@ crates/cortex/src/lib.rs  [rust] 3 test(s), inline tests
 adr-001-relation-predicate-field (decision) — changed since doc updated:
   crates/brain-index/src/lib.rs
 adr-003-templates-in-the-graph (decision) — changed since doc updated:
+  crates/brain-observe/src/features.rs
   crates/brain-observe/src/templates.rs
+adr-004-tests-in-the-graph (decision) — changed since doc updated:
+  crates/brain-observe/src/testing.rs
 adr-005-docs-as-projections (decision) — changed since doc updated:
   crates/brain-observe/src/twin.rs
+  scripts/docsgen/generate.sh
+  scripts/docsgen/tts.py
 adr-006-monolithic-binary (decision) — changed since doc updated:
+  crates/brain-cli/assets/capture.mjs
+  crates/brain-cli/assets/tts.py
   crates/brain-cli/src/docsgen.rs
+  install.sh
+  scripts/twin_watch.sh
 adr-007-git-triggers-the-brain (decision) — changed since doc updated:
   Cargo.toml
   crates/brain-cli/src/hooks.rs
 adr-008-capture-rules-in-the-graph (decision) — changed since doc updated:
+  crates/brain-observe/src/templates.rs
   crates/brain-observe/src/twin.rs
 adr-009-functional-brain-not-structural (decision) — changed since doc updated:
+  crates/brain-observe/src/assoc.rs
   crates/brain-observe/src/attention.rs
+  crates/brain-observe/src/sleep.rs
+adr-010-governed-mode (decision) — changed since doc updated:
+  crates/brain-observe/src/govern.rs
 claude.md (agent_config) — changed since doc updated:
   README.md
   docs/twin.md

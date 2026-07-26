@@ -25,6 +25,7 @@
 pub mod agents;
 pub mod assoc;
 pub mod attention;
+pub mod backfill;
 pub mod docs;
 pub mod features;
 pub mod govern;

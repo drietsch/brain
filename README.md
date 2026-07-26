@@ -47,6 +47,7 @@ cargo run -p brain -- hook install --tests   # every commit: refresh + run tests
 cargo run -p brain -- twin symbols twin/self/crates/brain-core/src/object.rs
 cargo run -p brain -- twin rdeps twin/self/crates/brain-observe/src/symbols.rs --transitive  # blast radius
 cargo run -p brain -- twin at twin/self 2h        # the twin as it was (also takes a git hash)
+cargo run -p brain -- twin backfill . --prefix twin/self  # brownfield: replay git history into the twin
 cargo run -p brain -- bench index                 # cortex vs cold replay, answers verified
 cargo run -p brain -- note twin/self/README.md "docs entry point"
 cargo run -p brain -- plan add ~/.claude/plans/feature.md --prefix twin/self  # Claude Code plans
