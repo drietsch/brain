@@ -35,9 +35,12 @@ use std::path::Path;
 
 use brain_store::StoreError;
 
-/// File extensions worth twinning in a source tree.
+/// File extensions worth twinning in a source tree. Media formats are
+/// included so generated documentation artifacts (screenshots, screencasts,
+/// narration) carry freshness observations like any other file.
 pub(crate) const INGEST_EXTENSIONS: &[&str] = &[
-    "rs", "toml", "md", "json", "php", "py", "js", "jsx", "ts", "tsx", "mdc",
+    "rs", "toml", "md", "json", "php", "py", "js", "jsx", "ts", "tsx", "mdc", "sh", "mjs",
+    "png", "svg", "gif", "webm", "mp4", "wav",
 ];
 /// Extensionless files worth twinning by exact name (agent configuration).
 pub(crate) const INGEST_FILENAMES: &[&str] = &[".cursorrules"];

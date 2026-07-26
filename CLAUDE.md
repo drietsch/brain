@@ -37,4 +37,9 @@ target/debug/brain notes twin/self             # what previous sessions learned
 - After an approved plan: `brain plan add <plan.md> --prefix twin/self`.
 - After a significant decision: write an ADR into `docs/adr/` — the next
   refresh captures it.
+- After a test run: `cargo test 2>&1 | brain testrun import - --prefix
+  twin/self` — protocols belong in the graph.
+- Before finishing: `brain twin stale twin/self` (fix rotted docs) and
+  `scripts/docsgen/generate.sh . twin/self` (docs/generated/ is a
+  projection — regenerate, never edit).
 - Leave `brain note` breadcrumbs for the next session.

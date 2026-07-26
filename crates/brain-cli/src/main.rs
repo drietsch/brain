@@ -54,6 +54,7 @@ fn usage() -> &'static str {
        brain testrun import <report> --prefix <p>    ingest cargo-test output or JUnit XML\n\
        brain testrun list <prefix>                   imported protocols, newest first\n\
        brain twin tests <prefix>                     test files, frameworks, failing cases\n\
+       brain twin stale <prefix>                     docs invalidated by later file changes\n\
        brain ingest <dir> [--prefix <p>]  alias for twin refresh\n\
        brain pull <store-root>            replicate another store into this one\n\
        brain push <store-root>            replicate this store into another\n\
@@ -548,6 +549,12 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     println!("  {slug} ({kind}): missing {missing}");
                 }
             }
+            if !ins.stale_docs.is_empty() {
+                println!("possibly stale docs (mentioned files changed since):");
+                for (slug, kind, changed) in ins.stale_docs.iter().take(5) {
+                    println!("  {slug} ({kind}): {}", changed.join(", "));
+                }
+            }
             if !ins.notes.is_empty() {
                 println!("recent notes:");
                 for (at, entity, text) in &ins.notes {
@@ -604,6 +611,21 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                 println!("failing now:");
                 for name in failing {
                     println!("  ✗ {name}");
+                }
+            }
+            Ok(())
+        }
+        Some("stale") => {
+            let prefix = args.get(1).ok_or("usage: brain twin stale <prefix>")?;
+            let store = open_store()?;
+            let ins = brain_observe::twin::insights(&store, prefix).map_err(|e| e.to_string())?;
+            if ins.stale_docs.is_empty() {
+                println!("no stale docs under {prefix}");
+            }
+            for (slug, kind, changed) in &ins.stale_docs {
+                println!("{slug} ({kind}) — changed since doc updated:");
+                for f in changed {
+                    println!("  {f}");
                 }
             }
             Ok(())

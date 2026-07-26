@@ -255,6 +255,43 @@ What the graph gives you:
   convention) produce `test_case -defined_in-> file` relations.
 - **Replication.** Runs, timelines, and evidence travel with `brain pull`.
 
+## Always-up-to-date docs: staleness + projections
+
+Two mechanisms keep documentation honest (see
+docs/adr/adr-005-docs-as-projections.md):
+
+**Staleness detection** for hand-written docs. A doc whose mentioned files
+gained newer content observations than the doc itself is *possibly stale*:
+
+```bash
+brain twin stale twin/app     # doc -> which files changed since it was written
+```
+
+Derived at query time, never written; surfaced in insights the moment rot
+happens instead of when a reader trips over it.
+
+**Generated docs as projections.** `scripts/docsgen/generate.sh` regenerates
+`docs/generated/` wholesale from live graph queries:
+
+- `tour.md` — insights, feature matrix, decisions, tests, protocols,
+  staleness: verbatim query results.
+- `img/*.png` — terminal screenshots rendered with Playwright's bundled
+  Chromium.
+- `tour.webm` — a typed screencast of the same session.
+- `narration.txt` + `tour-narrated.webm` — a spoken tour whose sentences
+  are computed from the same queries (file counts, pass rates, DoD
+  fractions), synthesized to audio and muxed onto the screencast.
+
+TTS backend: **Qwen3-TTS-12Hz-0.6B-Base** when its stack is available
+(`pip install torch soundfile transformers`; weights fetch on first use —
+see `scripts/docsgen/tts.py`), with espeak-ng as the offline fallback, so
+the pipeline degrades gracefully instead of failing.
+
+The generated artifacts are themselves twinned (media extensions are
+ingested), so "when were the docs last regenerated, and from which commit"
+is a graph query like everything else. Run it from the same hooks as
+`twin refresh` — docs that regenerate with the twin cannot drift from it.
+
 ## Continuous insights
 
 `brain twin insights <prefix>` synthesizes the twin into a picture of the

@@ -388,6 +388,10 @@ pub struct Insights {
     pub failing: Vec<String>,
     /// Most-imported files with no declared tests and no covering test file.
     pub untested_hubs: Vec<(String, usize)>,
+    /// Docs whose mentioned files changed after the doc was last updated:
+    /// (slug, kind, changed files). Derived at query time, never written —
+    /// stale is a judgment about now, not a fact about then.
+    pub stale_docs: Vec<(String, String, Vec<String>)>,
 }
 
 const TOP: usize = 5;
@@ -482,7 +486,8 @@ pub fn insights_with(
         }
     }
 
-    // Documents failing their template contract (recorded, never enforced).
+    // Documents failing their template contract (recorded, never enforced),
+    // and documents gone stale: a mentioned file changed after the doc did.
     for kind in ["decision", "plan", "skill", "agent_config"] {
         let mut seen: BTreeSet<StableId> = BTreeSet::new();
         for node in index.entities_by_kind(kind) {
@@ -491,14 +496,31 @@ pub fn insights_with(
             {
                 continue;
             }
+            let slug = labels.get("slug").cloned().unwrap_or_default();
             if latest(index, store, &id, "conforms")?.as_deref() == Some("false") {
-                let slug = labels.get("slug").cloned().unwrap_or_default();
                 let missing = latest(index, store, &id, "missing")?.unwrap_or_default();
-                ins.nonconforming.push((slug, kind.to_string(), missing));
+                ins.nonconforming.push((slug.clone(), kind.to_string(), missing));
+            }
+            if let Some((doc_at, _)) = latest_at(index, store, &id, "content")? {
+                let mut changed = Vec::new();
+                for rid in index.relations_from(&id, "mentions") {
+                    if let Object::Relation { to, .. } = store.get(&rid)? {
+                        if let Some((f_at, _)) = latest_at(index, store, &to, "content_b3")? {
+                            if f_at > doc_at {
+                                changed.push(sid_label(index, store, &to));
+                            }
+                        }
+                    }
+                }
+                if !changed.is_empty() {
+                    changed.sort();
+                    ins.stale_docs.push((slug, kind.to_string(), changed));
+                }
             }
         }
     }
     ins.nonconforming.sort();
+    ins.stale_docs.sort();
 
     // Features: done-ness evaluated live against the definition of done.
     for row in crate::features::list(store, index, prefix)? {
@@ -699,6 +721,20 @@ pub(crate) fn relate(
     })?;
     written.insert(key);
     Ok(true)
+}
+
+/// A human-readable label for an entity: path, name, or slug — else the id.
+pub fn sid_label(index: &MemIndex, store: &Store, sid: &StableId) -> String {
+    for node in index.entity_nodes(sid) {
+        if let Ok(Object::Entity { labels, .. }) = store.get(&node) {
+            for key in ["path", "name", "slug"] {
+                if let Some(v) = labels.get(key) {
+                    return v.clone();
+                }
+            }
+        }
+    }
+    sid.to_string()
 }
 
 /// Latest observation value for (subject, property), by observation time.
@@ -1669,6 +1705,47 @@ mod tests {
         assert!(ins.failing.is_empty());
         assert!(ins.untested_hubs.iter().any(|(f, _)| f == "src/util.rs"));
         assert!(!ins.untested_hubs.iter().any(|(f, _)| f == "web/app.js"));
+    }
+
+    #[test]
+    fn docs_go_stale_when_mentioned_files_change_after_them() {
+        let (src, store_dir) = fixture();
+        let store = Store::open(store_dir.path()).unwrap();
+        fs::create_dir_all(src.path().join("docs/adr")).unwrap();
+        fs::write(
+            src.path().join("docs/adr/adr-001-main.md"),
+            "# Main design\n\nStatus: accepted\n\nAll logic lives in src/main.rs.\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.stale_docs.is_empty(), "freshly captured doc is not stale");
+
+        // The mentioned file changes after the doc was recorded.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        fs::write(
+            src.path().join("src/main.rs"),
+            "use crate::util;\npub fn main() { util::helper() }\nstruct Config;\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert_eq!(ins.stale_docs.len(), 1);
+        let (slug, kind, changed) = &ins.stale_docs[0];
+        assert_eq!(slug, "adr-001-main");
+        assert_eq!(kind, "decision");
+        assert_eq!(changed, &vec!["src/main.rs".to_string()]);
+
+        // Updating the doc clears the staleness.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        fs::write(
+            src.path().join("docs/adr/adr-001-main.md"),
+            "# Main design\n\nStatus: accepted\n\nAll logic lives in src/main.rs; helper moved in.\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.stale_docs.is_empty(), "re-touched doc is fresh again");
     }
 
     #[test]
