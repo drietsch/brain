@@ -145,12 +145,54 @@ fn generate(store: &Store, dir: &Path, prefix: &str, out: &Path) -> Result<(), S
     let _ = fs::remove_file(out.join(".sections.json"));
     let _ = fs::remove_dir_all(&tmp);
 
-    // The artifacts become part of the twin.
+    // The artifacts become part of the twin — marked as generated, so
+    // attention and churn know their edits are projections, not work.
     twin::refresh(store, dir, prefix).map_err(|e| e.to_string())?;
+    mark_generated(store, dir, out).map_err(|e| e.to_string())?;
     println!(
         "docs regenerated under {} (projection of {prefix}; do not edit)",
         out.display()
     );
+    Ok(())
+}
+
+/// Guarded `generated=true` observations on every artifact under `out`.
+fn mark_generated(
+    store: &Store,
+    dir: &Path,
+    out: &Path,
+) -> Result<(), brain_store::StoreError> {
+    use brain_index::{replay, Index as _, MemIndex};
+    let mut index = MemIndex::new();
+    replay(store, &mut index)?;
+    let now = brain_store::now_ms();
+    let mut stack = vec![out.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for entry in std::fs::read_dir(&d)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            // dir is often "." and read_dir yields already-relative paths;
+            // a failed strip means the path is already repo-relative.
+            let rel = path.strip_prefix(dir).unwrap_or(&path);
+            let rel = rel.to_string_lossy().replace('\\', "/");
+            let sid = brain_core::ids::StableId::derive(&["file", &rel]);
+            if index.entity_nodes(&sid).is_empty() {
+                continue; // not a twinned extension; nothing to mark
+            }
+            if twin::latest(&index, store, &sid, "generated")?.as_deref() != Some("true") {
+                store.put(&brain_core::object::Object::Observation {
+                    subject: sid,
+                    property: "generated".to_string(),
+                    value: "true".to_string(),
+                    source: "docsgen".to_string(),
+                    observed_at_ms: now,
+                })?;
+            }
+        }
+    }
     Ok(())
 }
 

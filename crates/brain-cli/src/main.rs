@@ -371,11 +371,15 @@ fn print_twin_report(report: &brain_observe::twin::TwinReport, wrote: bool) {
 fn cmd_twin_refresh(args: &[String], write: bool) -> Result<(), String> {
     let dir = args
         .first()
-        .ok_or("usage: brain twin refresh|status <dir> [--prefix <p>]")?;
+        .filter(|a| !a.starts_with("--"))
+        .ok_or("usage: brain twin refresh|status <dir> [--prefix <p>] [--full]")?;
     let prefix = parse_prefix(&args[1..]);
+    let full = args.iter().any(|a| a == "--full");
     let store = open_store()?;
     let path = std::path::Path::new(dir);
-    let report = if write {
+    let report = if write && full {
+        brain_observe::twin::refresh_full(&store, path, &prefix)
+    } else if write {
         brain_observe::twin::refresh(&store, path, &prefix)
     } else {
         brain_observe::twin::status(&store, path, &prefix)

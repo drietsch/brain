@@ -58,7 +58,9 @@ brain observations twin/app/src/main.rs      # full observation timeline
   returned files get `present=true`.
 - **Backfill:** a file twinned before structure extraction existed (no
   `language` observation) gets its structure on the next refresh even if
-  unchanged.
+  unchanged. After an extractor upgrade, `brain twin refresh --full`
+  reprocesses every file as if changed — still guarded, so unchanged
+  facts write nothing.
 - **Repo-level facts:** the prefix itself binds to a `repo` entity carrying
   `git_commit` / `git_branch` observations (skipped outside git repos).
 - **Continuous by design:** `brain hook install` wires refresh into git —
@@ -76,7 +78,7 @@ compiler-grade analysis:
 
 | Language | Symbols | Imports |
 |---|---|---|
-| Rust | fn, struct, enum, trait, mod | `use` paths; `crate::foo` resolves to `src/foo.rs` when present |
+| Rust | fn, struct, enum, trait, mod | `use` paths; `crate::foo` and cross-crate `foo_bar::baz` resolve to files across sibling `src/` trees (crate-root fallback for item imports) |
 | PHP | class, interface, trait, function, namespace | `use X\Y;` |
 | Python | def, class | `import X`, `from X import` |
 | JS/TS | function, class (incl. exported) | `import ... from`, bare imports, `require()` — relative paths resolve to files |

@@ -39,7 +39,7 @@ native implementations without re-modeling.
 ## Quickstart
 
 ```bash
-cargo test                 # 67 tests, including crash recovery
+cargo test                 # 88 tests, including crash recovery
 cargo run -p brain -- init
 cargo run -p brain -- demo            # author -> store -> bind -> run
 cargo run -p brain -- twin refresh . --prefix twin/self   # the brain twins itself

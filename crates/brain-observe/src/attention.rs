@@ -50,6 +50,8 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
         let Ok(Object::Entity { id: sid, entity_kind, .. }) = store.get(node) else { continue };
         if entity_kind != "source_file"
             || latest(index, store, &sid, "present")?.as_deref() == Some("false")
+            // Generated projections regenerate constantly; never salient.
+            || latest(index, store, &sid, "generated")?.as_deref() == Some("true")
         {
             continue;
         }
@@ -174,5 +176,16 @@ mod tests {
         // Determinism: recompute gives the identical ranking.
         let again = attend(&store, &index, "twin/app").unwrap();
         assert_eq!(ranked, again);
+
+        // A generated projection, however churned, is never salient.
+        let util = StableId::derive(&["file", "web/util.js"]);
+        crate::twin::observe_src(&store, &util, "generated", "true", "docsgen", 999).unwrap();
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+        let ranked = attend(&store, &index, "twin/app").unwrap();
+        assert!(
+            !ranked.iter().any(|a| a.label == "web/util.js"),
+            "generated files drop out: {ranked:?}"
+        );
     }
 }

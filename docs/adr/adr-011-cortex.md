@@ -49,6 +49,9 @@ the earn-adoption gate, kept honest.
   single write path.
 - Blast-radius and as-of queries become one-liners; deeper Datalog-style
   rules can grow inside cortex later without touching the store.
-- Known limit inherited from the extractors: cross-crate Rust imports
-  resolve to module entities, not files, so transitive walks are
-  strongest within a crate.
+- Known limit inherited from the extractors — cross-crate Rust imports
+  resolving to module entities rather than files — was closed shortly
+  after landing: the resolver now maps `foo_bar::baz` into sibling crate
+  `src/` trees (crate-root fallback for item imports), and
+  `brain twin refresh --full` reprocesses existing files after any such
+  extractor upgrade.

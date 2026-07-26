@@ -41,15 +41,29 @@ pub struct TwinReport {
 /// Refresh the twin under `prefix` from the tree at `root`, writing only
 /// what drifted. Idempotent: an immediately repeated refresh writes nothing.
 pub fn refresh(store: &Store, root: &Path, prefix: &str) -> Result<TwinReport, StoreError> {
-    run(store, root, prefix, true)
+    run(store, root, prefix, true, false)
+}
+
+/// Like [`refresh`], but reprocesses every file as if it had changed —
+/// the upgrade path after extractors improve (better import resolution,
+/// new classifiers): existing files gain the new structure without
+/// waiting to drift. Still guarded: unchanged facts write nothing.
+pub fn refresh_full(store: &Store, root: &Path, prefix: &str) -> Result<TwinReport, StoreError> {
+    run(store, root, prefix, true, true)
 }
 
 /// The same comparison as [`refresh`], read-only: what *would* be recorded?
 pub fn status(store: &Store, root: &Path, prefix: &str) -> Result<TwinReport, StoreError> {
-    run(store, root, prefix, false)
+    run(store, root, prefix, false, false)
 }
 
-fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinReport, StoreError> {
+fn run(
+    store: &Store,
+    root: &Path,
+    prefix: &str,
+    write: bool,
+    full: bool,
+) -> Result<TwinReport, StoreError> {
     let mut index = MemIndex::new();
     replay(store, &mut index)?;
     let now = now_ms();
@@ -157,7 +171,8 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
             }
             None => false,
         };
-        if !changed
+        if !full
+            && !changed
             && !structure_missing
             && !doc_missing
             && !agent_missing
@@ -626,7 +641,9 @@ pub fn insights_with(
             .filter_map(|id| store.get(id).ok())
             .filter(|o| matches!(o, Object::Observation { property, .. } if property == "content_b3"))
             .count();
-        if versions > 1 {
+        // Generated projections churn by design; their edits are noise.
+        let generated = latest(index, store, sid, "generated")?.as_deref() == Some("true");
+        if versions > 1 && !generated {
             churn.push((rel.clone(), versions));
         }
 
@@ -893,6 +910,7 @@ fn resolve_import(from_rel: &str, import: &str, files: &BTreeSet<String>) -> Opt
     }
     // Rust intra-crate: `crate::foo::Bar` -> <src-root>/foo.rs or foo/mod.rs,
     // where the src root is the importing file's path up through "src/".
+    // Item imports (`crate::helper`) fall back to the crate root (lib.rs).
     if let Some(rest) = import.strip_prefix("crate::") {
         let src_root = if let Some(p) = from_rel.rfind("/src/") {
             &from_rel[..p + 5]
@@ -905,10 +923,47 @@ fn resolve_import(from_rel: &str, import: &str, files: &BTreeSet<String>) -> Opt
             for cand in [
                 format!("{src_root}{first}.rs"),
                 format!("{src_root}{first}/mod.rs"),
+                format!("{src_root}lib.rs"),
             ] {
                 if files.contains(&cand) {
                     return Some(cand);
                 }
+            }
+        }
+    }
+    // Rust cross-crate: `foo_bar::mod::Item` resolves into a sibling
+    // crate's src tree when one exists among the walked files (crate dirs
+    // may use hyphens where imports use underscores). Item and bare-crate
+    // imports fall back to the crate root — the honest answer for
+    // `use foo_bar::Thing` and `use foo_bar::{a, b}`.
+    if !import.contains('/') {
+        let mut segs = import.split("::");
+        let first = segs.next().unwrap_or("");
+        let second = segs.next();
+        if !matches!(first, "crate" | "super" | "self" | "std" | "core" | "alloc")
+            && first.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && !first.is_empty()
+        {
+            let hyphen = first.replace('_', "-");
+            for f in files {
+                let Some(src_root) = f.strip_suffix("lib.rs") else { continue };
+                let dir = src_root
+                    .strip_suffix("/src/")
+                    .map(|d| d.rsplit('/').next().unwrap_or(d))
+                    .unwrap_or("");
+                if dir.is_empty() || (dir != first && dir != hyphen) {
+                    continue;
+                }
+                if let Some(second) = second {
+                    for cand in
+                        [format!("{src_root}{second}.rs"), format!("{src_root}{second}/mod.rs")]
+                    {
+                        if files.contains(&cand) {
+                            return Some(cand);
+                        }
+                    }
+                }
+                return Some(f.clone());
             }
         }
     }
@@ -1960,6 +2015,46 @@ mod tests {
         assert!(ins.stale_docs.iter().any(|(s, k, files)| {
             s == "deploy" && k == "runbook" && files.contains(&"src/main.rs".to_string())
         }));
+    }
+
+    #[test]
+    fn rust_cross_crate_imports_resolve_to_sibling_crates() {
+        let src = tempfile::tempdir().unwrap();
+        fs::create_dir_all(src.path().join("crates/core-lib/src")).unwrap();
+        fs::create_dir_all(src.path().join("crates/app/src")).unwrap();
+        fs::write(src.path().join("crates/core-lib/src/lib.rs"), "pub mod ids;\n").unwrap();
+        fs::write(src.path().join("crates/core-lib/src/ids.rs"), "pub struct Id;\n").unwrap();
+        fs::write(
+            src.path().join("crates/app/src/lib.rs"),
+            "use core_lib::ids::Id;\nuse core_lib::helper;\npub fn go() {}\n",
+        )
+        .unwrap();
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/ws").unwrap();
+
+        let index = fresh_index(&store);
+        let app = StableId::derive(&["file", "crates/app/src/lib.rs"]);
+        let ids_rs = StableId::derive(&["file", "crates/core-lib/src/ids.rs"]);
+        let core_root = StableId::derive(&["file", "crates/core-lib/src/lib.rs"]);
+        let targets: Vec<_> = index
+            .relations_from(&app, "imports")
+            .iter()
+            .filter_map(|id| match store.get(id) {
+                Ok(Object::Relation { to, .. }) => Some(to),
+                _ => None,
+            })
+            .collect();
+        // `core_lib::ids::Id` -> the module file (hyphens matched from
+        // underscores); `core_lib::helper` -> the crate root fallback.
+        assert!(targets.contains(&ids_rs), "{targets:?}");
+        assert!(targets.contains(&core_root), "{targets:?}");
+
+        // A --full refresh after an extractor upgrade is guarded too:
+        // reprocessing everything writes no duplicate facts.
+        let before = store.count_objects().unwrap();
+        refresh_full(&store, src.path(), "twin/ws").unwrap();
+        assert_eq!(store.count_objects().unwrap(), before, "full reprocess, zero growth");
     }
 
     #[test]
