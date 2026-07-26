@@ -19,6 +19,7 @@
 //! never edited in place, so the codebase can never be broken by a change.
 
 pub mod intents;
+pub mod sync;
 
 use brain_core::ids::NodeId;
 use brain_core::object::{hash_object, object_bytes, Object};
@@ -45,6 +46,9 @@ pub enum StoreError {
     Corrupt { id: NodeId, actual: NodeId },
     #[error("expected {expected} object at {id}")]
     WrongKind { id: NodeId, expected: &'static str },
+    #[error("canonicalization mismatch during sync: {claimed} now canonicalizes to {actual} — \
+             the source store predates the current canonical form; rebuild or migrate it")]
+    CanonEpoch { claimed: NodeId, actual: NodeId },
 }
 
 pub struct Store {
@@ -222,7 +226,7 @@ impl Store {
 
     // ---- event log ----
 
-    fn append_event(&self, kind: &str, detail: serde_json::Value) -> Result<(), StoreError> {
+    pub(crate) fn append_event(&self, kind: &str, detail: serde_json::Value) -> Result<(), StoreError> {
         let line = json!({ "at_ms": now_ms(), "kind": kind, "detail": detail });
         let mut f = fs::OpenOptions::new()
             .create(true)

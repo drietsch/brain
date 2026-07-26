@@ -39,8 +39,11 @@ benchmarks embedded graph-database backends (OverGraph, Graph_D) against
 
 ## Stage 4 — Replication and distribution
 
-Content-addressed sync between stores (how code moves; replaces deployment),
-signed partitions, receipts that survive reconciliation after disconnection.
+~~Content-addressed sync between stores~~ (done: `brain pull|push`, set-union
+objects with epoch-checked ingest, conflicts preserved as `sync-conflict/`
+bindings, evidence travels and re-checks arrive cached). Remaining: signed
+partitions, transport beyond the local filesystem, receipts that survive
+reconciliation after disconnection.
 
 ## Stage 5 — The tournament
 

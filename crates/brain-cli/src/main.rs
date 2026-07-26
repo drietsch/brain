@@ -31,6 +31,8 @@ fn usage() -> &'static str {
        brain run <name> [--cap <c>]...    evaluate the code bound to a name\n\
        brain recover                      mark pending intents indeterminate\n\
        brain ingest <dir> [--prefix <p>]  twin an external source tree\n\
+       brain pull <store-root>            replicate another store into this one\n\
+       brain push <store-root>            replicate this store into another\n\
        brain refs <name|b3:hash>          who references this node (reverse edges)\n\
        brain evidence <name|b3:hash>      verification claims about a node\n\
        brain deps <name|b3:hash>          what this node references (forward edges)\n\
@@ -40,6 +42,12 @@ fn usage() -> &'static str {
 }
 
 fn main() -> ExitCode {
+    // Die quietly on a closed pipe (`brain status | head`) instead of
+    // panicking — restore the default Unix SIGPIPE behavior Rust masks.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("init") => cmd_init(),
@@ -50,6 +58,8 @@ fn main() -> ExitCode {
         Some("run") => cmd_run(&args[1..]),
         Some("recover") => cmd_recover(),
         Some("ingest") => cmd_ingest(&args[1..]),
+        Some("pull") => cmd_sync(&args[1..], true),
+        Some("push") => cmd_sync(&args[1..], false),
         Some("refs") => cmd_refs(&args[1..]),
         Some("evidence") => cmd_evidence(&args[1..]),
         Some("deps") => cmd_deps(&args[1..]),
@@ -71,7 +81,31 @@ fn main() -> ExitCode {
 }
 
 fn open_store() -> Result<Store, String> {
-    Store::open(".brain").map_err(|e| e.to_string())
+    let root = std::env::var("BRAIN_STORE").unwrap_or_else(|_| ".brain".to_string());
+    Store::open(root).map_err(|e| e.to_string())
+}
+
+/// Open an existing store at an explicit path (for sync). Refuses to
+/// conjure an empty store out of a typo.
+fn open_existing_store(root: &str) -> Result<Store, String> {
+    if !std::path::Path::new(root).join("objects").is_dir() {
+        return Err(format!("no store at '{root}' (missing objects/)"));
+    }
+    Store::open(root).map_err(|e| e.to_string())
+}
+
+fn print_sync_report(report: &brain_store::sync::SyncReport) {
+    println!(
+        "objects: {} copied, {} already present",
+        report.objects_copied, report.objects_present
+    );
+    println!(
+        "names:   {} added, {} agreed",
+        report.names_added, report.names_agreed
+    );
+    for (name, kept, incoming) in &report.conflicts {
+        println!("CONFLICT {name}: kept {kept:?}, source's {incoming:?} bound as sync-conflict/{name}");
+    }
 }
 
 fn cmd_init() -> Result<(), String> {
@@ -292,6 +326,22 @@ fn cmd_refs(args: &[String]) -> Result<(), String> {
             println!("{}", describe(&store, &names, &id));
         }
     }
+    Ok(())
+}
+
+fn cmd_sync(args: &[String], pull: bool) -> Result<(), String> {
+    let other_root = args
+        .first()
+        .ok_or("usage: brain pull|push <store-root>")?;
+    let local = open_store()?;
+    let other = open_existing_store(other_root)?;
+    let report = if pull {
+        brain_store::sync::pull(&local, &other)
+    } else {
+        brain_store::sync::pull(&other, &local)
+    }
+    .map_err(|e| e.to_string())?;
+    print_sync_report(&report);
     Ok(())
 }
 

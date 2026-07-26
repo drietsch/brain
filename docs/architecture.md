@@ -34,8 +34,17 @@ gradient — describe → observe → govern → absorb — not an event.
    before retry.
 5. **Observer frame** (`brain-observe`) — reflective-mode ingestion as a
    continuous sense organ.
-6. **Replication** — not yet built. Content-addressed sync between stores is
-   how code moves; it replaces deployment.
+6. **Replication** (`brain-store::sync`) — content-addressed sync between
+   stores; how code moves, replacing deployment. Objects are a conflict-free
+   set union (immutable + content-addressed; every ingest re-hashed, with a
+   distinct canonicalization-epoch error when a source predates the current
+   canonical form). Namespace conflicts are preserved as explicit structure:
+   the destination's binding is kept and the source's target lands under
+   `sync-conflict/<name>` — never silently overwritten. Operational state
+   (the intent log) stays local; receipts and evidence travel as objects, so
+   a program verified in one store arrives in another with its evidence —
+   where the checker's cache then recognizes it as already-verified work.
+   CLI: `brain pull|push <store-root>`; `BRAIN_STORE` selects the local store.
 
 ## The index seam: system of record vs. system of query
 

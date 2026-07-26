@@ -34,6 +34,10 @@ cargo run -p brain-cli -- observations twin/self/README.md
 cargo run -p brain-cli -- task check tasks/t01-increment.json tasks/solutions/increment.json
 cargo run -p brain-cli -- notation tasks/solutions/abs.json   # project to compact notation
 cargo run -p brain-cli -- recover         # marks pending intents indeterminate
+
+# Replication: code moves as content-addressed sync, with its evidence
+BRAIN_STORE=/tmp/brain2 cargo run -p brain-cli -- init
+BRAIN_STORE=/tmp/brain2 cargo run -p brain-cli -- pull .brain
 ```
 
 The demo stores two programs in the graph, runs the pure one (42), shows the
