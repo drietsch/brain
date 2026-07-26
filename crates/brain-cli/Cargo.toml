@@ -1,0 +1,16 @@
+[package]
+name = "brain-cli"
+version.workspace = true
+edition.workspace = true
+description = "Command-line surface of the brain substrate"
+
+[[bin]]
+name = "brain"
+path = "src/main.rs"
+
+[dependencies]
+brain-core = { workspace = true }
+brain-store = { workspace = true }
+brain-runtime = { workspace = true }
+brain-observe = { workspace = true }
+serde_json = { workspace = true }

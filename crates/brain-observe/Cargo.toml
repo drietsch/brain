@@ -1,0 +1,13 @@
+[package]
+name = "brain-observe"
+version.workspace = true
+edition.workspace = true
+description = "Reflective mode: ingest the state of external software as entities and observations"
+
+[dependencies]
+brain-core = { workspace = true }
+brain-store = { workspace = true }
+blake3 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -1,0 +1,193 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://brain.dev/schema/term.schema.json",
+  "title": "brain core calculus term",
+  "description": "The wire shape agents author programs against. A term is a tagged union on 'op'. Constrained/structured output against this schema is the intended authoring path.",
+  "$ref": "#/definitions/term",
+  "definitions": {
+    "term": {
+      "type": "object",
+      "required": ["op"],
+      "oneOf": [
+        { "$ref": "#/definitions/lit" },
+        { "$ref": "#/definitions/var" },
+        { "$ref": "#/definitions/lam" },
+        { "$ref": "#/definitions/app" },
+        { "$ref": "#/definitions/let" },
+        { "$ref": "#/definitions/record" },
+        { "$ref": "#/definitions/field" },
+        { "$ref": "#/definitions/variant" },
+        { "$ref": "#/definitions/match" },
+        { "$ref": "#/definitions/ref" },
+        { "$ref": "#/definitions/foreign" },
+        { "$ref": "#/definitions/hole" }
+      ]
+    },
+    "literal": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        {
+          "properties": {
+            "type": { "const": "int" },
+            "value": { "type": "integer" }
+          },
+          "required": ["type", "value"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": { "const": "str" },
+            "value": { "type": "string" }
+          },
+          "required": ["type", "value"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": { "const": "bool" },
+            "value": { "type": "boolean" }
+          },
+          "required": ["type", "value"],
+          "additionalProperties": false
+        },
+        {
+          "properties": { "type": { "const": "unit" } },
+          "required": ["type"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "lit": {
+      "properties": {
+        "op": { "const": "lit" },
+        "value": { "$ref": "#/definitions/literal" }
+      },
+      "required": ["op", "value"],
+      "additionalProperties": false
+    },
+    "var": {
+      "properties": {
+        "op": { "const": "var" },
+        "name": { "type": "string", "minLength": 1 }
+      },
+      "required": ["op", "name"],
+      "additionalProperties": false
+    },
+    "lam": {
+      "properties": {
+        "op": { "const": "lam" },
+        "param": { "type": "string", "minLength": 1 },
+        "body": { "$ref": "#/definitions/term" }
+      },
+      "required": ["op", "param", "body"],
+      "additionalProperties": false
+    },
+    "app": {
+      "properties": {
+        "op": { "const": "app" },
+        "func": { "$ref": "#/definitions/term" },
+        "arg": { "$ref": "#/definitions/term" }
+      },
+      "required": ["op", "func", "arg"],
+      "additionalProperties": false
+    },
+    "let": {
+      "properties": {
+        "op": { "const": "let" },
+        "name": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "#/definitions/term" },
+        "body": { "$ref": "#/definitions/term" }
+      },
+      "required": ["op", "name", "value", "body"],
+      "additionalProperties": false
+    },
+    "record": {
+      "properties": {
+        "op": { "const": "record" },
+        "fields": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/term" }
+        }
+      },
+      "required": ["op", "fields"],
+      "additionalProperties": false
+    },
+    "field": {
+      "properties": {
+        "op": { "const": "field" },
+        "record": { "$ref": "#/definitions/term" },
+        "field": { "type": "string", "minLength": 1 }
+      },
+      "required": ["op", "record", "field"],
+      "additionalProperties": false
+    },
+    "variant": {
+      "properties": {
+        "op": { "const": "variant" },
+        "tag": { "type": "string", "minLength": 1 },
+        "payload": { "$ref": "#/definitions/term" }
+      },
+      "required": ["op", "tag", "payload"],
+      "additionalProperties": false
+    },
+    "match": {
+      "properties": {
+        "op": { "const": "match" },
+        "scrutinee": { "$ref": "#/definitions/term" },
+        "arms": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "bind": { "type": "string", "minLength": 1 },
+              "body": { "$ref": "#/definitions/term" }
+            },
+            "required": ["bind", "body"],
+            "additionalProperties": false
+          }
+        },
+        "default": { "$ref": "#/definitions/term" }
+      },
+      "required": ["op", "scrutinee", "arms"],
+      "additionalProperties": false
+    },
+    "ref": {
+      "properties": {
+        "op": { "const": "ref" },
+        "node": {
+          "type": "string",
+          "pattern": "^b3:[0-9a-f]{64}$",
+          "description": "Content identity of the referenced Code object."
+        }
+      },
+      "required": ["op", "node"],
+      "additionalProperties": false
+    },
+    "foreign": {
+      "properties": {
+        "op": { "const": "foreign" },
+        "symbol": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name in the runtime's foreign registry, which declares effect class and required capability. The only gate to the outside world."
+        },
+        "arg": { "$ref": "#/definitions/term" }
+      },
+      "required": ["op", "symbol", "arg"],
+      "additionalProperties": false
+    },
+    "hole": {
+      "properties": {
+        "op": { "const": "hole" },
+        "id": { "type": "string", "minLength": 1 },
+        "expected": {
+          "type": "string",
+          "description": "Optional expected type, as an opaque string until the type system lands."
+        }
+      },
+      "required": ["op", "id"],
+      "additionalProperties": false
+    }
+  }
+}

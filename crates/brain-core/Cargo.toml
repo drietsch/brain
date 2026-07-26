@@ -1,0 +1,11 @@
+[package]
+name = "brain-core"
+version.workspace = true
+edition.workspace = true
+description = "Identity, canonical encoding, and the core calculus of the brain substrate"
+
+[dependencies]
+blake3 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

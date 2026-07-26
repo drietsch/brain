@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/brain-core",
+    "crates/brain-store",
+    "crates/brain-runtime",
+    "crates/brain-observe",
+    "crates/brain-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+blake3 = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tempfile = "3"
+
+brain-core = { path = "crates/brain-core" }
+brain-store = { path = "crates/brain-store" }
+brain-runtime = { path = "crates/brain-runtime" }
+brain-observe = { path = "crates/brain-observe" }

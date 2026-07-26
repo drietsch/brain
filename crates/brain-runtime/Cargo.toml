@@ -1,0 +1,10 @@
+[package]
+name = "brain-runtime"
+version.workspace = true
+edition.workspace = true
+description = "Interpreter for the core calculus: fuel-metered, capability-checked, effects only through the boundary"
+
+[dependencies]
+brain-core = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
