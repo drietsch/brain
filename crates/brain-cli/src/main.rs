@@ -32,6 +32,7 @@ fn usage() -> &'static str {
        brain recover                      mark pending intents indeterminate\n\
        brain ingest <dir> [--prefix <p>]  twin an external source tree\n\
        brain refs <name|b3:hash>          who references this node (reverse edges)\n\
+       brain evidence <name|b3:hash>      verification claims about a node\n\
        brain deps <name|b3:hash>          what this node references (forward edges)\n\
        brain observations <name>          observations about a twinned entity\n\
        brain task check <task.json> <term.json>   check a solution, record evidence\n\
@@ -50,6 +51,7 @@ fn main() -> ExitCode {
         Some("recover") => cmd_recover(),
         Some("ingest") => cmd_ingest(&args[1..]),
         Some("refs") => cmd_refs(&args[1..]),
+        Some("evidence") => cmd_evidence(&args[1..]),
         Some("deps") => cmd_deps(&args[1..]),
         Some("observations") => cmd_observations(&args[1..]),
         Some("task") => cmd_task(&args[1..]),
@@ -288,6 +290,27 @@ fn cmd_refs(args: &[String]) -> Result<(), String> {
     } else {
         for id in referrers {
             println!("{}", describe(&store, &names, &id));
+        }
+    }
+    Ok(())
+}
+
+fn cmd_evidence(args: &[String]) -> Result<(), String> {
+    let arg = args.first().ok_or("usage: brain evidence <name|b3:hash>")?;
+    let store = open_store()?;
+    let target = resolve_arg(&store, arg)?;
+    let index = build_index(&store)?;
+    let evidence = index.evidence_for(&target);
+    if evidence.is_empty() {
+        println!("no evidence recorded for {target:?}");
+        return Ok(());
+    }
+    for id in evidence {
+        if let Object::Evidence { level, method, passed, detail, .. } =
+            store.get(&id).map_err(|e| e.to_string())?
+        {
+            let mark = if passed { "pass" } else { "FAIL" };
+            println!("{mark}  {level:?}  {method}  {detail}");
         }
     }
     Ok(())

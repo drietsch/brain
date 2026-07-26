@@ -191,6 +191,95 @@ pub enum Literal {
     Unit,
 }
 
+/// Alpha-normalization: rename every binder (and its bound occurrences) to a
+/// canonical de Bruijn-level name (`_0`, `_1`, ... by binding depth), so that
+/// alpha-equivalent terms have identical canonical form and therefore
+/// identical content identity. "Identity before names": binder names are
+/// projection-level, and must not leak into hashes.
+///
+/// Free variables are left untouched (top-level Code is closed; a free
+/// variable literally named `_N` in an open term could be captured — a
+/// documented pathological edge, not reachable from closed programs).
+pub fn alpha_normalize(term: &Term) -> Term {
+    norm(term, &mut Vec::new())
+}
+
+fn canon_name(depth: usize) -> String {
+    format!("_{depth}")
+}
+
+fn norm(t: &Term, scope: &mut Vec<(String, String)>) -> Term {
+    match t {
+        Term::Lit { .. } | Term::RefNode { .. } | Term::Hole { .. } => t.clone(),
+        Term::Var { name } => Term::Var {
+            name: scope
+                .iter()
+                .rev()
+                .find(|(n, _)| n == name)
+                .map(|(_, c)| c.clone())
+                .unwrap_or_else(|| name.clone()),
+        },
+        Term::Lam { param, body } => {
+            let canon = canon_name(scope.len());
+            scope.push((param.clone(), canon.clone()));
+            let body = Box::new(norm(body, scope));
+            scope.pop();
+            Term::Lam { param: canon, body }
+        }
+        Term::Let { name, value, body } => {
+            let value = Box::new(norm(value, scope));
+            let canon = canon_name(scope.len());
+            scope.push((name.clone(), canon.clone()));
+            let body = Box::new(norm(body, scope));
+            scope.pop();
+            Term::Let { name: canon, value, body }
+        }
+        Term::App { func, arg } => Term::App {
+            func: Box::new(norm(func, scope)),
+            arg: Box::new(norm(arg, scope)),
+        },
+        Term::Record { fields } => Term::Record {
+            fields: fields.iter().map(|(k, v)| (k.clone(), norm(v, scope))).collect(),
+        },
+        Term::Field { record, field } => Term::Field {
+            record: Box::new(norm(record, scope)),
+            field: field.clone(),
+        },
+        Term::Variant { tag, payload } => Term::Variant {
+            tag: tag.clone(),
+            payload: Box::new(norm(payload, scope)),
+        },
+        Term::Match { scrutinee, arms, default } => Term::Match {
+            scrutinee: Box::new(norm(scrutinee, scope)),
+            arms: arms
+                .iter()
+                .map(|(tag, arm)| {
+                    let canon = canon_name(scope.len());
+                    scope.push((arm.bind.clone(), canon.clone()));
+                    let body = norm(&arm.body, scope);
+                    scope.pop();
+                    (tag.clone(), Arm { bind: canon, body })
+                })
+                .collect(),
+            default: default.as_ref().map(|d| Box::new(norm(d, scope))),
+        },
+        Term::Foreign { symbol, arg } => Term::Foreign {
+            symbol: symbol.clone(),
+            arg: Box::new(norm(arg, scope)),
+        },
+    }
+}
+
+/// The form of an object as stored and hashed: Code terms are
+/// alpha-normalized. The store applies this at the put boundary, so what is
+/// on disk is always the canonical form and stored bytes re-hash to the id.
+pub fn canonicalize(o: &Object) -> Object {
+    match o {
+        Object::Code { term } => Object::Code { term: alpha_normalize(term) },
+        other => other.clone(),
+    }
+}
+
 /// Content identity of an object: hash of its canonical encoding.
 pub fn hash_object(o: &Object) -> Result<NodeId, CoreError> {
     let v = serde_json::to_value(o)?;
@@ -239,6 +328,57 @@ mod tests {
         let back: Object = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(o, back);
         assert_eq!(hash_object(&o).unwrap(), hash_object(&back).unwrap());
+    }
+
+    #[test]
+    fn alpha_equivalent_terms_share_canonical_identity() {
+        let f = |p: &str| Object::Code {
+            term: Term::Lam {
+                param: p.to_string(),
+                body: Box::new(Term::Var { name: p.to_string() }),
+            },
+        };
+        assert_ne!(
+            hash_object(&f("x")).unwrap(),
+            hash_object(&f("y")).unwrap(),
+            "raw hashes differ by binder name"
+        );
+        assert_eq!(
+            hash_object(&canonicalize(&f("x"))).unwrap(),
+            hash_object(&canonicalize(&f("y"))).unwrap(),
+            "canonical hashes must not"
+        );
+    }
+
+    #[test]
+    fn alpha_normalization_handles_shadowing_and_free_vars() {
+        // \x -> (\x -> x) x   — inner x binds to inner lam, outer to outer.
+        let t = Term::Lam {
+            param: "x".to_string(),
+            body: Box::new(Term::App {
+                func: Box::new(Term::Lam {
+                    param: "x".to_string(),
+                    body: Box::new(Term::Var { name: "x".to_string() }),
+                }),
+                arg: Box::new(Term::Var { name: "x".to_string() }),
+            }),
+        };
+        let n = alpha_normalize(&t);
+        let expected = Term::Lam {
+            param: "_0".to_string(),
+            body: Box::new(Term::App {
+                func: Box::new(Term::Lam {
+                    param: "_1".to_string(),
+                    body: Box::new(Term::Var { name: "_1".to_string() }),
+                }),
+                arg: Box::new(Term::Var { name: "_0".to_string() }),
+            }),
+        };
+        assert_eq!(n, expected);
+
+        // Free variables pass through untouched.
+        let free = Term::Var { name: "unbound".to_string() };
+        assert_eq!(alpha_normalize(&free), free);
     }
 
     #[test]

@@ -83,9 +83,11 @@ is forbidden by protocol, not by convention.
 
 - **Type checking** — types are opaque strings on `Spec` for now; the calculus
   is designed so a checker can be added without changing object identity.
-- **Alpha-equivalence in hashing** — `\x.x` and `\y.y` hash differently.
-  Known limitation; fixing it means canonicalizing binders (de Bruijn) in the
-  encoding, which should happen before any large corpus of code accumulates.
+- ~~**Alpha-equivalence in hashing**~~ — fixed: `Store::put` alpha-normalizes
+  Code terms (binders renamed to de Bruijn-level names), so alpha-equivalent
+  programs deduplicate to one node and stored bytes always re-hash to their
+  id. Verified end to end: the same program authored in JSON with one
+  parameter name and in compact notation with another lands on a single node.
 - **Replication, branch worlds, learning lineage, agent-to-agent transfer** —
   roadmap items; see `docs/roadmap.md`.
 - **A files export** — intentionally not built into the core loop. Projection

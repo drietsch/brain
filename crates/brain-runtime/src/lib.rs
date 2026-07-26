@@ -560,6 +560,32 @@ mod tests {
     }
 
     #[test]
+    fn alpha_normalization_preserves_semantics_under_shadowing() {
+        // (\x -> (\x -> add x 1) (add x 2)) 10  =>  (10+2)+1 = 13
+        let inner = Term::Lam {
+            param: "x".to_string(),
+            body: Box::new(add(Term::Var { name: "x".to_string() }, int(1))),
+        };
+        let outer = Term::Lam {
+            param: "x".to_string(),
+            body: Box::new(Term::App {
+                func: Box::new(inner),
+                arg: Box::new(add(Term::Var { name: "x".to_string() }, int(2))),
+            }),
+        };
+        let term = Term::App { func: Box::new(outer), arg: Box::new(int(10)) };
+        let normalized = brain_core::object::alpha_normalize(&term);
+        assert_ne!(term, normalized, "binder names should have changed");
+
+        let registry = Registry::with_builtins();
+        for t in [&term, &normalized] {
+            let mut effects = MemEffects::default();
+            let mut c = ctx(&registry, &mut effects, &[]);
+            assert_eq!(eval_closed(&mut c, t).unwrap(), Value::Int(13));
+        }
+    }
+
+    #[test]
     fn fuel_exhaustion_halts_evaluation() {
         // omega: (\x -> x x)(\x -> x x) — must halt via fuel, not hang.
         let self_app = Term::Lam {

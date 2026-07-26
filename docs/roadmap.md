@@ -26,13 +26,15 @@ verification-level → authority-ceiling rule enforced rather than recorded.
 
 ## Stage 3 — The graph as a codebase in earnest
 
-De Bruijn canonicalization (alpha-equivalent hashing), semantic diff between
-namespace steps, `(spec, implementation, evidence)` triples linked and
-queried, evidence-keyed test caching (a test result is a fact about a hash,
-forever), embedding annotations beside hashes for similarity retrieval.
-The `brain-index` trait seam exists; this stage benchmarks embedded
-graph-database backends (OverGraph, Graph_D) against `MemIndex` on real twin
-data and adopts one only if it wins.
+~~De Bruijn canonicalization (alpha-equivalent hashing)~~ (done: store-boundary
+alpha-normalization), ~~compact authoring notation~~ (done: 10-20x denser,
+provably projection-level), semantic diff between namespace steps,
+`(spec, implementation, evidence)` triples linked and queried (evidence
+queries exist: `brain evidence <name>`), evidence-keyed test caching (a test
+result is a fact about a hash, forever), embedding annotations beside hashes
+for similarity retrieval. The `brain-index` trait seam exists; this stage
+benchmarks embedded graph-database backends (OverGraph, Graph_D) against
+`MemIndex` on real twin data and adopts one only if it wins.
 
 ## Stage 4 — Replication and distribution
 

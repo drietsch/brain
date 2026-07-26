@@ -73,7 +73,11 @@ impl Store {
 
     /// Store an object. Idempotent: identical content lands at the identical
     /// path, so a re-put of existing content is a no-op (structural dedup).
+    /// Code objects are alpha-normalized on the way in, so alpha-equivalent
+    /// programs deduplicate to one node and stored bytes always re-hash to
+    /// their id ("identity before names").
     pub fn put(&self, o: &Object) -> Result<NodeId, StoreError> {
+        let o = &brain_core::object::canonicalize(o);
         let id = hash_object(o)?;
         let path = self.object_path(&id);
         if !path.exists() {
@@ -263,6 +267,24 @@ mod tests {
         assert_eq!(id1, id2);
         assert_eq!(store.count_objects().unwrap(), 1);
         assert_eq!(store.get(&id1).unwrap(), code(42));
+    }
+
+    #[test]
+    fn alpha_equivalent_programs_deduplicate() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let identity = |p: &str| Object::Code {
+            term: Term::Lam {
+                param: p.to_string(),
+                body: Box::new(Term::Var { name: p.to_string() }),
+            },
+        };
+        let a = store.put(&identity("x")).unwrap();
+        let b = store.put(&identity("y")).unwrap();
+        assert_eq!(a, b);
+        assert_eq!(store.count_objects().unwrap(), 1);
+        // Stored bytes re-hash to the id (integrity holds post-normalization).
+        assert!(store.get(&a).is_ok());
     }
 
     #[test]

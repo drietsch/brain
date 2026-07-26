@@ -78,9 +78,12 @@ programs). `brain notation <file>` converts either direction; `put-code` and
 
 - **No type checker yet.** `expected` on holes and `Spec` types are opaque
   strings awaiting a real type system.
-- **Hashing is not alpha-equivalent.** `\x.x` and `\y.y` are different nodes.
-  Canonicalizing binders (de Bruijn indices in the encoding) should land
-  before a large code corpus accumulates.
+- ~~**Hashing is not alpha-equivalent.**~~ **Fixed:** the store
+  alpha-normalizes binders to de Bruijn-level names (`_0`, `_1`, ...) at the
+  put boundary, so `\x.x` and `\y.y` are one node. Binder names are
+  projection-level; authored names live only in source files. (Edge:
+  free variables literally named `_N` in an *open* term could be captured —
+  unreachable from closed programs, documented in `alpha_normalize`.)
 - **`match` arms bind exactly one payload**; no nested patterns. Compose
   matches instead.
 - **Recursion** is expressible only via self-application (and will burn fuel);
