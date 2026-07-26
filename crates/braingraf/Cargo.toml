@@ -1,13 +1,15 @@
 [package]
-name = "brain-index"
+name = "braingraf"
 version.workspace = true
 edition.workspace = true
-description = "The index seam: derived, disposable query structures over the authoritative graph"
+description = "brain's own persistent graph-query engine: checkpoint + event-log delta-replay, recursive traversal"
 
 [dependencies]
 brain-core = { workspace = true }
 brain-store = { workspace = true }
+brain-index = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

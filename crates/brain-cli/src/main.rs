@@ -10,7 +10,7 @@ mod tasks;
 
 use brain_core::ids::NodeId;
 use brain_core::object::{Object, Term};
-use brain_index::{object_edges, replay, Index, MemIndex};
+use brain_index::{object_edges, Index, MemIndex};
 use brain_runtime::{
     eval_closed, value_to_json, CodeSource, EffectPort, EvalCtx, Registry, Value,
 };
@@ -35,7 +35,9 @@ fn usage() -> &'static str {
        brain twin refresh <dir> [--prefix <p>]   observe a source tree, record drift\n\
        brain twin status <dir> [--prefix <p>]    report drift without writing\n\
        brain twin files <prefix>                 twinned files with freshness\n\
-       brain twin symbols|imports|rdeps <name>   structure queries on a twinned file\n\
+       brain twin symbols|imports|rdeps <name> [--transitive]   structure queries (recursive walk)\n\
+       brain twin at <prefix> <ms|30m|2h|git-hash>   the twin as it was (bi-temporal read)\n\
+       brain bench index                  braingraf vs cold replay: the earn-adoption gate\n\
        brain twin search <substring>             find twinned entities by name\n\
        brain twin insights <prefix>              synthesized picture: churn, hubs, growth\n\
        brain note <name> <text...>        attach a durable note to an entity\n\
@@ -113,6 +115,7 @@ fn main() -> ExitCode {
         Some("done") => cmd_done(&args[1..]),
         Some("testrun") => cmd_testrun(&args[1..]),
         Some("change") => cmd_change(&args[1..]),
+        Some("bench") => cmd_bench(&args[1..]),
         Some("attend") => cmd_attend(&args[1..]),
         Some("sleep") => cmd_sleep(&args[1..]),
         Some("related") => cmd_related(&args[1..]),
@@ -470,34 +473,65 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             }
             Ok(())
         }
-        Some("imports") => {
-            let name = args.get(1).ok_or("usage: brain twin imports <file-name>")?;
+        Some(op @ ("imports" | "rdeps")) => {
+            let name = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .ok_or("usage: brain twin imports|rdeps <file-name> [--transitive]")?;
+            let reverse = op == "rdeps";
             let store = open_store()?;
             let index = build_index(&store)?;
             let sid = entity_sid(&store, name)?;
-            for target in relation_targets(&store, &index, &sid, "imports")? {
-                println!("{}", entity_label(&store, &index, &target));
+            if args.iter().any(|a| a == "--transitive") {
+                // braingraf's recursive walk: the full (blast) radius.
+                let reached = index
+                    .reach(&store, &sid, "imports", reverse, 64)
+                    .map_err(|e| e.to_string())?;
+                if reached.is_empty() {
+                    println!("nothing, transitively");
+                }
+                for (target, depth) in reached {
+                    println!("{}{}", "  ".repeat(depth - 1), entity_label(&store, &index, &target));
+                }
+                return Ok(());
             }
-            Ok(())
-        }
-        Some("rdeps") => {
-            let name = args.get(1).ok_or("usage: brain twin rdeps <file-name>")?;
-            let store = open_store()?;
-            let index = build_index(&store)?;
-            let sid = entity_sid(&store, name)?;
-            let mut froms = Vec::new();
-            for id in index.relations_to(&sid, "imports") {
-                if let Object::Relation { from, .. } = store.get(&id).map_err(|e| e.to_string())? {
-                    if !froms.contains(&from) {
-                        froms.push(from);
+            let mut targets = Vec::new();
+            let ids = if reverse {
+                index.relations_to(&sid, "imports")
+            } else {
+                index.relations_from(&sid, "imports")
+            };
+            for id in ids {
+                if let Object::Relation { from, to, .. } =
+                    store.get(&id).map_err(|e| e.to_string())?
+                {
+                    let t = if reverse { from } else { to };
+                    if !targets.contains(&t) {
+                        targets.push(t);
                     }
                 }
             }
-            if froms.is_empty() {
-                println!("nothing imports {name}");
+            if targets.is_empty() {
+                println!("nothing {} {name}", if reverse { "imports" } else { "imported by" });
             }
-            for from in froms {
-                println!("{}", entity_label(&store, &index, &from));
+            for t in targets {
+                println!("{}", entity_label(&store, &index, &t));
+            }
+            Ok(())
+        }
+        Some("at") => {
+            let (prefix, when) = match (args.get(1), args.get(2)) {
+                (Some(p), Some(w)) => (p, w),
+                _ => return Err("usage: brain twin at <prefix> <ms|30m|2h|1d|git-commit>".into()),
+            };
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let t = resolve_when(&store, &index, prefix, when)?;
+            let files = brain_observe::twin::files_at(&store, &index, prefix, t)
+                .map_err(|e| e.to_string())?;
+            println!("== {prefix} as of {t} ({} file(s)) ==", files.len());
+            for (rel, hash) in files {
+                println!("{}  {rel}", &hash[..12]);
             }
             Ok(())
         }
@@ -1386,6 +1420,113 @@ fn cmd_watch(args: &[String]) -> Result<(), String> {
     }
 }
 
+/// `brain bench index` — the earn-adoption gate: honest numbers, cold
+/// reference replay vs braingraf warm open, plus a real query mix, with
+/// answers verified identical before any timing is trusted.
+fn cmd_bench(args: &[String]) -> Result<(), String> {
+    if args.first().map(String::as_str) != Some("index") {
+        return Err("usage: brain bench index [--prefix <p>]".to_string());
+    }
+    let prefix = args
+        .iter()
+        .position(|a| a == "--prefix")
+        .and_then(|i| args.get(i + 1).cloned())
+        .unwrap_or_else(|| "twin/self".to_string());
+    let store = open_store()?;
+    let objects = store.count_objects().map_err(|e| e.to_string())?;
+
+    let t0 = std::time::Instant::now();
+    let cold = braingraf::Graf::open_ephemeral(&store).map_err(|e| e.to_string())?;
+    let cold_time = t0.elapsed();
+
+    // Ensure a checkpoint exists, then measure the warm path.
+    braingraf::Graf::open(&store)
+        .and_then(|g| g.checkpoint().map(|_| ()))
+        .map_err(|e| e.to_string())?;
+    let t1 = std::time::Instant::now();
+    let warm = braingraf::Graf::open(&store).map_err(|e| e.to_string())?;
+    let warm_time = t1.elapsed();
+
+    // Correctness first: identical answers over real probes, or no bench.
+    let mut sids = Vec::new();
+    for (name, node) in store.namespace().map_err(|e| e.to_string())? {
+        if name.strip_prefix(&format!("{prefix}/")).is_some() {
+            if let Ok(Object::Entity { id, .. }) = store.get(&node) {
+                sids.push(id);
+            }
+        }
+    }
+    if !braingraf::answers_match(
+        &*cold,
+        &*warm,
+        &[],
+        &sids,
+        &["source_file", "decision", "test_run"],
+        &["imports", "contains", "mentions"],
+    ) {
+        return Err("backends disagree — braingraf does not earn adoption".to_string());
+    }
+
+    // A real query mix over the warm index.
+    let t2 = std::time::Instant::now();
+    let mut edges = 0usize;
+    for sid in &sids {
+        edges += warm.relations_from(sid, "imports").len();
+        edges += warm.relations_to(sid, "imports").len();
+        edges += warm.relations_from(sid, "contains").len();
+    }
+    let ins = brain_observe::twin::insights_with(&store, &warm, &prefix)
+        .map_err(|e| e.to_string())?;
+    let query_time = t2.elapsed();
+
+    println!("store: {objects} objects; probes: {} entities, {edges} edge answers", sids.len());
+    println!("cold replay (BRAIN_INDEX=mem behavior): {cold_time:?}");
+    println!(
+        "warm braingraf open (delta {} event(s)):   {warm_time:?}  ({:.1}x faster)",
+        warm.delta(),
+        cold_time.as_secs_f64() / warm_time.as_secs_f64().max(1e-9)
+    );
+    println!("query mix (edges + full insights):      {query_time:?}");
+    println!("answers: identical across backends ({} files in insights)", ins.files);
+    Ok(())
+}
+
+/// Resolve a point in time: epoch ms, a relative `30m`/`2h`/`1d` ago, or
+/// a git commit hash looked up in the repo entity's observation timeline.
+fn resolve_when(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    when: &str,
+) -> Result<u64, String> {
+    if when.chars().all(|c| c.is_ascii_digit()) && when.len() >= 12 {
+        return when.parse().map_err(|e| format!("bad timestamp: {e}"));
+    }
+    if let Some(unit) = when.chars().last().filter(|c| "smhd".contains(*c)) {
+        if let Ok(n) = when[..when.len() - 1].parse::<u64>() {
+            let secs = match unit {
+                's' => n,
+                'm' => n * 60,
+                'h' => n * 3600,
+                _ => n * 86_400,
+            };
+            return Ok(now_ms().saturating_sub(secs * 1000));
+        }
+    }
+    // A commit hash (prefix): when the twin observed that commit as HEAD.
+    let repo = brain_core::ids::StableId::derive(&["repo", prefix]);
+    for id in index.observations_of(&repo) {
+        if let Object::Observation { property, value, observed_at_ms, .. } =
+            store.get(&id).map_err(|e| e.to_string())?
+        {
+            if property == "git_commit" && value.starts_with(when) {
+                return Ok(observed_at_ms);
+            }
+        }
+    }
+    Err(format!("cannot resolve '{when}' (epoch ms, 30m/2h/1d, or a twinned commit hash)"))
+}
+
 /// `brain change ...` — governed mode: the motor system. Changes to
 /// twinned software go through the intent/receipt boundary, with an
 /// explicit capability — never ambient authority.
@@ -1716,10 +1857,18 @@ fn describe(store: &Store, names: &std::collections::BTreeMap<NodeId, Vec<String
     format!("{id:?}  {kind}{bound}")
 }
 
-fn build_index(store: &Store) -> Result<MemIndex, String> {
-    let mut index = MemIndex::new();
-    replay(store, &mut index).map_err(|e| e.to_string())?;
-    Ok(index)
+/// The CLI's query backend: braingraf — a persisted checkpoint plus
+/// event-log delta replay, O(new events) on a warm open. It derefs to
+/// MemIndex, so every query path below is written against the reference
+/// backend. `BRAIN_INDEX=mem` forces a cold, non-persisting rebuild.
+fn build_index(store: &Store) -> Result<braingraf::Graf, String> {
+    if std::env::var("BRAIN_INDEX").as_deref() == Ok("mem") {
+        return braingraf::Graf::open_ephemeral(store).map_err(|e| e.to_string());
+    }
+    let graf = braingraf::Graf::open(store).map_err(|e| e.to_string())?;
+    // Best-effort persistence: a failed checkpoint costs only warmth.
+    let _ = graf.checkpoint();
+    Ok(graf)
 }
 
 fn cmd_refs(args: &[String]) -> Result<(), String> {

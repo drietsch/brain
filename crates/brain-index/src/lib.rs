@@ -164,9 +164,69 @@ pub struct MemIndex {
     relations_to: BTreeMap<(StableId, String), BTreeSet<NodeId>>,
 }
 
+/// A serde-friendly checkpoint of a [`MemIndex`]: pure data, tuples in
+/// arrays (JSON-safe, unlike tuple map keys). Exists so a persistent
+/// backend (braingraf) can checkpoint derived state and catch up from the
+/// event log — the snapshot is disposable by contract, never truth.
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct IndexSnapshot {
+    pub referrers: Vec<(NodeId, Vec<NodeId>)>,
+    pub observations: Vec<(StableId, Vec<NodeId>)>,
+    pub entity_nodes: Vec<(StableId, Vec<NodeId>)>,
+    pub entities_by_kind: Vec<(String, Vec<NodeId>)>,
+    pub evidence: Vec<(NodeId, Vec<NodeId>)>,
+    pub receipts: Vec<(NodeId, Vec<NodeId>)>,
+    pub relations_from: Vec<(StableId, String, Vec<NodeId>)>,
+    pub relations_to: Vec<(StableId, String, Vec<NodeId>)>,
+}
+
 impl MemIndex {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn snapshot(&self) -> IndexSnapshot {
+        fn dump<K: Clone>(m: &BTreeMap<K, BTreeSet<NodeId>>) -> Vec<(K, Vec<NodeId>)> {
+            m.iter().map(|(k, v)| (k.clone(), v.iter().copied().collect())).collect()
+        }
+        fn dump2(
+            m: &BTreeMap<(StableId, String), BTreeSet<NodeId>>,
+        ) -> Vec<(StableId, String, Vec<NodeId>)> {
+            m.iter()
+                .map(|((s, p), v)| (s.clone(), p.clone(), v.iter().copied().collect()))
+                .collect()
+        }
+        IndexSnapshot {
+            referrers: dump(&self.referrers),
+            observations: dump(&self.observations),
+            entity_nodes: dump(&self.entity_nodes),
+            entities_by_kind: dump(&self.entities_by_kind),
+            evidence: dump(&self.evidence),
+            receipts: dump(&self.receipts),
+            relations_from: dump2(&self.relations_from),
+            relations_to: dump2(&self.relations_to),
+        }
+    }
+
+    pub fn restore(snap: IndexSnapshot) -> MemIndex {
+        fn load<K: Ord>(v: Vec<(K, Vec<NodeId>)>) -> BTreeMap<K, BTreeSet<NodeId>> {
+            v.into_iter().map(|(k, ids)| (k, ids.into_iter().collect())).collect()
+        }
+        fn load2(
+            v: Vec<(StableId, String, Vec<NodeId>)>,
+        ) -> BTreeMap<(StableId, String), BTreeSet<NodeId>> {
+            v.into_iter().map(|(s, p, ids)| ((s, p), ids.into_iter().collect())).collect()
+        }
+        MemIndex {
+            referrers: load(snap.referrers),
+            observations: load(snap.observations),
+            entity_nodes: load(snap.entity_nodes),
+            entities_by_kind: load(snap.entities_by_kind),
+            evidence: load(snap.evidence),
+            receipts: load(snap.receipts),
+            relations_from: load2(snap.relations_from),
+            relations_to: load2(snap.relations_to),
+        }
     }
 }
 

@@ -832,15 +832,58 @@ pub fn latest_at(
     subject: &StableId,
     property: &str,
 ) -> Result<Option<(u64, String)>, StoreError> {
+    latest_at_before(index, store, subject, property, u64::MAX)
+}
+
+/// Bi-temporal read: the newest observation at or before `t`. Every
+/// observation carries its time, so "as of" is a filter, not a replay.
+pub fn latest_at_before(
+    index: &MemIndex,
+    store: &Store,
+    subject: &StableId,
+    property: &str,
+    t: u64,
+) -> Result<Option<(u64, String)>, StoreError> {
     let mut best: Option<(u64, String)> = None;
     for id in index.observations_of(subject) {
         if let Object::Observation { property: p, value, observed_at_ms, .. } = store.get(&id)? {
-            if p == property && best.as_ref().is_none_or(|(t, _)| observed_at_ms >= *t) {
+            if p == property
+                && observed_at_ms <= t
+                && best.as_ref().is_none_or(|(b, _)| observed_at_ms >= *b)
+            {
                 best = Some((observed_at_ms, value));
             }
         }
     }
     Ok(best)
+}
+
+/// The twin as it was: files present under `prefix` as of `t`, with the
+/// content hash each had at that moment.
+pub fn files_at(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    t: u64,
+) -> Result<Vec<(String, String)>, StoreError> {
+    let mut out = Vec::new();
+    for (name, node) in store.namespace()? {
+        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
+        let Ok(Object::Entity { id: sid, entity_kind, .. }) = store.get(&node) else { continue };
+        if entity_kind != "source_file" {
+            continue;
+        }
+        let Some((_, hash)) = latest_at_before(index, store, &sid, "content_b3", t)? else {
+            continue; // did not exist yet at t
+        };
+        if latest_at_before(index, store, &sid, "present", t)?.map(|(_, v)| v).as_deref()
+            == Some("false")
+        {
+            continue; // was deleted at t
+        }
+        out.push((rel.to_string(), hash));
+    }
+    Ok(out)
 }
 
 /// Best-effort resolution of an import string to a twinned file path.
@@ -1917,6 +1960,35 @@ mod tests {
         assert!(ins.stale_docs.iter().any(|(s, k, files)| {
             s == "deploy" && k == "runbook" && files.contains(&"src/main.rs".to_string())
         }));
+    }
+
+    #[test]
+    fn files_at_reads_the_twin_as_it_was() {
+        let (src, store_dir) = fixture();
+        let store = Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let index = fresh_index(&store);
+        let py = StableId::derive(&["file", "run.py"]);
+        let (t1, old_hash) =
+            latest_at(&index, &store, &py, "content_b3").unwrap().expect("first hash");
+
+        // Later: run.py changes, new.rs appears.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        fs::write(src.path().join("run.py"), "import os\ndef main():\n    return 9\n").unwrap();
+        fs::write(src.path().join("new.rs"), "pub fn fresh() {}\n").unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        let index = fresh_index(&store);
+        // As of t1: the old hash, and new.rs does not exist yet.
+        let then = files_at(&store, &index, "twin/app", t1).unwrap();
+        let at_t1 = then.iter().find(|(r, _)| r == "run.py").expect("run.py existed");
+        assert_eq!(at_t1.1, old_hash);
+        assert!(!then.iter().any(|(r, _)| r == "new.rs"));
+        // Now: the new hash, and new.rs is present.
+        let now = files_at(&store, &index, "twin/app", u64::MAX).unwrap();
+        let current = now.iter().find(|(r, _)| r == "run.py").unwrap();
+        assert_ne!(current.1, old_hash);
+        assert!(now.iter().any(|(r, _)| r == "new.rs"));
     }
 
     #[test]

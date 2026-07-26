@@ -428,6 +428,29 @@ change as ordinary drift, and the change entity's `changes` relation ties
 the drift to its reason. See
 docs/adr/adr-010-governed-mode.md.
 
+## braingraf — the query engine underneath
+
+Every query above runs on **braingraf** (`crates/braingraf`), brain's own
+persistent graph-query engine — learned from minigraf, then simplified by
+one observation: brain's event log already is a WAL, so braingraf is just
+a checkpoint (`.brain/index.graf`) plus delta-replay from a cursor:
+
+- warm opens are O(new events) — measured ~15x faster than a cold replay
+  on this repo's store — and the checkpoint is derived, disposable, and
+  rebuilt silently if corrupt or stale;
+- recursive traversal powers `--transitive` on imports/rdeps (the true
+  blast radius) — `brain twin rdeps <file> --transitive`;
+- bi-temporal reads power `brain twin at <prefix> <when>` — the twin as
+  it was at an epoch, `30m`/`2h`/`1d` ago, or **at a git commit** (hashes
+  resolve through the repo entity's observation timeline);
+- `brain bench index` is the standing earn-adoption gate: it verifies
+  both backends answer identically over real probes before printing
+  timings, and `BRAIN_INDEX=mem` always forces reference behavior.
+
+The `.graf` file never replicates: truth travels as objects with
+`brain pull`; each store grows its own index. See
+docs/adr/adr-011-braingraf.md.
+
 ## Relation to the founding architecture
 
 The twin is the "describe → observe" half of the adoption gradient in

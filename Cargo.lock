@@ -43,6 +43,7 @@ dependencies = [
  "brain-observe",
  "brain-runtime",
  "brain-store",
+ "braingraf",
  "libc",
  "serde",
  "serde_json",
@@ -65,6 +66,7 @@ version = "0.1.0"
 dependencies = [
  "brain-core",
  "brain-store",
+ "serde",
  "tempfile",
 ]
 
@@ -97,6 +99,18 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "braingraf"
+version = "0.1.0"
+dependencies = [
+ "brain-core",
+ "brain-index",
+ "brain-store",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
