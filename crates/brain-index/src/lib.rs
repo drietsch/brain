@@ -60,6 +60,7 @@ pub fn object_edges(obj: &Object) -> Vec<(EdgeKind, NodeId)> {
         | Object::Capability { .. }
         | Object::Entity { .. }
         | Object::Observation { .. }
+        | Object::Relation { .. }
         | Object::Intent { .. } => {}
     }
     out
@@ -126,6 +127,12 @@ pub trait Index {
 
     /// All receipts settling an intent.
     fn receipts_for(&self, intent: &NodeId) -> Vec<NodeId>;
+
+    /// Relation nodes of a kind leaving an entity (e.g. what a file contains).
+    fn relations_from(&self, from: &StableId, kind: &str) -> Vec<NodeId>;
+
+    /// Relation nodes of a kind arriving at an entity (e.g. who imports it).
+    fn relations_to(&self, to: &StableId, kind: &str) -> Vec<NodeId>;
 }
 
 /// Rebuild an index from the store's put history, in event order.
@@ -153,6 +160,8 @@ pub struct MemIndex {
     entities_by_kind: BTreeMap<String, BTreeSet<NodeId>>,
     evidence: BTreeMap<NodeId, BTreeSet<NodeId>>,
     receipts: BTreeMap<NodeId, BTreeSet<NodeId>>,
+    relations_from: BTreeMap<(StableId, String), BTreeSet<NodeId>>,
+    relations_to: BTreeMap<(StableId, String), BTreeSet<NodeId>>,
 }
 
 impl MemIndex {
@@ -190,6 +199,16 @@ impl Index for MemIndex {
                     .or_default()
                     .insert(*id);
             }
+            Object::Relation { from, predicate, to, .. } => {
+                self.relations_from
+                    .entry((from.clone(), predicate.clone()))
+                    .or_default()
+                    .insert(*id);
+                self.relations_to
+                    .entry((to.clone(), predicate.clone()))
+                    .or_default()
+                    .insert(*id);
+            }
             _ => {}
         }
     }
@@ -216,6 +235,14 @@ impl Index for MemIndex {
 
     fn receipts_for(&self, intent: &NodeId) -> Vec<NodeId> {
         sorted(self.receipts.get(intent))
+    }
+
+    fn relations_from(&self, from: &StableId, kind: &str) -> Vec<NodeId> {
+        sorted(self.relations_from.get(&(from.clone(), kind.to_string())))
+    }
+
+    fn relations_to(&self, to: &StableId, kind: &str) -> Vec<NodeId> {
+        sorted(self.relations_to.get(&(to.clone(), kind.to_string())))
     }
 }
 
@@ -335,5 +362,46 @@ mod tests {
         replay(&store, &mut index).unwrap();
         assert_eq!(index.observations_of(&sid), vec![obs]);
         assert_eq!(index.referrers(&code).len(), 2);
+    }
+
+    #[test]
+    fn relation_queries_filter_by_endpoint_and_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let file = StableId::derive(&["file", "a.rs"]);
+        let sym = StableId::derive(&["symbol", "a.rs", "fn", "main"]);
+        let dep = StableId::derive(&["module", "serde"]);
+
+        let contains = store
+            .put(&Object::Relation {
+                from: file.clone(),
+                predicate: "contains".to_string(),
+                to: sym.clone(),
+                source: "twin".to_string(),
+                observed_at_ms: 1,
+            })
+            .unwrap();
+        let imports = store
+            .put(&Object::Relation {
+                from: file.clone(),
+                predicate: "imports".to_string(),
+                to: dep.clone(),
+                source: "twin".to_string(),
+                observed_at_ms: 1,
+            })
+            .unwrap();
+
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+
+        assert_eq!(index.relations_from(&file, "contains"), vec![contains]);
+        assert_eq!(index.relations_from(&file, "imports"), vec![imports]);
+        assert!(index.relations_from(&file, "declares").is_empty());
+        assert_eq!(index.relations_to(&dep, "imports"), vec![imports]);
+        assert!(index.relations_to(&sym, "imports").is_empty());
+
+        // Replay idempotence holds for relations too.
+        replay(&store, &mut index).unwrap();
+        assert_eq!(index.relations_from(&file, "contains"), vec![contains]);
     }
 }

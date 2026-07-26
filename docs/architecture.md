@@ -32,8 +32,10 @@ gradient — describe → observe → govern → absorb — not an event.
 4. **Effect boundary** (`brain-store::intents`, `brain-runtime::EffectPort`) —
    durable intent before, receipt after, indeterminate on crash, reconcile
    before retry.
-5. **Observer frame** (`brain-observe`) — reflective-mode ingestion as a
-   continuous sense organ.
+5. **Observer frame** (`brain-observe`) — reflective mode, the project's
+   first deliverable: drift-aware `twin refresh`/`status`, per-language
+   symbol and import extraction into `Relation` edges, agent notes as
+   durable observations, and deletion-as-observation. See `docs/twin.md`.
 6. **Replication** (`brain-store::sync`) — content-addressed sync between
    stores; how code moves, replacing deployment. Objects are a conflict-free
    set union (immutable + content-addressed; every ingest re-hashed, with a

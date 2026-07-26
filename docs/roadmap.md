@@ -3,6 +3,14 @@
 The founding assumption — programs live natively in the graph, no files above
 the semantic line — is treated as a bet whose riskiest test comes first.
 
+**Pivot (2026-07-26): the twin is the first deliverable.** Reflective mode —
+the graph as a persistent semantic model of existing software — ships before
+further native-mode capability. Twin v1 (structure queries, drift &
+staleness, agent notes, continuous refresh; `docs/twin.md`) is done; its
+natural growth path is deeper extraction (tree-sitter), the govern step
+(routing changes to twinned software through intents/receipts), and
+embedding-based similarity over twin entities.
+
 ## Stage 0 — Kernel object model ✅ (this scaffold)
 
 Canonical encoding, content addressing, the object model, namespace lineage,

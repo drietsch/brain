@@ -30,7 +30,14 @@ fn usage() -> &'static str {
        brain notation <file>              convert term between .term notation and JSON\n\
        brain run <name> [--cap <c>]...    evaluate the code bound to a name\n\
        brain recover                      mark pending intents indeterminate\n\
-       brain ingest <dir> [--prefix <p>]  twin an external source tree\n\
+       brain twin refresh <dir> [--prefix <p>]   observe a source tree, record drift\n\
+       brain twin status <dir> [--prefix <p>]    report drift without writing\n\
+       brain twin files <prefix>                 twinned files with freshness\n\
+       brain twin symbols|imports|rdeps <name>   structure queries on a twinned file\n\
+       brain twin search <substring>             find twinned entities by name\n\
+       brain note <name> <text...>        attach a durable note to an entity\n\
+       brain notes <name>                 read an entity's notes\n\
+       brain ingest <dir> [--prefix <p>]  alias for twin refresh\n\
        brain pull <store-root>            replicate another store into this one\n\
        brain push <store-root>            replicate this store into another\n\
        brain refs <name|b3:hash>          who references this node (reverse edges)\n\
@@ -57,7 +64,10 @@ fn main() -> ExitCode {
         Some("notation") => cmd_notation(&args[1..]),
         Some("run") => cmd_run(&args[1..]),
         Some("recover") => cmd_recover(),
-        Some("ingest") => cmd_ingest(&args[1..]),
+        Some("ingest") => cmd_twin_refresh(&args[1..], true),
+        Some("twin") => cmd_twin(&args[1..]),
+        Some("note") => cmd_note(&args[1..]),
+        Some("notes") => cmd_notes(&args[1..]),
         Some("pull") => cmd_sync(&args[1..], true),
         Some("push") => cmd_sync(&args[1..], false),
         Some("refs") => cmd_refs(&args[1..]),
@@ -242,10 +252,9 @@ fn cmd_recover() -> Result<(), String> {
     Ok(())
 }
 
-fn cmd_ingest(args: &[String]) -> Result<(), String> {
-    let dir = args.first().ok_or("usage: brain ingest <dir> [--prefix <p>]")?;
+fn parse_prefix(args: &[String]) -> String {
     let mut prefix = "twin".to_string();
-    let mut it = args[1..].iter();
+    let mut it = args.iter();
     while let Some(a) = it.next() {
         if a == "--prefix" {
             if let Some(p) = it.next() {
@@ -253,13 +262,205 @@ fn cmd_ingest(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    let store = open_store()?;
-    let report = brain_observe::ingest_dir(&store, std::path::Path::new(dir), &prefix)
-        .map_err(|e| e.to_string())?;
+    prefix
+}
+
+fn print_twin_report(report: &brain_observe::twin::TwinReport, wrote: bool) {
+    for f in &report.added {
+        println!("added    {f}");
+    }
+    for f in &report.changed {
+        println!("changed  {f}");
+    }
+    for f in &report.deleted {
+        println!("deleted  {f}");
+    }
+    let verb = if wrote { "recorded" } else { "would record" };
     println!(
-        "twinned {} file(s): {} entities, {} observations under '{prefix}/'",
-        report.files, report.entities, report.observations
+        "{} unchanged; {verb} {} added, {} changed, {} deleted ({} symbols, {} relations)",
+        report.unchanged,
+        report.added.len(),
+        report.changed.len(),
+        report.deleted.len(),
+        report.symbols,
+        report.relations
     );
+}
+
+fn cmd_twin_refresh(args: &[String], write: bool) -> Result<(), String> {
+    let dir = args
+        .first()
+        .ok_or("usage: brain twin refresh|status <dir> [--prefix <p>]")?;
+    let prefix = parse_prefix(&args[1..]);
+    let store = open_store()?;
+    let path = std::path::Path::new(dir);
+    let report = if write {
+        brain_observe::twin::refresh(&store, path, &prefix)
+    } else {
+        brain_observe::twin::status(&store, path, &prefix)
+    }
+    .map_err(|e| e.to_string())?;
+    print_twin_report(&report, write);
+    Ok(())
+}
+
+/// Resolve a bound name to the entity's stable id.
+fn entity_sid(store: &Store, name: &str) -> Result<brain_core::ids::StableId, String> {
+    let node = resolve_arg(store, name)?;
+    match store.get(&node).map_err(|e| e.to_string())? {
+        Object::Entity { id, .. } => Ok(id),
+        other => Err(format!("'{name}' is not an entity (found {})", kind_of(&other))),
+    }
+}
+
+/// Distinct target entities of relations of `kind` leaving `sid`.
+fn relation_targets(
+    store: &Store,
+    index: &MemIndex,
+    sid: &brain_core::ids::StableId,
+    kind: &str,
+) -> Result<Vec<brain_core::ids::StableId>, String> {
+    let mut out = Vec::new();
+    for id in index.relations_from(sid, kind) {
+        if let Object::Relation { to, .. } = store.get(&id).map_err(|e| e.to_string())? {
+            if !out.contains(&to) {
+                out.push(to);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// A human-readable label for an entity: its path, name, or raw stable id.
+fn entity_label(store: &Store, index: &MemIndex, sid: &brain_core::ids::StableId) -> String {
+    for node in index.entity_nodes(sid) {
+        if let Ok(Object::Entity { labels, entity_kind, .. }) = store.get(&node) {
+            if let Some(p) = labels.get("path").or_else(|| labels.get("name")) {
+                return format!("{p} ({entity_kind})");
+            }
+        }
+    }
+    sid.to_string()
+}
+
+fn cmd_twin(args: &[String]) -> Result<(), String> {
+    let usage = "usage: brain twin refresh|status|files|symbols|imports|rdeps|search ...";
+    match args.first().map(String::as_str) {
+        Some("refresh") => cmd_twin_refresh(&args[1..], true),
+        Some("status") => cmd_twin_refresh(&args[1..], false),
+        Some("files") => {
+            let prefix = args.get(1).ok_or("usage: brain twin files <prefix>")?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let now = now_ms();
+            for (name, node) in store.namespace().map_err(|e| e.to_string())? {
+                let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
+                let Ok(Object::Entity { id: sid, .. }) = store.get(&node) else { continue };
+                let present = brain_observe::twin::latest(&index, &store, &sid, "present")
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or_else(|| "true".to_string());
+                let age = brain_observe::twin::latest_at(&index, &store, &sid, "content_b3")
+                    .map_err(|e| e.to_string())?
+                    .map(|(at, _)| format!("{}s", now.saturating_sub(at) / 1000))
+                    .unwrap_or_else(|| "?".to_string());
+                let symbols = index.relations_from(&sid, "contains").len();
+                let lang = brain_observe::twin::latest(&index, &store, &sid, "language")
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or_default();
+                let flag = if present == "false" { "  [deleted]" } else { "" };
+                println!("{rel}  {lang}  {symbols} symbol(s)  observed {age} ago{flag}");
+            }
+            Ok(())
+        }
+        Some("symbols") => {
+            let name = args.get(1).ok_or("usage: brain twin symbols <file-name>")?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = entity_sid(&store, name)?;
+            for target in relation_targets(&store, &index, &sid, "contains")? {
+                let line = brain_observe::twin::latest(&index, &store, &target, "line")
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or_else(|| "?".to_string());
+                for node in index.entity_nodes(&target) {
+                    if let Ok(Object::Entity { labels, .. }) = store.get(&node) {
+                        let kind = labels.get("kind").cloned().unwrap_or_default();
+                        let sym = labels.get("name").cloned().unwrap_or_default();
+                        println!("{kind:<10} {sym}  (line {line})");
+                        break;
+                    }
+                }
+            }
+            Ok(())
+        }
+        Some("imports") => {
+            let name = args.get(1).ok_or("usage: brain twin imports <file-name>")?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = entity_sid(&store, name)?;
+            for target in relation_targets(&store, &index, &sid, "imports")? {
+                println!("{}", entity_label(&store, &index, &target));
+            }
+            Ok(())
+        }
+        Some("rdeps") => {
+            let name = args.get(1).ok_or("usage: brain twin rdeps <file-name>")?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = entity_sid(&store, name)?;
+            let mut froms = Vec::new();
+            for id in index.relations_to(&sid, "imports") {
+                if let Object::Relation { from, .. } = store.get(&id).map_err(|e| e.to_string())? {
+                    if !froms.contains(&from) {
+                        froms.push(from);
+                    }
+                }
+            }
+            if froms.is_empty() {
+                println!("nothing imports {name}");
+            }
+            for from in froms {
+                println!("{}", entity_label(&store, &index, &from));
+            }
+            Ok(())
+        }
+        Some("search") => {
+            let needle = args.get(1).ok_or("usage: brain twin search <substring>")?;
+            let store = open_store()?;
+            for (name, id) in store.namespace().map_err(|e| e.to_string())? {
+                if name.contains(needle.as_str()) {
+                    println!("{name}  ->  {id:?}");
+                }
+            }
+            Ok(())
+        }
+        _ => Err(usage.to_string()),
+    }
+}
+
+fn cmd_note(args: &[String]) -> Result<(), String> {
+    let (name, text) = match args {
+        [name, rest @ ..] if !rest.is_empty() => (name, rest.join(" ")),
+        _ => return Err("usage: brain note <name> <text...>".to_string()),
+    };
+    let store = open_store()?;
+    let sid = entity_sid(&store, name)?;
+    brain_observe::twin::add_note(&store, &sid, &text).map_err(|e| e.to_string())?;
+    println!("noted on {name}");
+    Ok(())
+}
+
+fn cmd_notes(args: &[String]) -> Result<(), String> {
+    let name = args.first().ok_or("usage: brain notes <name>")?;
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let sid = entity_sid(&store, name)?;
+    let notes = brain_observe::twin::notes(&index, &store, &sid).map_err(|e| e.to_string())?;
+    if notes.is_empty() {
+        println!("no notes on {name}");
+    }
+    for (at, text) in notes {
+        println!("{at}  {text}");
+    }
     Ok(())
 }
 
@@ -291,6 +492,7 @@ fn kind_of(obj: &Object) -> &'static str {
         Object::Capability { .. } => "capability",
         Object::Entity { .. } => "entity",
         Object::Observation { .. } => "observation",
+        Object::Relation { .. } => "relation",
         Object::Intent { .. } => "intent",
         Object::Receipt { .. } => "receipt",
         Object::Namespace { .. } => "namespace",

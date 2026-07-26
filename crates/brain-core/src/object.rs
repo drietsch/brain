@@ -69,6 +69,19 @@ pub enum Object {
         observed_at_ms: u64,
     },
 
+    /// An observed, time-bound, typed edge between two entities. Observations
+    /// state facts *about* one entity; Relations state structure *between*
+    /// entities — the twin's glue (a file `contains` a symbol, a file
+    /// `imports` a module). Like observations, they are claims at a moment,
+    /// not eternal truths.
+    Relation {
+        from: StableId,
+        predicate: String,
+        to: StableId,
+        source: String,
+        observed_at_ms: u64,
+    },
+
     /// Durable record of intent, written BEFORE a consequential effect is
     /// attempted. The recovery protocol depends on this ordering.
     Intent {
@@ -328,6 +341,23 @@ mod tests {
         let back: Object = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(o, back);
         assert_eq!(hash_object(&o).unwrap(), hash_object(&back).unwrap());
+    }
+
+    #[test]
+    fn relations_roundtrip_and_hash_stably() {
+        let r = Object::Relation {
+            from: StableId::derive(&["file", "src/lib.rs"]),
+            predicate: "contains".to_string(),
+            to: StableId::derive(&["symbol", "src/lib.rs", "fn", "main"]),
+            source: "twin".to_string(),
+            observed_at_ms: 42,
+        };
+        let bytes = object_bytes(&r).unwrap();
+        let back: Object = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(r, back);
+        assert_eq!(hash_object(&r).unwrap(), hash_object(&back).unwrap());
+        // canonicalize is a passthrough for non-Code objects.
+        assert_eq!(canonicalize(&r), r);
     }
 
     #[test]
