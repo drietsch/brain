@@ -1,0 +1,55 @@
+{
+  "op": "lam",
+  "param": "r",
+  "body": {
+    "op": "let",
+    "name": "max2",
+    "value": {
+      "op": "lam",
+      "param": "p",
+      "body": {
+        "op": "foreign",
+        "symbol": "core/if",
+        "arg": {
+          "op": "record",
+          "fields": {
+            "cond": {
+              "op": "foreign",
+              "symbol": "core/lt",
+              "arg": {
+                "op": "record",
+                "fields": {
+                  "a": { "op": "field", "record": { "op": "var", "name": "p" }, "field": "a" },
+                  "b": { "op": "field", "record": { "op": "var", "name": "p" }, "field": "b" }
+                }
+              }
+            },
+            "then": { "op": "field", "record": { "op": "var", "name": "p" }, "field": "b" },
+            "else": { "op": "field", "record": { "op": "var", "name": "p" }, "field": "a" }
+          }
+        }
+      }
+    },
+    "body": {
+      "op": "app",
+      "func": { "op": "var", "name": "max2" },
+      "arg": {
+        "op": "record",
+        "fields": {
+          "a": {
+            "op": "app",
+            "func": { "op": "var", "name": "max2" },
+            "arg": {
+              "op": "record",
+              "fields": {
+                "a": { "op": "field", "record": { "op": "var", "name": "r" }, "field": "a" },
+                "b": { "op": "field", "record": { "op": "var", "name": "r" }, "field": "b" }
+              }
+            }
+          },
+          "b": { "op": "field", "record": { "op": "var", "name": "r" }, "field": "c" }
+        }
+      }
+    }
+  }
+}

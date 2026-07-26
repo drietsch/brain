@@ -1,0 +1,11 @@
+{
+  "name": "max3",
+  "description": "Given a record with integer fields a, b and c, return the largest of the three.",
+  "spec": { "input": "record{a: int, b: int, c: int}", "output": "int" },
+  "cases": [
+    { "arg": { "a": 1, "b": 2, "c": 3 }, "expect": 3 },
+    { "arg": { "a": 9, "b": 2, "c": 3 }, "expect": 9 },
+    { "arg": { "a": 1, "b": 7, "c": 3 }, "expect": 7 },
+    { "arg": { "a": -5, "b": -2, "c": -9 }, "expect": -2 }
+  ]
+}

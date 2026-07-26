@@ -1,0 +1,24 @@
+{
+  "name": "greet-excited",
+  "description": "Modify the base program minimally: the greeting should now end with an exclamation mark.",
+  "spec": { "input": "str", "output": "str" },
+  "base_term": {
+    "op": "lam",
+    "param": "name",
+    "body": {
+      "op": "foreign",
+      "symbol": "core/concat",
+      "arg": {
+        "op": "record",
+        "fields": {
+          "a": { "op": "lit", "value": { "type": "str", "value": "Hello, " } },
+          "b": { "op": "var", "name": "name" }
+        }
+      }
+    }
+  },
+  "cases": [
+    { "arg": "graph", "expect": "Hello, graph!" },
+    { "arg": "", "expect": "Hello, !" }
+  ]
+}

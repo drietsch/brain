@@ -1,0 +1,36 @@
+{
+  "op": "lam",
+  "param": "n",
+  "body": {
+    "op": "foreign",
+    "symbol": "core/if",
+    "arg": {
+      "op": "record",
+      "fields": {
+        "cond": {
+          "op": "foreign",
+          "symbol": "core/lt",
+          "arg": {
+            "op": "record",
+            "fields": {
+              "a": { "op": "var", "name": "n" },
+              "b": { "op": "lit", "value": { "type": "int", "value": 0 } }
+            }
+          }
+        },
+        "then": {
+          "op": "foreign",
+          "symbol": "core/sub",
+          "arg": {
+            "op": "record",
+            "fields": {
+              "a": { "op": "lit", "value": { "type": "int", "value": 0 } },
+              "b": { "op": "var", "name": "n" }
+            }
+          }
+        },
+        "else": { "op": "var", "name": "n" }
+      }
+    }
+  }
+}

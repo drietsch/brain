@@ -1,0 +1,39 @@
+{
+  "op": "lam",
+  "param": "shape",
+  "body": {
+    "op": "match",
+    "scrutinee": { "op": "var", "name": "shape" },
+    "arms": {
+      "square": {
+        "bind": "s",
+        "body": {
+          "op": "foreign",
+          "symbol": "core/mul",
+          "arg": {
+            "op": "record",
+            "fields": {
+              "a": { "op": "var", "name": "s" },
+              "b": { "op": "var", "name": "s" }
+            }
+          }
+        }
+      },
+      "rect": {
+        "bind": "d",
+        "body": {
+          "op": "foreign",
+          "symbol": "core/mul",
+          "arg": {
+            "op": "record",
+            "fields": {
+              "a": { "op": "field", "record": { "op": "var", "name": "d" }, "field": "w" },
+              "b": { "op": "field", "record": { "op": "var", "name": "d" }, "field": "h" }
+            }
+          }
+        }
+      }
+    },
+    "default": { "op": "lit", "value": { "type": "int", "value": 0 } }
+  }
+}

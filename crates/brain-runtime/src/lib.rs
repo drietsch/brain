@@ -156,6 +156,22 @@ impl Registry {
             ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_add },
         );
         r.register(
+            "core/sub",
+            ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_sub },
+        );
+        r.register(
+            "core/mul",
+            ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_mul },
+        );
+        r.register(
+            "core/lt",
+            ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_lt },
+        );
+        r.register(
+            "core/if",
+            ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_if },
+        );
+        r.register(
             "core/concat",
             ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_concat },
         );
@@ -193,6 +209,48 @@ fn builtin_add(arg: &Value) -> Result<Value, String> {
             .ok_or_else(|| "core/add: integer overflow".to_string()),
         _ => Err("core/add expects integer fields".to_string()),
     }
+}
+
+fn builtin_sub(arg: &Value) -> Result<Value, String> {
+    match two_fields(arg, "core/sub")? {
+        (Value::Int(a), Value::Int(b)) => a
+            .checked_sub(*b)
+            .map(Value::Int)
+            .ok_or_else(|| "core/sub: integer overflow".to_string()),
+        _ => Err("core/sub expects integer fields".to_string()),
+    }
+}
+
+fn builtin_mul(arg: &Value) -> Result<Value, String> {
+    match two_fields(arg, "core/mul")? {
+        (Value::Int(a), Value::Int(b)) => a
+            .checked_mul(*b)
+            .map(Value::Int)
+            .ok_or_else(|| "core/mul: integer overflow".to_string()),
+        _ => Err("core/mul expects integer fields".to_string()),
+    }
+}
+
+fn builtin_lt(arg: &Value) -> Result<Value, String> {
+    match two_fields(arg, "core/lt")? {
+        (Value::Int(a), Value::Int(b)) => Ok(Value::Bool(a < b)),
+        _ => Err("core/lt expects integer fields".to_string()),
+    }
+}
+
+/// Eager conditional: both branches are already evaluated (record fields).
+/// Acceptable for pure scaffold tasks; a lazy `if` op in the calculus is
+/// future work, gated on authoring evidence.
+fn builtin_if(arg: &Value) -> Result<Value, String> {
+    if let Value::Record(fields) = arg {
+        match (fields.get("cond"), fields.get("then"), fields.get("else")) {
+            (Some(Value::Bool(c)), Some(t), Some(e)) => {
+                return Ok(if *c { t.clone() } else { e.clone() });
+            }
+            _ => {}
+        }
+    }
+    Err("core/if expects a record with fields cond (bool), then, else".to_string())
 }
 
 fn builtin_concat(arg: &Value) -> Result<Value, String> {
@@ -457,6 +515,36 @@ mod tests {
         let mut effects = MemEffects::default();
         let mut c = ctx(&registry, &mut effects, &[]);
         assert_eq!(eval_closed(&mut c, &term).unwrap(), Value::Int(6));
+    }
+
+    #[test]
+    fn comparison_and_conditional_builtins() {
+        // abs(-7) = if (lt -7 0) then (sub 0 -7) else -7  =>  7
+        let x = -7;
+        let mut lt_fields = BTreeMap::new();
+        lt_fields.insert("a".to_string(), int(x));
+        lt_fields.insert("b".to_string(), int(0));
+        let mut sub_fields = BTreeMap::new();
+        sub_fields.insert("a".to_string(), int(0));
+        sub_fields.insert("b".to_string(), int(x));
+        let mut if_fields = BTreeMap::new();
+        if_fields.insert(
+            "cond".to_string(),
+            Term::Foreign { symbol: "core/lt".to_string(), arg: Box::new(Term::Record { fields: lt_fields }) },
+        );
+        if_fields.insert(
+            "then".to_string(),
+            Term::Foreign { symbol: "core/sub".to_string(), arg: Box::new(Term::Record { fields: sub_fields }) },
+        );
+        if_fields.insert("else".to_string(), int(x));
+        let term = Term::Foreign {
+            symbol: "core/if".to_string(),
+            arg: Box::new(Term::Record { fields: if_fields }),
+        };
+        let registry = Registry::with_builtins();
+        let mut effects = MemEffects::default();
+        let mut c = ctx(&registry, &mut effects, &[]);
+        assert_eq!(eval_closed(&mut c, &term).unwrap(), Value::Int(7));
     }
 
     #[test]

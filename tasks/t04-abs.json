@@ -1,0 +1,10 @@
+{
+  "name": "abs",
+  "description": "Return the absolute value of the input integer.",
+  "spec": { "input": "int", "output": "int" },
+  "cases": [
+    { "arg": 5, "expect": 5 },
+    { "arg": -5, "expect": 5 },
+    { "arg": 0, "expect": 0 }
+  ]
+}

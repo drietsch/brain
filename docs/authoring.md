@@ -7,19 +7,42 @@ models reliably author and *edit* non-trivial terms against
 deliberately scheduled before everything else it gates. If it fails, the
 calculus gets redesigned while redesign is still cheap.
 
+## Running it
+
+The driver is `scripts/authoring_experiment.py` (requires `ANTHROPIC_API_KEY`
+or an `ant auth login` profile; `cargo build -p brain-cli` first):
+
+```bash
+python3 scripts/authoring_experiment.py tasks/t0*.json                 # author mode
+python3 scripts/authoring_experiment.py --edits tasks/edits/*.json     # edit mode
+python3 scripts/authoring_experiment.py --dry-run tasks/t01-increment.json  # inspect prompts
+```
+
+Per-run metrics land in `results/authoring-runs.jsonl`; every checked emission
+also lands in the graph as `Evidence` attached to its content hash.
+
+**A finding worth recording:** schema-constrained decoding cannot carry the
+emission, because the term schema is recursive (a term contains terms) and
+structured-outputs features reject recursive schemas. Emissions are therefore
+plain JSON and *validity is a measured outcome* — which is what this
+experiment exists to measure. If validity turns out poor, a non-recursive
+"instruction list" encoding of terms is the first redesign candidate.
+
 ## Protocol
 
 1. Give the model a task description (see `tasks/*.json`), the term schema,
    and the builtin foreign-symbol table from `docs/calculus.md`.
-2. The model emits a term as JSON — with schema-constrained/structured output
-   where the serving stack supports it, plain JSON mode otherwise.
+2. The model emits a term as plain JSON (see the finding above).
 3. Check with `brain task check <task.json> <emitted-term.json>`. The checker
    runs the term against the task's cases in simulation posture (pure,
    fuel-bounded, effects denied) and records the outcome in the graph as
    `Evidence` at the `Behavioral` level, attached to the term's content hash.
-4. For *edit* trials: give the model an existing passing term plus a change
-   request ("also handle the `none` case"); measure whether the emission is a
-   local modification (small term diff) or a from-scratch rewrite.
+4. On failure, the driver feeds the checker output back for one repair
+   attempt (the repair-rate metric).
+5. For *edit* trials (`tasks/edits/*.json`): the task carries a `base_term`
+   and a change request; the driver measures **edit locality** — the fraction
+   of the emission's subtrees already present in the base (1.0 = pure reuse,
+   near 0 = wholesale regeneration). Heuristic, not a proof.
 
 ## Metrics
 

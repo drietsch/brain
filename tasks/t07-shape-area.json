@@ -1,0 +1,10 @@
+{
+  "name": "shape-area",
+  "description": "Given a shape as a variant, return its area: square carries an integer side (area = side * side); rect carries a record {w, h} (area = w * h); any other shape has area 0.",
+  "spec": { "input": "variant<square: int, rect: record{w: int, h: int}>", "output": "int" },
+  "cases": [
+    { "arg": { "$variant": "square", "payload": 4 }, "expect": 16 },
+    { "arg": { "$variant": "rect", "payload": { "w": 3, "h": 5 } }, "expect": 15 },
+    { "arg": { "$variant": "point", "payload": null }, "expect": 0 }
+  ]
+}

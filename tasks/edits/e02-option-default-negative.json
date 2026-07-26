@@ -1,0 +1,24 @@
+{
+  "name": "option-default-negative",
+  "description": "Modify the base program minimally: the default value for anything that is not some(int) should be -1 instead of 0.",
+  "spec": { "input": "variant<some: int, none: unit>", "output": "int" },
+  "base_term": {
+    "op": "lam",
+    "param": "opt",
+    "body": {
+      "op": "match",
+      "scrutinee": { "op": "var", "name": "opt" },
+      "arms": {
+        "some": {
+          "bind": "x",
+          "body": { "op": "var", "name": "x" }
+        }
+      },
+      "default": { "op": "lit", "value": { "type": "int", "value": 0 } }
+    }
+  },
+  "cases": [
+    { "arg": { "$variant": "some", "payload": 5 }, "expect": 5 },
+    { "arg": { "$variant": "none", "payload": null }, "expect": -1 }
+  ]
+}

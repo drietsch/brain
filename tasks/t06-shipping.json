@@ -1,0 +1,11 @@
+{
+  "name": "shipping",
+  "description": "Given a record with an integer field total (an order total), return the total with shipping applied: add 5 if the total is less than 50, otherwise shipping is free and the total is unchanged.",
+  "spec": { "input": "record{total: int}", "output": "int" },
+  "cases": [
+    { "arg": { "total": 20 }, "expect": 25 },
+    { "arg": { "total": 49 }, "expect": 54 },
+    { "arg": { "total": 50 }, "expect": 50 },
+    { "arg": { "total": 100 }, "expect": 100 }
+  ]
+}

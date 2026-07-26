@@ -38,9 +38,18 @@ schema-constrained output; nobody hand-writes it — that is the point).
 | Symbol | Class | Requires | Meaning |
 |---|---|---|---|
 | `core/add` | pure | — | `{a: int, b: int} -> int` (checked overflow). |
+| `core/sub` | pure | — | `{a: int, b: int} -> int` (checked overflow). |
+| `core/mul` | pure | — | `{a: int, b: int} -> int` (checked overflow). |
+| `core/lt` | pure | — | `{a: int, b: int} -> bool` (`a < b`). |
+| `core/if` | pure | — | `{cond: bool, then: T, else: T} -> T`. **Eager**: both branches evaluate before selection. A lazy `if` in the calculus is future work, gated on authoring evidence. |
 | `core/concat` | pure | — | `{a: str, b: str} -> str`. |
 | `core/eq` | pure | — | `{a, b} -> bool` (structural). |
 | `io/echo` | external | `io` | Identity with a declared external effect; exists so the full intent/receipt path is exercisable end to end. |
+
+`core/sub`, `core/mul`, `core/lt` and `core/if` were added when the Stage 1
+task corpus demonstrated the gap (no way to branch on a comparison) — the
+"enrichment must be paid for by authoring pain" rule working as intended. Note
+the calculus itself did not change: the registry is the extension point.
 
 ## Known limitations (deliberate, documented)
 
