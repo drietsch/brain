@@ -1,0 +1,20 @@
+{
+  "op": "lam",
+  "param": "who",
+  "body": {
+    "op": "let",
+    "name": "prefix",
+    "value": { "op": "lit", "value": { "type": "str", "value": "Hello, " } },
+    "body": {
+      "op": "foreign",
+      "symbol": "core/concat",
+      "arg": {
+        "op": "record",
+        "fields": {
+          "a": { "op": "var", "name": "prefix" },
+          "b": { "op": "var", "name": "who" }
+        }
+      }
+    }
+  }
+}

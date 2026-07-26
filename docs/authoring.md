@@ -65,6 +65,31 @@ triple. If results are poor, the calculus and schema are the suspects, in
 that order: too many ops, ambiguous shapes, or missing constructs the tasks
 implicitly need.
 
+## Run 1 — coding agent in-session (2026-07-26)
+
+The first subject was the coding agent driving this repository (mode 1 — no
+API). Emissions in `runs/2026-07-26-coding-agent/`, per-task rows in
+`runs.jsonl` there, evidence in the graph under each term's content hash.
+
+| Metric | Result |
+|---|---|
+| Emission validity | 9/9 |
+| Checker pass, first attempt | 9/9 (7 author + 2 edit) |
+| Repairs needed | 0 |
+| Edit locality | 0.571 (`greet-excited`), 0.737 (`option-default-negative`) |
+
+**Caveats, honestly stated:** the subject also authored the task corpus and
+its reference solutions, so this run is contaminated for novelty — it
+validates the pipeline end to end and sets an upper-bound baseline, not an
+unbiased capability measurement. Where the tasks allowed it, the emissions
+were deliberately structured differently from the references (`abs` via
+multiply-by-negative-one, `max3` via nested conditionals instead of a helper,
+explicit `none` arm in `option-default`), so the run does exercise fresh
+composition rather than recall. The discriminating experiment is the same
+protocol run by an agent that has never seen this repository, on tasks it has
+never seen — and at larger program sizes, where emission validity is likelier
+to degrade.
+
 ## Task format
 
 ```json

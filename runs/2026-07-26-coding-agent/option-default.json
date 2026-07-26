@@ -1,0 +1,13 @@
+{
+  "op": "lam",
+  "param": "opt",
+  "body": {
+    "op": "match",
+    "scrutinee": { "op": "var", "name": "opt" },
+    "arms": {
+      "some": { "bind": "value", "body": { "op": "var", "name": "value" } },
+      "none": { "bind": "_", "body": { "op": "lit", "value": { "type": "int", "value": 0 } } }
+    },
+    "default": { "op": "lit", "value": { "type": "int", "value": 0 } }
+  }
+}

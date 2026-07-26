@@ -1,0 +1,83 @@
+{
+  "op": "lam",
+  "param": "r",
+  "body": {
+    "op": "let",
+    "name": "a",
+    "value": { "op": "field", "record": { "op": "var", "name": "r" }, "field": "a" },
+    "body": {
+      "op": "let",
+      "name": "b",
+      "value": { "op": "field", "record": { "op": "var", "name": "r" }, "field": "b" },
+      "body": {
+        "op": "let",
+        "name": "c",
+        "value": { "op": "field", "record": { "op": "var", "name": "r" }, "field": "c" },
+        "body": {
+          "op": "foreign",
+          "symbol": "core/if",
+          "arg": {
+            "op": "record",
+            "fields": {
+              "cond": {
+                "op": "foreign",
+                "symbol": "core/lt",
+                "arg": {
+                  "op": "record",
+                  "fields": {
+                    "a": { "op": "var", "name": "a" },
+                    "b": { "op": "var", "name": "b" }
+                  }
+                }
+              },
+              "then": {
+                "op": "foreign",
+                "symbol": "core/if",
+                "arg": {
+                  "op": "record",
+                  "fields": {
+                    "cond": {
+                      "op": "foreign",
+                      "symbol": "core/lt",
+                      "arg": {
+                        "op": "record",
+                        "fields": {
+                          "a": { "op": "var", "name": "b" },
+                          "b": { "op": "var", "name": "c" }
+                        }
+                      }
+                    },
+                    "then": { "op": "var", "name": "c" },
+                    "else": { "op": "var", "name": "b" }
+                  }
+                }
+              },
+              "else": {
+                "op": "foreign",
+                "symbol": "core/if",
+                "arg": {
+                  "op": "record",
+                  "fields": {
+                    "cond": {
+                      "op": "foreign",
+                      "symbol": "core/lt",
+                      "arg": {
+                        "op": "record",
+                        "fields": {
+                          "a": { "op": "var", "name": "a" },
+                          "b": { "op": "var", "name": "c" }
+                        }
+                      }
+                    },
+                    "then": { "op": "var", "name": "c" },
+                    "else": { "op": "var", "name": "a" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

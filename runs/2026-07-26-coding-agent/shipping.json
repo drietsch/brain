@@ -1,0 +1,41 @@
+{
+  "op": "lam",
+  "param": "order",
+  "body": {
+    "op": "let",
+    "name": "t",
+    "value": { "op": "field", "record": { "op": "var", "name": "order" }, "field": "total" },
+    "body": {
+      "op": "foreign",
+      "symbol": "core/if",
+      "arg": {
+        "op": "record",
+        "fields": {
+          "cond": {
+            "op": "foreign",
+            "symbol": "core/lt",
+            "arg": {
+              "op": "record",
+              "fields": {
+                "a": { "op": "var", "name": "t" },
+                "b": { "op": "lit", "value": { "type": "int", "value": 50 } }
+              }
+            }
+          },
+          "then": {
+            "op": "foreign",
+            "symbol": "core/add",
+            "arg": {
+              "op": "record",
+              "fields": {
+                "a": { "op": "lit", "value": { "type": "int", "value": 5 } },
+                "b": { "op": "var", "name": "t" }
+              }
+            }
+          },
+          "else": { "op": "var", "name": "t" }
+        }
+      }
+    }
+  }
+}

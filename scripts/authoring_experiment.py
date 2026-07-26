@@ -10,12 +10,26 @@ graph), and tallies the metrics from docs/authoring.md:
   repair rate        - given the failure report, did the next emission fix it?
   edit locality      - for edit tasks, how much of the base term survived?
 
-Usage:
-  python3 scripts/authoring_experiment.py tasks/t0*.json                # author mode
-  python3 scripts/authoring_experiment.py --edits tasks/edits/*.json    # edit mode
-  python3 scripts/authoring_experiment.py --dry-run tasks/t01-increment.json
+Two ways to supply the model:
 
-Requires ANTHROPIC_API_KEY (or an `ant auth login` profile) unless --dry-run.
+1. **Agent-in-the-loop (preferred, no API):** the coding agent driving this
+   repository IS the authoring model. It reads the task, writes the emission
+   to a file, and scores it:
+
+     python3 scripts/authoring_experiment.py --score emission.json \
+         --model coding-agent tasks/t04-abs.json
+     python3 scripts/authoring_experiment.py --score emission.json \
+         --model coding-agent --edits tasks/edits/e01-greet-excited.json
+
+2. **API mode:** calls the Anthropic API for each task (requires
+   ANTHROPIC_API_KEY or an `ant auth login` profile):
+
+     python3 scripts/authoring_experiment.py tasks/t0*.json
+     python3 scripts/authoring_experiment.py --edits tasks/edits/*.json
+
+  `--dry-run` prints the prompts and exits (also useful as the exact prompt
+  to hand an agent in mode 1).
+
 Build the checker first: `cargo build -p brain-cli` (or set BRAIN_BIN).
 
 Note: schema-constrained decoding is deliberately NOT used. The term schema is
@@ -228,6 +242,9 @@ def main() -> int:
     parser.add_argument("--max-repairs", type=int, default=1)
     parser.add_argument("--dry-run", action="store_true",
                         help="print the prompts and exit; no API key needed")
+    parser.add_argument("--score", metavar="EMISSION",
+                        help="score a pre-authored emission file against exactly "
+                             "one task (agent-in-the-loop mode; no API)")
     args = parser.parse_args()
 
     if not args.tasks and not args.edits:
@@ -236,6 +253,41 @@ def main() -> int:
 
     jobs = [(pathlib.Path(t), False) for t in args.tasks] + \
            [(pathlib.Path(t), True) for t in args.edits]
+
+    if args.score:
+        if len(jobs) != 1:
+            parser.error("--score takes exactly one task file")
+        path, is_edit = jobs[0]
+        task = json.loads(path.read_text())
+        text = pathlib.Path(args.score).read_text()
+        row = {
+            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "model": args.model,
+            "task": task["name"],
+            "mode": "edit" if is_edit else "author",
+            "valid_json": False,
+            "checker_passed": False,
+            "repairs_used": 0,
+            "edit_locality": None,
+            "detail": "",
+        }
+        try:
+            parsed = json.loads(extract_json(text))
+            row["valid_json"] = True
+        except json.JSONDecodeError as e:
+            parsed = None
+            row["detail"] = f"invalid JSON: {e}"
+        if parsed is not None:
+            passed, output = check(path, pathlib.Path(args.score))
+            row["checker_passed"] = passed
+            row["detail"] = output.splitlines()[-1] if output else ""
+            if passed and is_edit:
+                row["edit_locality"] = round(edit_locality(task["base_term"], parsed), 3)
+        RESULTS_DIR.mkdir(exist_ok=True)
+        with (RESULTS_DIR / "authoring-runs.jsonl").open("a") as f:
+            f.write(json.dumps(row) + "\n")
+        print(json.dumps(row))
+        return 0 if row["checker_passed"] else 1
 
     if args.dry_run:
         for path, is_edit in jobs:
