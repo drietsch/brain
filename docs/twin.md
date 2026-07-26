@@ -92,6 +92,50 @@ is agents recording what they learned (*"this module is the entry point"*,
 *"tests here are flaky because of X"*) so the next session starts oriented
 instead of from zero.
 
+## Decisions and plans — the *why* documents
+
+The twin stores not just what the software *is* but why it is that way:
+architecture decision records (ADRs) and the plans agents produce are
+first-class entities (`decision`, `plan`) with sourced observations
+(`content`, `title`, `status`) and typed relations linking them to the code
+they concern.
+
+Two capture paths:
+
+- **Auto-detection during refresh.** Markdown in conventional paths is
+  captured automatically: `docs/adr/`, `decisions/`, or `adr-*.md` filenames
+  become decisions; `plans/` directories become plans. The file entity stays;
+  the decision/plan entity is the semantic thing (`doc -recorded_in-> file`),
+  so a document's identity survives file moves.
+- **Explicit add for files outside the repo** — the Claude Code workflow:
+
+```bash
+brain plan add ~/.claude/plans/my-feature.md --prefix twin/app
+brain adr  add decision.md --prefix twin/app --status accepted
+
+brain adr  list twin/app        # [status] slug: title (age, mentions)
+brain plan list twin/app
+brain adr  show twin/app adr-001-storage   # full text + status timeline + mentions
+```
+
+What the graph gives you for free:
+
+- **Status timeline.** An ADR whose `Status:` line changes
+  (proposed → accepted → superseded) gets a new `status` observation each
+  time — the decision's lifecycle is queryable history, never an overwrite.
+- **Mentions-scan.** Every twinned file path appearing in a document's text
+  becomes a `doc -mentions-> file` relation, so "which decisions cover this
+  file?" is a reverse-relation query — and insights tags churn hotspots that
+  have documented rationale with `[decided]`.
+- **Supersession.** A `Supersedes:` line becomes a `supersedes` relation
+  between decisions.
+- **Replication.** Decisions and plans travel with `brain pull`, timelines
+  and all, like every other graph object.
+
+The intended loop: after a Claude Code plan is approved, `brain plan add`
+it; after a significant decision, write an ADR into `docs/adr/` — the next
+refresh captures it automatically.
+
 ## Continuous insights
 
 `brain twin insights <prefix>` synthesizes the twin into a picture of the
@@ -103,6 +147,8 @@ software — built for watching what agents build:
 - **Largest**: most symbols declared — complexity concentrations.
 - **External deps**: unresolved imports tallied by use.
 - **Recent notes**: the memory agents left behind, newest first.
+- **Decisions and plans**: the newest ADRs (with status) and plans; churn
+  entries covered by a decision are tagged `[decided]`.
 - **Growth series**: files/symbols/relations over time. Every refresh that
   changes the totals records one complete series point on the repo entity —
   so trends are graph objects: they persist, replicate with `brain pull`,

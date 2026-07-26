@@ -11,6 +11,7 @@
 //! observation timeline, and "deleted" is itself just an observation.
 
 use crate::collect_files;
+use crate::docs::{self, DocMeta};
 use crate::symbols;
 use brain_core::ids::{NodeId, StableId};
 use brain_core::object::Object;
@@ -31,6 +32,8 @@ pub struct TwinReport {
     pub symbols: usize,
     /// Relations written this run (refresh only).
     pub relations: usize,
+    /// Decision/plan documents captured this run (refresh only): rel paths.
+    pub docs: Vec<String>,
 }
 
 /// Refresh the twin under `prefix` from the tree at `root`, writing only
@@ -102,7 +105,14 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
         // existed (no `language` observation yet) still gets its structure.
         let structure_missing = !structure.language.is_empty()
             && latest(&index, store, &sid, "language")?.is_none();
-        if !changed && !structure_missing {
+        // Same backfill rule for decision/plan documents twinned before doc
+        // capture existed (no `content` observation on the doc entity yet).
+        let doc_meta = docs::parse_doc(rel, &text);
+        let doc_missing = match &doc_meta {
+            Some(m) => latest(&index, store, &doc_sid(prefix, m), "content")?.is_none(),
+            None => false,
+        };
+        if !changed && !structure_missing && !doc_missing {
             continue;
         }
 
@@ -165,6 +175,27 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
             };
             if relate(store, &index, &mut written_relations, &sid, "imports", &target, now)? {
                 report.relations += 1;
+            }
+        }
+
+        // A file following an ADR/plan convention is also a *why* document:
+        // capture it as a decision/plan entity beside its file entity.
+        if let Some(meta) = &doc_meta {
+            let out = record_doc(
+                store,
+                &index,
+                prefix,
+                meta,
+                &text,
+                "twin",
+                Some(rel),
+                &file_set,
+                &mut written_relations,
+                now,
+            )?;
+            report.relations += out.relations;
+            if out.wrote {
+                report.docs.push(rel.clone());
             }
         }
     }
@@ -260,6 +291,12 @@ pub struct Insights {
     /// Growth series from the repo entity, oldest first: (at_ms, files,
     /// symbols, relations) — one point per refresh that changed the totals.
     pub series: Vec<(u64, usize, usize, usize)>,
+    /// Decisions (ADRs) under the prefix, newest first: (slug, title, status).
+    pub decisions: Vec<(String, String, String)>,
+    /// Plans under the prefix, newest first: (slug, title).
+    pub plans: Vec<(String, String)>,
+    /// Files a decision mentions — hotspots with documented rationale.
+    pub decided: BTreeSet<String>,
 }
 
 const TOP: usize = 5;
@@ -287,6 +324,40 @@ pub fn insights_with(
             }
         }
     }
+
+    // Decisions and plans under this prefix, newest first by content time.
+    let mut decision_sids: BTreeSet<StableId> = BTreeSet::new();
+    let mut decisions: Vec<(u64, String, String, String)> = Vec::new();
+    let mut plans: Vec<(u64, String, String)> = Vec::new();
+    for kind in ["decision", "plan"] {
+        let mut seen: BTreeSet<StableId> = BTreeSet::new();
+        for node in index.entities_by_kind(kind) {
+            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+            if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone())
+            {
+                continue;
+            }
+            let slug = labels.get("slug").cloned().unwrap_or_default();
+            let title = latest(index, store, &id, "title")?
+                .or_else(|| labels.get("title").cloned())
+                .unwrap_or_else(|| slug.clone());
+            let at = latest_at(index, store, &id, "content")?.map_or(0, |(t, _)| t);
+            if kind == "decision" {
+                let status =
+                    latest(index, store, &id, "status")?.unwrap_or_else(|| "recorded".to_string());
+                decisions.push((at, slug, title, status));
+                decision_sids.insert(id);
+            } else {
+                plans.push((at, slug, title));
+            }
+        }
+    }
+    decisions.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    decisions.truncate(TOP);
+    ins.decisions = decisions.into_iter().map(|(_, s, t, st)| (s, t, st)).collect();
+    plans.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    plans.truncate(TOP);
+    ins.plans = plans.into_iter().map(|(_, s, t)| (s, t)).collect();
 
     let mut churn: Vec<(String, usize)> = Vec::new();
     let mut hubs: Vec<(String, usize)> = Vec::new();
@@ -320,6 +391,16 @@ pub fn insights_with(
         let importers = index.relations_to(sid, "imports").len();
         if importers > 0 {
             hubs.push((rel.clone(), importers));
+        }
+
+        // Is this file covered by a decision? (Any `mentions` from an ADR.)
+        for id in index.relations_to(sid, "mentions") {
+            if let Object::Relation { from, .. } = store.get(&id)? {
+                if decision_sids.contains(&from) {
+                    ins.decided.insert(rel.clone());
+                    break;
+                }
+            }
         }
 
         for id in index.relations_from(sid, "imports") {
@@ -395,11 +476,22 @@ fn observe(
     value: &str,
     at: u64,
 ) -> Result<NodeId, StoreError> {
+    observe_src(store, subject, property, value, "twin", at)
+}
+
+fn observe_src(
+    store: &Store,
+    subject: &StableId,
+    property: &str,
+    value: &str,
+    source: &str,
+    at: u64,
+) -> Result<NodeId, StoreError> {
     store.put(&Object::Observation {
         subject: subject.clone(),
         property: property.to_string(),
         value: value.to_string(),
-        source: "twin".to_string(),
+        source: source.to_string(),
         observed_at_ms: at,
     })
 }
@@ -592,6 +684,136 @@ pub fn notes(
     Ok(out)
 }
 
+// ---------------------------------------------------------------------------
+// Decisions and plans: the *why* documents, as first-class twin entities
+// ---------------------------------------------------------------------------
+
+/// Stable identity of a decision/plan under a prefix. Derived from kind +
+/// prefix + slug, not from the file path: the document's identity survives
+/// file moves, and out-of-repo documents get the same scheme.
+pub fn doc_sid(prefix: &str, meta: &DocMeta) -> StableId {
+    StableId::derive(&[meta.kind.as_str(), prefix, &meta.slug])
+}
+
+#[derive(Debug)]
+pub struct DocOutcome {
+    pub sid: StableId,
+    /// Did this call write anything (observations or relations)?
+    pub wrote: bool,
+    /// Relations written by this call.
+    pub relations: usize,
+    /// Twinned file paths this document mentions.
+    pub mentions: Vec<String>,
+}
+
+/// Record a decision/plan document into the twin. Every observation is
+/// guarded by [`latest`], so re-recording an unchanged document writes
+/// nothing — and a changed `Status:` line becomes a new `status`
+/// observation, giving decisions a status timeline for free.
+#[allow(clippy::too_many_arguments)]
+pub fn record_doc(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    meta: &DocMeta,
+    content: &str,
+    source: &str,
+    rel_path: Option<&str>,
+    candidates: &BTreeSet<String>,
+    written_relations: &mut BTreeSet<(StableId, String, StableId)>,
+    now: u64,
+) -> Result<DocOutcome, StoreError> {
+    let sid = doc_sid(prefix, meta);
+    let mut labels = BTreeMap::new();
+    labels.insert("title".to_string(), meta.title.clone());
+    labels.insert("prefix".to_string(), prefix.to_string());
+    labels.insert("slug".to_string(), meta.slug.clone());
+    if let Some(rel) = rel_path {
+        labels.insert("path".to_string(), rel.to_string());
+    }
+    store.put(&Object::Entity {
+        id: sid.clone(),
+        entity_kind: meta.kind.as_str().to_string(),
+        labels,
+    })?;
+
+    let mut wrote = false;
+    let mut props: Vec<(&str, &str)> = vec![("content", content), ("title", &meta.title)];
+    if let Some(status) = &meta.status {
+        props.push(("status", status));
+    }
+    for (prop, value) in props {
+        if latest(index, store, &sid, prop)?.as_deref() != Some(value) {
+            observe_src(store, &sid, prop, value, source, now)?;
+            wrote = true;
+        }
+    }
+
+    let mut outcome = DocOutcome { sid: sid.clone(), wrote, relations: 0, mentions: Vec::new() };
+
+    let repo_sid = StableId::derive(&["repo", prefix]);
+    if relate(store, index, written_relations, &sid, "concerns", &repo_sid, now)? {
+        outcome.relations += 1;
+    }
+    // Auto-detected docs keep their file entity too: the decision/plan is the
+    // semantic thing, the file is where it happens to be recorded.
+    if let Some(rel) = rel_path {
+        let file_sid = StableId::derive(&["file", rel]);
+        if relate(store, index, written_relations, &sid, "recorded_in", &file_sid, now)? {
+            outcome.relations += 1;
+        }
+    }
+    // Mentions-scan: link the document to every twinned file its text names.
+    for cand in candidates {
+        if Some(cand.as_str()) == rel_path || !content.contains(cand.as_str()) {
+            continue;
+        }
+        let file_sid = StableId::derive(&["file", cand]);
+        if relate(store, index, written_relations, &sid, "mentions", &file_sid, now)? {
+            outcome.relations += 1;
+        }
+        outcome.mentions.push(cand.clone());
+    }
+    if let Some(other) = &meta.supersedes {
+        let other_sid = StableId::derive(&["decision", prefix, other]);
+        if relate(store, index, written_relations, &sid, "supersedes", &other_sid, now)? {
+            outcome.relations += 1;
+        }
+    }
+    if outcome.relations > 0 {
+        outcome.wrote = true;
+    }
+    Ok(outcome)
+}
+
+/// Explicit ingestion for documents outside the observed tree — the path
+/// for Claude Code plan files (`~/.claude/plans/*.md`) or pasted decisions.
+pub fn add_doc(
+    store: &Store,
+    prefix: &str,
+    meta: &DocMeta,
+    content: &str,
+    source: &str,
+) -> Result<DocOutcome, StoreError> {
+    let mut index = MemIndex::new();
+    replay(store, &mut index)?;
+    let candidates = twinned_paths(store, prefix)?;
+    let mut written = BTreeSet::new();
+    record_doc(
+        store, &index, prefix, meta, content, source, None, &candidates, &mut written, now_ms(),
+    )
+}
+
+/// Rel paths of files twinned under a prefix, from the namespace.
+pub fn twinned_paths(store: &Store, prefix: &str) -> Result<BTreeSet<String>, StoreError> {
+    Ok(store
+        .namespace()?
+        .keys()
+        .filter_map(|n| n.strip_prefix(&format!("{prefix}/")))
+        .map(str::to_string)
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -771,6 +993,125 @@ mod tests {
         add_note(&store, &sid, "agent: rewrote main twice while iterating").unwrap();
         let ins = insights(&store, "twin/app").unwrap();
         assert!(ins.notes.iter().any(|(_, e, t)| e == "run.py" && t.contains("rewrote")));
+    }
+
+    #[test]
+    fn decisions_and_plans_are_captured_and_linked() {
+        let (src, store_dir) = fixture();
+        let store = Store::open(store_dir.path()).unwrap();
+        fs::create_dir_all(src.path().join("docs/adr")).unwrap();
+        fs::create_dir_all(src.path().join("docs/plans")).unwrap();
+        fs::write(
+            src.path().join("docs/adr/adr-001-storage.md"),
+            "# Use content addressing\n\nStatus: proposed\n\nAffects src/main.rs directly.\n",
+        )
+        .unwrap();
+        fs::write(
+            src.path().join("docs/plans/plan-v1.md"),
+            "# Plan v1\n\nRefactor src/util.rs and web/app.js.\n",
+        )
+        .unwrap();
+
+        let r = refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(r.docs.len(), 2, "both documents captured: {:?}", r.docs);
+
+        let index = fresh_index(&store);
+        let adr = StableId::derive(&["decision", "twin/app", "adr-001-storage"]);
+        let plan = StableId::derive(&["plan", "twin/app", "plan-v1"]);
+        assert_eq!(latest(&index, &store, &adr, "status").unwrap().as_deref(), Some("proposed"));
+        assert_eq!(
+            latest(&index, &store, &adr, "title").unwrap().as_deref(),
+            Some("Use content addressing")
+        );
+        assert!(latest(&index, &store, &plan, "content").unwrap().unwrap().contains("Refactor"));
+
+        // Linked: mentions -> the file it names, concerns -> repo,
+        // recorded_in -> the markdown file entity.
+        let main_sid = StableId::derive(&["file", "src/main.rs"]);
+        let rels = index.relations_from(&adr, "mentions");
+        assert_eq!(rels.len(), 1);
+        match store.get(&rels[0]).unwrap() {
+            Object::Relation { to, .. } => assert_eq!(to, main_sid),
+            other => panic!("expected relation, got {other:?}"),
+        }
+        assert_eq!(index.relations_from(&adr, "concerns").len(), 1);
+        assert_eq!(index.relations_from(&adr, "recorded_in").len(), 1);
+        assert_eq!(index.relations_from(&plan, "mentions").len(), 2);
+
+        // Idempotence: an immediate second refresh writes nothing.
+        let before = store.count_objects().unwrap();
+        let r2 = refresh(&store, src.path(), "twin/app").unwrap();
+        assert!(r2.docs.is_empty());
+        assert_eq!(store.count_objects().unwrap(), before, "no graph growth");
+
+        // A status change is a new observation: decisions get a timeline.
+        fs::write(
+            src.path().join("docs/adr/adr-001-storage.md"),
+            "# Use content addressing\n\nStatus: accepted\n\nAffects src/main.rs directly.\n",
+        )
+        .unwrap();
+        // And a superseding decision links to what it replaces.
+        fs::write(
+            src.path().join("docs/adr/adr-002-sync.md"),
+            "# Sync differently\n\nStatus: proposed\nSupersedes: adr-001-storage.md\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let index = fresh_index(&store);
+        assert_eq!(latest(&index, &store, &adr, "status").unwrap().as_deref(), Some("accepted"));
+        let statuses = index
+            .observations_of(&adr)
+            .iter()
+            .filter_map(|id| store.get(id).ok())
+            .filter(|o| matches!(o, Object::Observation { property, .. } if property == "status"))
+            .count();
+        assert_eq!(statuses, 2, "status history is a timeline");
+        let adr2 = StableId::derive(&["decision", "twin/app", "adr-002-sync"]);
+        let sup = index.relations_from(&adr2, "supersedes");
+        assert_eq!(sup.len(), 1);
+        match store.get(&sup[0]).unwrap() {
+            Object::Relation { to, .. } => assert_eq!(to, adr),
+            other => panic!("expected relation, got {other:?}"),
+        }
+
+        // Insights surface both, and tag mentioned files as decided.
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins
+            .decisions
+            .iter()
+            .any(|(s, t, st)| s == "adr-001-storage" && t.contains("content") && st == "accepted"));
+        assert!(ins.plans.iter().any(|(s, _)| s == "plan-v1"));
+        assert!(ins.decided.contains("src/main.rs"));
+        assert!(!ins.decided.contains("run.py"));
+    }
+
+    #[test]
+    fn explicit_add_doc_records_out_of_repo_plans() {
+        let (src, store_dir) = fixture();
+        let store = Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        // A plan file living outside the observed tree (e.g. ~/.claude/plans).
+        let content = "# The session plan\n\nTouch src/main.rs and run.py.\n";
+        let meta = docs::parse_content(docs::DocKind::Plan, "session-plan", content, None, None);
+        let out = add_doc(&store, "twin/app", &meta, content, "claude-code").unwrap();
+        assert!(out.wrote);
+        assert_eq!(out.mentions, vec!["run.py".to_string(), "src/main.rs".to_string()]);
+
+        // Re-adding the identical document writes nothing.
+        let before = store.count_objects().unwrap();
+        let again = add_doc(&store, "twin/app", &meta, content, "claude-code").unwrap();
+        assert!(!again.wrote);
+        assert_eq!(store.count_objects().unwrap(), before);
+
+        // The observations carry the explicit source, and insights list it.
+        let index = fresh_index(&store);
+        assert!(index.observations_of(&out.sid).iter().any(|id| matches!(
+            store.get(id).unwrap(),
+            Object::Observation { source, .. } if source == "claude-code"
+        )));
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.plans.iter().any(|(s, t)| s == "session-plan" && t == "The session plan"));
     }
 
     #[test]

@@ -8,10 +8,13 @@
 //! - [`twin`] — the engine: drift-aware `refresh`, read-only `status`,
 //!   agent notes.
 //! - [`symbols`] — lightweight per-language symbol and import extraction.
+//! - [`docs`] — parsing for decision records (ADRs) and plans, the *why*
+//!   documents captured alongside structure.
 //!
 //! Observers are sense organs, meant to run continuously; re-ingesting
 //! refreshes observations and surfaces drift as new nodes, never overwrites.
 
+pub mod docs;
 pub mod symbols;
 pub mod twin;
 

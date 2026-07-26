@@ -22,14 +22,16 @@ native implementations without re-modeling.
 ## Quickstart
 
 ```bash
-cargo test                 # 23 tests, including crash recovery
+cargo test                 # 54 tests, including crash recovery
 cargo run -p brain-cli -- init
 cargo run -p brain-cli -- demo            # author -> store -> bind -> run
 cargo run -p brain-cli -- twin refresh . --prefix twin/self   # the brain twins itself
 cargo run -p brain-cli -- twin symbols twin/self/crates/brain-core/src/object.rs
 cargo run -p brain-cli -- twin rdeps twin/self/crates/brain-observe/src/symbols.rs
 cargo run -p brain-cli -- note twin/self/README.md "docs entry point"
-cargo run -p brain-cli -- twin insights twin/self   # churn, hubs, growth, notes
+cargo run -p brain-cli -- plan add ~/.claude/plans/feature.md --prefix twin/self  # Claude Code plans
+cargo run -p brain-cli -- adr list twin/self       # decisions (auto-captured from docs/adr/)
+cargo run -p brain-cli -- twin insights twin/self   # churn, hubs, growth, notes, decisions
 scripts/twin_watch.sh . twin/self 60               # continuous refresh + insights
 cargo run -p brain-cli -- status
 cargo run -p brain-cli -- names
@@ -56,7 +58,7 @@ leaves the intent/receipt trail in the store for inspection.
 | `brain-core` | Identity (`NodeId`, `StableId`), canonical encoding, the object model and core calculus. The constitutional layer: everything else is replaceable. |
 | `brain-store` | Content-addressed store, namespace lineage ("version control"), event log, durable intent log. |
 | `brain-runtime` | Fuel-metered interpreter; capabilities checked before effects; effects only through the intent/receipt boundary. |
-| `brain-observe` | Reflective mode — the twin: drift-aware observation of external software with symbols, import relations, agent notes, and read-only status. See `docs/twin.md`. |
+| `brain-observe` | Reflective mode — the twin: drift-aware observation of external software with symbols, import relations, agent notes, decisions/plans (ADRs), and read-only status. See `docs/twin.md`. |
 | `brain-index` | The system-of-query seam: derived, disposable indexes rebuilt by replaying the event log. `MemIndex` is the reference backend; embedded graph engines can implement the same trait. |
 | `brain-cli` | Projection instrument; holds no state of its own. |
 

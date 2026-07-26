@@ -38,6 +38,10 @@ fn usage() -> &'static str {
        brain twin insights <prefix>              synthesized picture: churn, hubs, growth\n\
        brain note <name> <text...>        attach a durable note to an entity\n\
        brain notes <name>                 read an entity's notes\n\
+       brain adr add <md-file> --prefix <p> [--title T] [--status S]   record a decision\n\
+       brain plan add <md-file> --prefix <p> [--title T]               record a plan\n\
+       brain adr|plan list <prefix>       decisions/plans under a prefix\n\
+       brain adr|plan show <prefix> <slug>   full document, status timeline, mentions\n\
        brain ingest <dir> [--prefix <p>]  alias for twin refresh\n\
        brain pull <store-root>            replicate another store into this one\n\
        brain push <store-root>            replicate this store into another\n\
@@ -69,6 +73,8 @@ fn main() -> ExitCode {
         Some("twin") => cmd_twin(&args[1..]),
         Some("note") => cmd_note(&args[1..]),
         Some("notes") => cmd_notes(&args[1..]),
+        Some("adr") => cmd_doc(&args[1..], brain_observe::docs::DocKind::Decision),
+        Some("plan") => cmd_doc(&args[1..], brain_observe::docs::DocKind::Plan),
         Some("pull") => cmd_sync(&args[1..], true),
         Some("push") => cmd_sync(&args[1..], false),
         Some("refs") => cmd_refs(&args[1..]),
@@ -276,15 +282,19 @@ fn print_twin_report(report: &brain_observe::twin::TwinReport, wrote: bool) {
     for f in &report.deleted {
         println!("deleted  {f}");
     }
+    for f in &report.docs {
+        println!("doc      {f}");
+    }
     let verb = if wrote { "recorded" } else { "would record" };
     println!(
-        "{} unchanged; {verb} {} added, {} changed, {} deleted ({} symbols, {} relations)",
+        "{} unchanged; {verb} {} added, {} changed, {} deleted ({} symbols, {} relations, {} docs)",
         report.unchanged,
         report.added.len(),
         report.changed.len(),
         report.deleted.len(),
         report.symbols,
-        report.relations
+        report.relations,
+        report.docs.len()
     );
 }
 
@@ -445,10 +455,28 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     }
                 }
             };
-            list("churn (most edited)", &ins.churn, "versions");
+            if !ins.churn.is_empty() {
+                println!("churn (most edited):");
+                for (name, n) in &ins.churn {
+                    let tag = if ins.decided.contains(name) { "  [decided]" } else { "" };
+                    println!("  {n:>4} versions  {name}{tag}");
+                }
+            }
             list("hubs (most imported)", &ins.hubs, "importers");
             list("largest (symbols declared)", &ins.largest, "symbols");
             list("external deps (unresolved imports)", &ins.external_modules, "uses");
+            if !ins.decisions.is_empty() {
+                println!("decisions (ADRs):");
+                for (slug, title, status) in &ins.decisions {
+                    println!("  [{status}] {slug}: {title}");
+                }
+            }
+            if !ins.plans.is_empty() {
+                println!("plans:");
+                for (slug, title) in &ins.plans {
+                    println!("  {slug}: {title}");
+                }
+            }
             if !ins.notes.is_empty() {
                 println!("recent notes:");
                 for (at, entity, text) in &ins.notes {
@@ -504,6 +532,143 @@ fn cmd_notes(args: &[String]) -> Result<(), String> {
         println!("{at}  {text}");
     }
     Ok(())
+}
+
+/// `brain adr ...` / `brain plan ...` — decisions and plans in the twin.
+fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), String> {
+    use brain_observe::{docs, twin};
+    let noun = kind.as_str();
+    let cmd = match kind {
+        docs::DocKind::Decision => "adr",
+        docs::DocKind::Plan => "plan",
+    };
+    let usage = format!(
+        "usage: brain {cmd} add <md-file> --prefix <p> [--title T]{} | \
+         brain {cmd} list <prefix> | brain {cmd} show <prefix> <slug>",
+        if cmd == "adr" { " [--status S]" } else { "" }
+    );
+    match args.first().map(String::as_str) {
+        Some("add") => {
+            let mut file = None;
+            let mut prefix = None;
+            let mut title = None;
+            let mut status = None;
+            let mut it = args[1..].iter();
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--prefix" => prefix = it.next().cloned(),
+                    "--title" => title = it.next().cloned(),
+                    "--status" if cmd == "adr" => status = it.next().cloned(),
+                    other if file.is_none() && !other.starts_with("--") => {
+                        file = Some(other.to_string())
+                    }
+                    other => return Err(format!("unexpected argument '{other}'\n{usage}")),
+                }
+            }
+            let file = file.ok_or_else(|| usage.clone())?;
+            let prefix = prefix.ok_or_else(|| format!("--prefix is required\n{usage}"))?;
+            let content = std::fs::read_to_string(&file)
+                .map_err(|e| format!("cannot read '{file}': {e}"))?;
+            let slug = docs::slug_of(&file);
+            let meta =
+                docs::parse_content(kind, &slug, &content, title.as_deref(), status.as_deref());
+            let store = open_store()?;
+            let out = twin::add_doc(&store, &prefix, &meta, &content, "claude-code")
+                .map_err(|e| e.to_string())?;
+            let state = if out.wrote { "recorded" } else { "already recorded (unchanged)" };
+            let status_part = meta
+                .status
+                .as_deref()
+                .map(|s| format!(", status: {s}"))
+                .unwrap_or_default();
+            println!(
+                "{noun} '{slug}' {state} under {prefix} (title: {}{status_part}, {} mention(s))",
+                meta.title,
+                out.mentions.len()
+            );
+            for m in &out.mentions {
+                println!("  mentions {prefix}/{m}");
+            }
+            Ok(())
+        }
+        Some("list") => {
+            let prefix = args.get(1).ok_or_else(|| usage.clone())?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let now = now_ms();
+            let mut seen = BTreeSet::new();
+            let mut any = false;
+            for node in index.entities_by_kind(noun) {
+                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+                if labels.get("prefix") != Some(prefix) || !seen.insert(id.clone()) {
+                    continue;
+                }
+                let slug = labels.get("slug").cloned().unwrap_or_default();
+                let title = brain_observe::twin::latest(&index, &store, &id, "title")
+                    .map_err(|e| e.to_string())?
+                    .or_else(|| labels.get("title").cloned())
+                    .unwrap_or_else(|| slug.clone());
+                let status = brain_observe::twin::latest(&index, &store, &id, "status")
+                    .map_err(|e| e.to_string())?
+                    .map(|s| format!("[{s}] "))
+                    .unwrap_or_default();
+                let age = brain_observe::twin::latest_at(&index, &store, &id, "content")
+                    .map_err(|e| e.to_string())?
+                    .map(|(at, _)| format!("{}s ago", now.saturating_sub(at) / 1000))
+                    .unwrap_or_else(|| "?".to_string());
+                let mentions = relation_targets(&store, &index, &id, "mentions")?.len();
+                println!("{status}{slug}: {title}  ({age}, {mentions} mention(s))");
+                any = true;
+            }
+            if !any {
+                println!("no {noun}s under {prefix}");
+            }
+            Ok(())
+        }
+        Some("show") => {
+            let (prefix, slug) = match (args.get(1), args.get(2)) {
+                (Some(p), Some(s)) => (p, s),
+                _ => return Err(usage),
+            };
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = brain_core::ids::StableId::derive(&[noun, prefix, slug]);
+            let content = brain_observe::twin::latest(&index, &store, &sid, "content")
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("no {noun} '{slug}' under {prefix}"))?;
+            print!("{content}");
+            if !content.ends_with('\n') {
+                println!();
+            }
+            // Status timeline (decisions), oldest first.
+            let mut statuses = Vec::new();
+            for id in index.observations_of(&sid) {
+                if let Object::Observation { property, value, observed_at_ms, .. } =
+                    store.get(&id).map_err(|e| e.to_string())?
+                {
+                    if property == "status" {
+                        statuses.push((observed_at_ms, value));
+                    }
+                }
+            }
+            statuses.sort();
+            if !statuses.is_empty() {
+                println!("--- status timeline ---");
+                for (at, s) in statuses {
+                    println!("{at}  {s}");
+                }
+            }
+            let mentions = relation_targets(&store, &index, &sid, "mentions")?;
+            if !mentions.is_empty() {
+                println!("--- mentions ---");
+                for m in mentions {
+                    println!("{}", entity_label(&store, &index, &m));
+                }
+            }
+            Ok(())
+        }
+        _ => Err(usage),
+    }
 }
 
 /// Resolve a CLI argument that may be a bound name or a literal b3: hash.
