@@ -48,6 +48,8 @@ fn usage() -> &'static str {
        brain agentcfg add <file> --prefix <p> [--agent A] [--role R]   record agent config\n\
        brain skill|agentcfg list <prefix> | show <prefix> <slug>       browse them\n\
        brain template seed|list|show <slug>          the deliverable contract, in the graph\n\
+       brain template set <slug> --applies-to k --capture <globs> [--fields spec]   teach a new kind\n\
+       brain artifact list|show <prefix> <kind> [slug]   browse artifacts of any kind\n\
        brain deliverable new <template> [--title T]  instantiate a scaffold to stdout\n\
        brain feature add <prefix> <slug> [--title T] [--status S]      register a feature\n\
        brain feature link <prefix> <slug> <predicate> <target>         link into the graph\n\
@@ -98,6 +100,7 @@ fn main() -> ExitCode {
         Some("skill") => cmd_agent_doc(&args[1..], brain_observe::agents::AgentDocKind::Skill),
         Some("agentcfg") => cmd_agent_doc(&args[1..], brain_observe::agents::AgentDocKind::Config),
         Some("template") => cmd_template(&args[1..]),
+        Some("artifact") => cmd_artifact(&args[1..]),
         Some("deliverable") => cmd_deliverable(&args[1..]),
         Some("feature") => cmd_feature(&args[1..]),
         Some("done") => cmd_done(&args[1..]),
@@ -551,6 +554,14 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     println!("  [{agent}] {slug} ({role})");
                 }
             }
+            if !ins.custom_artifacts.is_empty() {
+                let parts: Vec<String> = ins
+                    .custom_artifacts
+                    .iter()
+                    .map(|(k, n)| format!("{k} ×{n}"))
+                    .collect();
+                println!("custom artifacts (graph-defined kinds): {}", parts.join(", "));
+            }
             if !ins.features.is_empty() {
                 println!("features (DoD progress):");
                 for (slug, status, fraction) in &ins.features {
@@ -952,8 +963,71 @@ fn cmd_agent_doc(args: &[String], kind: brain_observe::agents::AgentDocKind) -> 
 /// `brain template ...` — the deliverable contract, defined in the graph.
 fn cmd_template(args: &[String]) -> Result<(), String> {
     use brain_observe::{templates, twin};
-    let usage = "usage: brain template seed | list | show <slug>";
+    let usage = "usage: brain template seed | list | show <slug> | \
+                 set <slug> [--applies-to k] [--capture \"globs\"] [--fields \"spec\"] \
+                 [--requires \"a,b\"] [--title T]";
     match args.first().map(String::as_str) {
+        Some("set") => {
+            let slug = args.get(1).filter(|s| !s.starts_with("--")).ok_or(usage)?;
+            let mut props: Vec<(String, String)> = Vec::new();
+            let mut title = None;
+            let mut it = args[2..].iter();
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--applies-to" | "--capture" | "--fields" | "--requires" => {
+                        let key = a.trim_start_matches("--").replace('-', "_");
+                        let v = it.next().cloned().ok_or(format!("{a} needs a value"))?;
+                        props.push((key, v));
+                    }
+                    "--title" => title = it.next().cloned(),
+                    other => return Err(format!("unexpected argument '{other}'\n{usage}")),
+                }
+            }
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = templates::template_sid(slug);
+            let mut labels = std::collections::BTreeMap::new();
+            labels.insert("slug".to_string(), slug.to_string());
+            labels.insert(
+                "title".to_string(),
+                title.clone().unwrap_or_else(|| slug.to_string()),
+            );
+            store
+                .put(&Object::Entity {
+                    id: sid.clone(),
+                    entity_kind: "template".to_string(),
+                    labels,
+                })
+                .map_err(|e| e.to_string())?;
+            if let Some(t) = title {
+                props.push(("title".to_string(), t));
+            }
+            let now = now_ms();
+            let mut wrote = 0;
+            for (prop, value) in &props {
+                if twin::latest(&index, &store, &sid, prop)
+                    .map_err(|e| e.to_string())?
+                    .as_deref()
+                    != Some(value.as_str())
+                {
+                    store
+                        .put(&Object::Observation {
+                            subject: sid.clone(),
+                            property: prop.clone(),
+                            value: value.clone(),
+                            source: "agent".to_string(),
+                            observed_at_ms: now,
+                        })
+                        .map_err(|e| e.to_string())?;
+                    wrote += 1;
+                }
+            }
+            println!("template '{slug}': {wrote} observation(s) written");
+            if props.iter().any(|(p, _)| p == "capture") {
+                println!("the twin now auto-captures matching paths on every refresh");
+            }
+            Ok(())
+        }
         Some("seed") => {
             let store = open_store()?;
             let n = templates::seed(&store).map_err(|e| e.to_string())?;
@@ -972,7 +1046,11 @@ fn cmd_template(args: &[String]) -> Result<(), String> {
                 let title = twin::latest(&index, &store, &sid, "title")
                     .map_err(|e| e.to_string())?
                     .unwrap_or_default();
-                println!("{applies:<12} requires [{}]  — {title}", requires.join(", "));
+                let capture = twin::latest(&index, &store, &sid, "capture")
+                    .map_err(|e| e.to_string())?
+                    .map(|c| format!("  captures [{c}]"))
+                    .unwrap_or_default();
+                println!("{applies:<12} requires [{}]{capture}  — {title}", requires.join(", "));
             }
             Ok(())
         }
@@ -985,6 +1063,92 @@ fn cmd_template(args: &[String]) -> Result<(), String> {
                 .map_err(|e| e.to_string())?
                 .ok_or_else(|| format!("no template '{slug}' (run: brain template seed)"))?;
             print!("{content}");
+            Ok(())
+        }
+        _ => Err(usage.to_string()),
+    }
+}
+
+/// `brain artifact ...` — generic browse for artifacts of any entity kind,
+/// including kinds taught to the store via graph-defined capture rules.
+fn cmd_artifact(args: &[String]) -> Result<(), String> {
+    let usage = "usage: brain artifact list <prefix> <kind> | brain artifact show <prefix> <kind> <slug>";
+    match args.first().map(String::as_str) {
+        Some("list") => {
+            let (prefix, kind) = match (args.get(1), args.get(2)) {
+                (Some(p), Some(k)) => (p, k),
+                _ => return Err(usage.to_string()),
+            };
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let mut seen = BTreeSet::new();
+            let mut any = false;
+            for node in index.entities_by_kind(kind) {
+                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+                if labels.get("prefix") != Some(prefix) || !seen.insert(id.clone()) {
+                    continue;
+                }
+                let slug = labels.get("slug").cloned().unwrap_or_default();
+                let title = brain_observe::twin::latest(&index, &store, &id, "title")
+                    .map_err(|e| e.to_string())?
+                    .or_else(|| labels.get("title").cloned())
+                    .unwrap_or_else(|| slug.clone());
+                let conforms = brain_observe::twin::latest(&index, &store, &id, "conforms")
+                    .map_err(|e| e.to_string())?
+                    .map(|c| if c == "true" { "".to_string() } else { "  [nonconforming]".to_string() })
+                    .unwrap_or_default();
+                let mentions = relation_targets(&store, &index, &id, "mentions")?.len();
+                println!("{slug}: {title}  ({mentions} mention(s)){conforms}");
+                any = true;
+            }
+            if !any {
+                println!("no {kind} artifacts under {prefix}");
+            }
+            Ok(())
+        }
+        Some("show") => {
+            let (prefix, kind, slug) = match (args.get(1), args.get(2), args.get(3)) {
+                (Some(p), Some(k), Some(s)) => (p, k, s),
+                _ => return Err(usage.to_string()),
+            };
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = brain_core::ids::StableId::derive(&[kind, prefix, slug]);
+            // Latest value per property, so extracted fields show as a header.
+            let mut latest_props: std::collections::BTreeMap<String, (u64, String)> =
+                Default::default();
+            for id in index.observations_of(&sid) {
+                if let Object::Observation { property, value, observed_at_ms, .. } =
+                    store.get(&id).map_err(|e| e.to_string())?
+                {
+                    let entry = latest_props.entry(property).or_insert((0, String::new()));
+                    if observed_at_ms >= entry.0 {
+                        *entry = (observed_at_ms, value);
+                    }
+                }
+            }
+            if latest_props.is_empty() {
+                return Err(format!("no {kind} '{slug}' under {prefix}"));
+            }
+            for (prop, (_, value)) in &latest_props {
+                if prop != "content" {
+                    println!("{prop}: {value}");
+                }
+            }
+            if let Some((_, content)) = latest_props.get("content") {
+                println!("---");
+                print!("{content}");
+                if !content.ends_with('\n') {
+                    println!();
+                }
+            }
+            let mentions = relation_targets(&store, &index, &sid, "mentions")?;
+            if !mentions.is_empty() {
+                println!("--- mentions ---");
+                for m in mentions {
+                    println!("{}", entity_label(&store, &index, &m));
+                }
+            }
             Ok(())
         }
         _ => Err(usage.to_string()),

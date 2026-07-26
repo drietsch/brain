@@ -264,6 +264,39 @@ What the graph gives you:
   convention) produce `test_case -defined_in-> file` relations.
 - **Replication.** Runs, timelines, and evidence travel with `brain pull`.
 
+## Teach brain a new artifact type (no code)
+
+The built-in detectors (ADRs, plans, skills, agent config, tests) are just
+conveniences. Any *other* artifact family — runbooks, incidents, RFCs,
+postmortems — can be taught to the store as **data on its template**:
+
+```bash
+brain template set runbook \
+  --applies-to runbook \
+  --capture "docs/runbooks/*.md" \
+  --fields  "title=heading, service=line" \
+  --requires "title,service" \
+  --title "Operational runbook"
+```
+
+Two observations do the work: `capture` (glob patterns — `*` within a
+segment, `**` across, `?` one char) says which paths are artifacts of this
+kind; `fields` says how to lift properties out of the text with a fixed
+extractor vocabulary (`heading`, `line[:Key]`, `frontmatter[:key]`,
+`slug`). From the next refresh — including the one your git hook runs —
+matching files become entities of the new kind with extracted-field
+observations, mentions-links to the code they name, conformance against
+`requires`, staleness detection, and replication. Nothing was compiled;
+the store taught itself, and `brain pull` teaches every replica.
+
+Built-in detectors keep precedence; rules apply to paths they didn't
+claim. Browse any kind, built-in or taught, with:
+
+```bash
+brain artifact list twin/app runbook
+brain artifact show twin/app runbook deploy   # fields, full text, mentions
+```
+
 ## Always-up-to-date docs: staleness + projections
 
 Two mechanisms keep documentation honest (see

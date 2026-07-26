@@ -163,6 +163,139 @@ pub fn instantiate(content: &str, title: &str) -> String {
     content.replace("{{title}}", title)
 }
 
+// ---------------------------------------------------------------------------
+// Graph-defined capture rules: teach brain a new artifact type, no code
+// ---------------------------------------------------------------------------
+
+/// A capture rule declared on a template entity as data: which paths are
+/// artifacts of its kind, and how to lift fields out of their text.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CaptureRule {
+    pub kind: String,
+    pub patterns: Vec<String>,
+    /// (property, extractor, optional arg) triples from the `fields` DSL.
+    pub fields: Vec<(String, String, Option<String>)>,
+}
+
+/// All capture rules in the graph, read from `capture` / `fields`
+/// observations on template entities. Kinds with a rule extend what the
+/// twin auto-captures — the built-in detectors keep precedence.
+pub fn capture_rules(store: &Store, index: &MemIndex) -> Result<Vec<CaptureRule>, StoreError> {
+    let mut out = Vec::new();
+    let mut seen: BTreeSet<StableId> = BTreeSet::new();
+    for node in index.entities_by_kind("template") {
+        let Ok(Object::Entity { id, .. }) = store.get(&node) else { continue };
+        if !seen.insert(id.clone()) {
+            continue;
+        }
+        let Some(kind) = latest(index, store, &id, "applies_to")? else { continue };
+        let Some(capture) = latest(index, store, &id, "capture")? else { continue };
+        let patterns: Vec<String> = capture
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect();
+        if patterns.is_empty() {
+            continue;
+        }
+        let fields = parse_fields(&latest(index, store, &id, "fields")?.unwrap_or_default());
+        out.push(CaptureRule { kind, patterns, fields });
+    }
+    Ok(out)
+}
+
+/// Parse the `fields` DSL: `prop=extractor[:arg]` comma-separated.
+pub fn parse_fields(spec: &str) -> Vec<(String, String, Option<String>)> {
+    spec.split(',')
+        .filter_map(|part| {
+            let (prop, rest) = part.trim().split_once('=')?;
+            let (extractor, arg) = match rest.split_once(':') {
+                Some((e, a)) => (e, Some(a.trim().to_string())),
+                None => (rest, None),
+            };
+            let prop = prop.trim();
+            if prop.is_empty() || extractor.trim().is_empty() {
+                return None;
+            }
+            Some((prop.to_string(), extractor.trim().to_string(), arg))
+        })
+        .collect()
+}
+
+impl CaptureRule {
+    pub fn matches(&self, rel_path: &str) -> bool {
+        self.patterns.iter().any(|p| glob_match(p, rel_path))
+    }
+
+    /// Extract this rule's fields from a document. Fields whose extractor
+    /// finds nothing are simply absent — capture is forgiving; the
+    /// `requires` contract is what flags gaps, as conformance.
+    pub fn extract(&self, content: &str, slug: &str) -> Vec<(String, String)> {
+        let fm = crate::agents::frontmatter(content);
+        let mut out = Vec::new();
+        for (prop, extractor, arg) in &self.fields {
+            let value = match extractor.as_str() {
+                "heading" => content
+                    .lines()
+                    .find_map(|l| l.trim().strip_prefix("# ").map(|t| t.trim().to_string())),
+                "line" => {
+                    // `Key:` line; default key = property with first letter
+                    // upper-cased (service -> "Service:").
+                    let key = arg.clone().unwrap_or_else(|| {
+                        let mut c = prop.chars();
+                        c.next()
+                            .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+                            .unwrap_or_default()
+                    });
+                    let needle = format!("{}:", key.to_lowercase());
+                    content.lines().find_map(|l| {
+                        let t = l.trim();
+                        t.to_lowercase()
+                            .strip_prefix(&needle)
+                            .map(|_| t[needle.len()..].trim().to_string())
+                            .filter(|v| !v.is_empty())
+                    })
+                }
+                "frontmatter" => fm.get(arg.as_deref().unwrap_or(prop)).cloned(),
+                "slug" => Some(slug.to_string()),
+                _ => None,
+            };
+            if let Some(v) = value {
+                out.push((prop.clone(), v));
+            }
+        }
+        out
+    }
+}
+
+/// Minimal glob: `*` matches within a path segment, `**` across segments,
+/// `?` one non-slash character. No dependency, no surprises.
+pub fn glob_match(pattern: &str, path: &str) -> bool {
+    fn inner(p: &[u8], s: &[u8]) -> bool {
+        match (p.first(), s.first()) {
+            (None, None) => true,
+            (None, Some(_)) => false,
+            (Some(b'*'), _) if p.get(1) == Some(&b'*') => {
+                // `**`: swallow any run (including slashes); a following
+                // `/` may match zero directories.
+                let rest = if p.get(2) == Some(&b'/') { &p[3..] } else { &p[2..] };
+                (0..=s.len()).any(|i| inner(rest, &s[i..]))
+            }
+            (Some(b'*'), _) => {
+                let rest = &p[1..];
+                (0..=s.len())
+                    .take_while(|i| *i == 0 || s[i - 1] != b'/')
+                    .any(|i| inner(rest, &s[i..]))
+            }
+            (Some(b'?'), Some(c)) if *c != b'/' => inner(&p[1..], &s[1..]),
+            (Some(a), Some(b)) if a == b => inner(&p[1..], &s[1..]),
+            _ => false,
+        }
+    }
+    inner(pattern.as_bytes(), path.as_bytes())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,6 +332,69 @@ mod tests {
         replay(&store, &mut index).unwrap();
         let map = by_kind(&store, &index).unwrap();
         assert_eq!(map.get("decision").unwrap().1.len(), 3, "local override wins");
+    }
+
+    #[test]
+    fn glob_matches_segments_and_double_star() {
+        assert!(glob_match("docs/runbooks/*.md", "docs/runbooks/deploy.md"));
+        assert!(!glob_match("docs/runbooks/*.md", "docs/runbooks/sub/deploy.md"));
+        assert!(glob_match("runbooks/**/*.md", "runbooks/a/b/deploy.md"));
+        assert!(glob_match("runbooks/**/*.md", "runbooks/deploy.md"), "** may match zero dirs");
+        assert!(glob_match("**/*.rfc", "any/depth/x.rfc"));
+        assert!(glob_match("incident-????.md", "incident-0042.md"));
+        assert!(!glob_match("incident-????.md", "incident-42.md"));
+        assert!(!glob_match("*.md", "docs/x.md"), "* does not cross slashes");
+    }
+
+    #[test]
+    fn capture_fields_extract_per_dsl() {
+        let fields = parse_fields("title=heading, service=line, owner=frontmatter, id=slug, sev=line:Severity");
+        assert_eq!(fields.len(), 5);
+        let rule = CaptureRule {
+            kind: "runbook".into(),
+            patterns: vec!["docs/runbooks/*.md".into()],
+            fields,
+        };
+        assert!(rule.matches("docs/runbooks/deploy.md"));
+        let md = "---\nowner: platform-team\n---\n\n# Deploy safely\n\nService: checkout\nSeverity: high\n";
+        let got = rule.extract(md, "deploy");
+        let get = |k: &str| got.iter().find(|(p, _)| p == k).map(|(_, v)| v.as_str());
+        assert_eq!(get("title"), Some("Deploy safely"));
+        assert_eq!(get("service"), Some("checkout"));
+        assert_eq!(get("owner"), Some("platform-team"));
+        assert_eq!(get("id"), Some("deploy"));
+        assert_eq!(get("sev"), Some("high"));
+        // Missing fields are absent, not errors — conformance flags gaps.
+        assert!(rule.extract("no structure here\n", "x").iter().all(|(p, _)| p == "id"));
+    }
+
+    #[test]
+    fn capture_rules_read_from_graph_observations() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        seed(&store).unwrap();
+        // Defaults declare no capture rules (built-in detectors own those
+        // kinds); a custom template becomes a rule via two observations.
+        let sid = template_sid("runbook");
+        store
+            .put(&Object::Entity {
+                id: sid.clone(),
+                entity_kind: "template".to_string(),
+                labels: BTreeMap::new(),
+            })
+            .unwrap();
+        let now = now_ms();
+        observe_src(&store, &sid, "applies_to", "runbook", "agent", now).unwrap();
+        observe_src(&store, &sid, "capture", "docs/runbooks/*.md", "agent", now).unwrap();
+        observe_src(&store, &sid, "fields", "title=heading, service=line", "agent", now).unwrap();
+        observe_src(&store, &sid, "requires", "title,service", "agent", now).unwrap();
+
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+        let rules = capture_rules(&store, &index).unwrap();
+        assert_eq!(rules.len(), 1, "only the runbook template captures: {rules:?}");
+        assert_eq!(rules[0].kind, "runbook");
+        assert!(rules[0].matches("docs/runbooks/deploy.md"));
     }
 
     #[test]

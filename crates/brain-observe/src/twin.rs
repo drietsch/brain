@@ -74,6 +74,10 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
     // these kinds need a conformance pass even when otherwise unchanged.
     let tmpl_kinds: BTreeSet<String> =
         crate::templates::by_kind(store, &index)?.keys().cloned().collect();
+    // Graph-defined capture rules: templates that declare, as data, which
+    // paths are artifacts of their kind — the store teaching itself new
+    // artifact types with no code change.
+    let rules = crate::templates::capture_rules(store, &index)?;
 
     for rel in &files {
         let content = fs::read(root.join(rel))?;
@@ -139,7 +143,27 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
         let test_info = testing::classify(rel, structure.language, &text);
         let test_missing = test_info.is_some()
             && latest(&index, store, &sid, "test_framework")?.is_none();
-        if !changed && !structure_missing && !doc_missing && !agent_missing && !test_missing {
+        // Graph-defined rules capture paths the built-in detectors didn't
+        // claim; built-ins keep precedence.
+        let rule = if doc_meta.is_none() && agent_meta.is_none() {
+            rules.iter().find(|r| r.matches(rel))
+        } else {
+            None
+        };
+        let rule_missing = match rule {
+            Some(r) => {
+                let rsid = StableId::derive(&[r.kind.as_str(), prefix, &docs::slug_of(rel)]);
+                latest(&index, store, &rsid, "content")?.is_none()
+            }
+            None => false,
+        };
+        if !changed
+            && !structure_missing
+            && !doc_missing
+            && !agent_missing
+            && !test_missing
+            && !rule_missing
+        {
             continue;
         }
 
@@ -272,6 +296,44 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
                 report.docs.push(rel.clone());
             }
         }
+
+        // A file claimed by a graph-defined rule is an artifact of that
+        // rule's kind: extracted fields become observations, and the
+        // shared core supplies mentions/concerns/conformance unchanged.
+        if let Some(r) = rule {
+            let slug = docs::slug_of(rel);
+            let extracted = r.extract(&text, &slug);
+            let title = extracted
+                .iter()
+                .find(|(p, _)| p == "title")
+                .map(|(_, v)| v.clone())
+                .unwrap_or_else(|| slug.clone());
+            let mut props: Vec<(&str, &str)> = vec![("content", &text)];
+            for (p, v) in &extracted {
+                if p != "content" {
+                    props.push((p.as_str(), v.as_str()));
+                }
+            }
+            let out = record_entity_doc(
+                store,
+                &index,
+                prefix,
+                &r.kind,
+                &slug,
+                &[("title", &title)],
+                &props,
+                &text,
+                "twin",
+                Some(rel),
+                &file_set,
+                &mut written_relations,
+                now,
+            )?;
+            report.relations += out.relations;
+            if out.wrote {
+                report.docs.push(rel.clone());
+            }
+        }
     }
 
     // Files the twin still claims are present but which are gone from disk.
@@ -392,6 +454,8 @@ pub struct Insights {
     /// (slug, kind, changed files). Derived at query time, never written —
     /// stale is a judgment about now, not a fact about then.
     pub stale_docs: Vec<(String, String, Vec<String>)>,
+    /// Artifacts of graph-defined kinds (capture rules): (kind, count).
+    pub custom_artifacts: Vec<(String, usize)>,
 }
 
 const TOP: usize = 5;
@@ -488,7 +552,17 @@ pub fn insights_with(
 
     // Documents failing their template contract (recorded, never enforced),
     // and documents gone stale: a mentioned file changed after the doc did.
-    for kind in ["decision", "plan", "skill", "agent_config"] {
+    // Kinds = the built-in families plus every graph-defined capture kind.
+    let builtin_kinds = ["decision", "plan", "skill", "agent_config"];
+    let mut doc_kinds: Vec<String> = builtin_kinds.iter().map(|s| s.to_string()).collect();
+    for kind in crate::templates::by_kind(store, index)?.keys() {
+        if !builtin_kinds.contains(&kind.as_str()) && kind != "feature" {
+            doc_kinds.push(kind.clone());
+        }
+    }
+    for kind in &doc_kinds {
+        let kind = kind.as_str();
+        let mut count = 0usize;
         let mut seen: BTreeSet<StableId> = BTreeSet::new();
         for node in index.entities_by_kind(kind) {
             let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
@@ -497,6 +571,7 @@ pub fn insights_with(
                 continue;
             }
             let slug = labels.get("slug").cloned().unwrap_or_default();
+            count += 1;
             if latest(index, store, &id, "conforms")?.as_deref() == Some("false") {
                 let missing = latest(index, store, &id, "missing")?.unwrap_or_default();
                 ins.nonconforming.push((slug.clone(), kind.to_string(), missing));
@@ -517,6 +592,9 @@ pub fn insights_with(
                     ins.stale_docs.push((slug, kind.to_string(), changed));
                 }
             }
+        }
+        if !builtin_kinds.contains(&kind) && count > 0 {
+            ins.custom_artifacts.push((kind.to_string(), count));
         }
     }
     ins.nonconforming.sort();
@@ -1746,6 +1824,99 @@ mod tests {
         refresh(&store, src.path(), "twin/app").unwrap();
         let ins = insights(&store, "twin/app").unwrap();
         assert!(ins.stale_docs.is_empty(), "re-touched doc is fresh again");
+    }
+
+    #[test]
+    fn graph_defined_capture_rules_teach_new_artifact_kinds() {
+        let (src, store_dir) = fixture();
+        let store = Store::open(store_dir.path()).unwrap();
+        crate::templates::seed(&store).unwrap();
+
+        // Teach the store a "runbook" kind purely with observations.
+        let tmpl = crate::templates::template_sid("runbook");
+        store
+            .put(&Object::Entity {
+                id: tmpl.clone(),
+                entity_kind: "template".to_string(),
+                labels: BTreeMap::new(),
+            })
+            .unwrap();
+        let now = now_ms();
+        for (prop, value) in [
+            ("applies_to", "runbook"),
+            ("capture", "docs/runbooks/*.md"),
+            ("fields", "title=heading, service=line"),
+            ("requires", "title,service"),
+        ] {
+            observe_src(&store, &tmpl, prop, value, "agent", now).unwrap();
+        }
+
+        fs::create_dir_all(src.path().join("docs/runbooks")).unwrap();
+        fs::write(
+            src.path().join("docs/runbooks/deploy.md"),
+            "# Deploy safely\n\nService: checkout\n\nRestart src/main.rs afterwards.\n",
+        )
+        .unwrap();
+        fs::write(src.path().join("docs/runbooks/rollback.md"), "just some prose\n").unwrap();
+
+        let r = refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(r.docs.len(), 2, "both runbooks captured: {:?}", r.docs);
+
+        let index = fresh_index(&store);
+        let deploy = StableId::derive(&["runbook", "twin/app", "deploy"]);
+        assert_eq!(
+            latest(&index, &store, &deploy, "title").unwrap().as_deref(),
+            Some("Deploy safely")
+        );
+        assert_eq!(
+            latest(&index, &store, &deploy, "service").unwrap().as_deref(),
+            Some("checkout"),
+            "extracted field became an observation"
+        );
+        assert_eq!(latest(&index, &store, &deploy, "conforms").unwrap().as_deref(), Some("true"));
+        // Mentions and concerns come from the shared core.
+        let main_sid = StableId::derive(&["file", "src/main.rs"]);
+        let mentioned: Vec<_> = index
+            .relations_from(&deploy, "mentions")
+            .iter()
+            .filter_map(|id| match store.get(id) {
+                Ok(Object::Relation { to, .. }) => Some(to),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(mentioned, vec![main_sid.clone()]);
+        assert_eq!(index.relations_from(&deploy, "concerns").len(), 1);
+
+        // The prose-only runbook fails its contract — recorded, not rejected.
+        let rollback = StableId::derive(&["runbook", "twin/app", "rollback"]);
+        assert_eq!(
+            latest(&index, &store, &rollback, "conforms").unwrap().as_deref(),
+            Some("false")
+        );
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.nonconforming.iter().any(|(s, k, m)| {
+            s == "rollback" && k == "runbook" && m.contains("service")
+        }));
+        assert!(ins.custom_artifacts.iter().any(|(k, n)| k == "runbook" && *n == 2));
+
+        // Idempotence holds for rule-captured artifacts too.
+        let before = store.count_objects().unwrap();
+        let r2 = refresh(&store, src.path(), "twin/app").unwrap();
+        assert!(r2.docs.is_empty());
+        assert_eq!(store.count_objects().unwrap(), before, "no graph growth");
+
+        // Staleness applies to the custom kind: the mentioned file changes.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        fs::write(
+            src.path().join("src/main.rs"),
+            "use crate::util;\npub fn main() { /* changed */ }\nstruct Config;\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.stale_docs.iter().any(|(s, k, files)| {
+            s == "deploy" && k == "runbook" && files.contains(&"src/main.rs".to_string())
+        }));
     }
 
     #[test]

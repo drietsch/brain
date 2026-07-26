@@ -52,6 +52,8 @@ cargo run -p brain -- adr list twin/self       # decisions (auto-captured from d
 cargo run -p brain -- skill list twin/self     # agent skills (SKILL.md, auto-captured)
 cargo run -p brain -- agentcfg list twin/self  # CLAUDE.md/AGENTS.md/.cursorrules/settings
 cargo run -p brain -- deliverable new adr --title "Use X"  # scaffold from graph template
+cargo run -p brain -- template set runbook --applies-to runbook --capture "docs/runbooks/*.md" \
+  --fields "title=heading, service=line" --requires "title,service"  # teach a new kind, no code
 cargo run -p brain -- feature matrix twin/self # definition-of-done as a rendered query
 cargo test 2>&1 | cargo run -p brain -- testrun import - --prefix twin/self  # protocol -> graph
 cargo run -p brain -- twin tests twin/self     # frameworks, covers-relations, failing
