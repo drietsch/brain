@@ -1,0 +1,17 @@
+; Triangle classification: invalid sides / inequality, then equal-side cases.
+(lam t
+  (let a (get t a)
+    (let b (get t b)
+      (let c (get t c)
+        (let classify
+          (if (eq a b)
+            (if (eq b c) "equilateral" "isosceles")
+            (if (eq b c) "isosceles" (if (eq a c) "isosceles" "scalene")))
+          (if (lt a 1) "invalid"
+            (if (lt b 1) "invalid"
+              (if (lt c 1) "invalid"
+                (if (lt c (add a b))
+                  (if (lt a (add b c))
+                    (if (lt b (add a c)) classify "invalid")
+                    "invalid")
+                  "invalid")))))))))

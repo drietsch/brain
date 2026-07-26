@@ -114,6 +114,26 @@ in 10. Emission *validity* did not degrade, but the verbosity cost is real
 and is the first concrete data point for the Stage 3 question of whether the
 wire encoding should stay JSON or move to something denser.
 
+## Run 3 — compact notation (2026-07-26)
+
+The verbosity finding from Run 2 was acted on: a compact term notation
+(`docs/calculus.md` § Compact term notation) that parses into the same
+canonical Term. The four largest programs were re-authored in it
+(`runs/2026-07-26-coding-agent-term/`):
+
+| Task | Nodes | JSON bytes | Notation bytes | Ratio | Same hash as JSON emission? |
+|---|---:|---:|---:|---:|---|
+| clock-add | 37 | 2,999 | 257 | 11.7x | yes — deduplicated |
+| checkout | 59 | 4,608 | 456 | 10.1x | yes — deduplicated |
+| valid-date | 73 | 8,343 | 423 | 19.7x | yes — deduplicated |
+| triangle | 92 | 11,675 | 630 | 18.5x | yes — deduplicated |
+
+4/4 first-attempt passes, zero repairs, 10–20x density gain — and the hash
+identity column is the important one: the notation is provably a projection.
+Both encodings of each program landed on the *same node* in the graph, so
+the encoding choice has no effect on identity, evidence, or dedup. Cumulative
+across all runs: 20/20.
+
 ## Task format
 
 ```json

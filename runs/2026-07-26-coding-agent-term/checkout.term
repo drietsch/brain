@@ -1,0 +1,8 @@
+; Checkout: line totals, subtotal, discount at 100, shipping under 50.
+(lam cart
+  (let s1 (mul (get (get cart i1) qty) (get (get cart i1) price))
+    (let s2 (mul (get (get cart i2) qty) (get (get cart i2) price))
+      (let s3 (mul (get (get cart i3) qty) (get (get cart i3) price))
+        (let subtotal (add (add s1 s2) s3)
+          (let after (if (lt subtotal 100) subtotal (sub subtotal 10))
+            (if (lt after 50) (add after 5) after)))))))

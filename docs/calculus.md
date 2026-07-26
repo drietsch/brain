@@ -51,6 +51,29 @@ task corpus demonstrated the gap (no way to branch on a comparison) — the
 "enrichment must be paid for by authoring pain" rule working as intended. Note
 the calculus itself did not change: the registry is the extension point.
 
+## Compact term notation
+
+Run 2 of the authoring experiment showed JSON emission validity holds to ~90
+nodes but the encoding costs 10–20x the bytes of a text form. The compact
+notation (`.term` files, parser/printer in `brain-cli/src/notation.rs`) is
+the response — an S-expression authoring/projection surface over the *same*
+canonical Term:
+
+```text
+(lam n (if (lt n 0) (mul n -1) n))          ; abs
+{h (get clock h) m m2}                      ; record
+(match e (case tick _ (tag green unit)) (else (tag red unit)))
+(add a b) (sub a b) (lt a b) (if c t e)     ; sugar for core/* foreign calls
+(io/echo x)                                 ; any symbol with '/' is foreign
+(hole h0 int)  (ref b3:<hash>)              ; holes and hash references
+```
+
+Identity is untouched: a program authored in notation and the same program
+authored in JSON parse to the identical Term, hash to the identical NodeId,
+and deduplicate to one node in the graph (verified in Run 3 across four
+programs). `brain notation <file>` converts either direction; `put-code` and
+`task check` accept both encodings by extension.
+
 ## Known limitations (deliberate, documented)
 
 - **No type checker yet.** `expected` on holes and `Spec` types are opaque

@@ -32,6 +32,7 @@ cargo run -p brain-cli -- refs demo/answer            # reverse edges
 cargo run -p brain-cli -- deps <b3:hash>              # forward edges
 cargo run -p brain-cli -- observations twin/self/README.md
 cargo run -p brain-cli -- task check tasks/t01-increment.json tasks/solutions/increment.json
+cargo run -p brain-cli -- notation tasks/solutions/abs.json   # project to compact notation
 cargo run -p brain-cli -- recover         # marks pending intents indeterminate
 ```
 

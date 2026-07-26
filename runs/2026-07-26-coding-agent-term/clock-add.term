@@ -1,0 +1,7 @@
+; Add minutes (0-59) to a 24h clock time, carrying and wrapping.
+(lam clock
+  (let m2 (add (get clock m) (get clock add))
+    (if (lt m2 60)
+      {h (get clock h) m m2}
+      (let h2 (add (get clock h) 1)
+        {h (if (lt h2 24) h2 0) m (sub m2 60)}))))

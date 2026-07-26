@@ -1,0 +1,14 @@
+; Valid calendar date, ignoring leap years (February = 28 days).
+(lam date
+  (let m (get date m)
+    (let d (get date d)
+      (let days
+        (if (eq m 2) 28
+          (if (eq m 4) 30
+            (if (eq m 6) 30
+              (if (eq m 9) 30
+                (if (eq m 11) 30 31)))))
+        (if (lt m 1) false
+          (if (lt 12 m) false
+            (if (lt d 1) false
+              (if (lt days d) false true))))))))

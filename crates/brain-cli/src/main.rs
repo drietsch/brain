@@ -3,6 +3,7 @@
 //! The CLI is a projection instrument: it renders and drives the graph, but
 //! holds no state of its own. All state lives in the store (default `.brain/`).
 
+mod notation;
 mod tasks;
 
 use brain_core::ids::NodeId;
@@ -25,7 +26,8 @@ fn usage() -> &'static str {
        brain init                         create a store in ./.brain\n\
        brain status                       objects, namespace, intent states\n\
        brain names                        list name -> node bindings\n\
-       brain put-code <name> <term.json>  store a term and bind it\n\
+       brain put-code <name> <term>       store a term (.json or .term) and bind it\n\
+       brain notation <file>              convert term between .term notation and JSON\n\
        brain run <name> [--cap <c>]...    evaluate the code bound to a name\n\
        brain recover                      mark pending intents indeterminate\n\
        brain ingest <dir> [--prefix <p>]  twin an external source tree\n\
@@ -43,6 +45,7 @@ fn main() -> ExitCode {
         Some("status") => cmd_status(),
         Some("names") => cmd_names(),
         Some("put-code") => cmd_put_code(&args[1..]),
+        Some("notation") => cmd_notation(&args[1..]),
         Some("run") => cmd_run(&args[1..]),
         Some("recover") => cmd_recover(),
         Some("ingest") => cmd_ingest(&args[1..]),
@@ -103,13 +106,37 @@ fn cmd_names() -> Result<(), String> {
     Ok(())
 }
 
+/// Load a term from disk: `.term` files are compact notation, anything else
+/// is the JSON encoding. Both parse into the same canonical Term.
+fn load_term(path: &str) -> Result<Term, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    if path.ends_with(".term") {
+        notation::parse_term(&text).map_err(|e| format!("invalid term notation: {e}"))
+    } else {
+        serde_json::from_str(&text).map_err(|e| format!("invalid term: {e}"))
+    }
+}
+
+fn cmd_notation(args: &[String]) -> Result<(), String> {
+    let path = args.first().ok_or("usage: brain notation <file>")?;
+    let term = load_term(path)?;
+    if path.ends_with(".term") {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&term).map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("{}", notation::print_term(&term));
+    }
+    Ok(())
+}
+
 fn cmd_put_code(args: &[String]) -> Result<(), String> {
     let (name, path) = match args {
         [name, path] => (name, path),
-        _ => return Err("usage: brain put-code <name> <term.json>".to_string()),
+        _ => return Err("usage: brain put-code <name> <term>".to_string()),
     };
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let term: Term = serde_json::from_str(&text).map_err(|e| format!("invalid term: {e}"))?;
+    let term = load_term(path)?;
     let store = open_store()?;
     let id = store
         .put(&Object::Code { term })
@@ -316,10 +343,7 @@ fn cmd_task(args: &[String]) -> Result<(), String> {
         &std::fs::read_to_string(task_path).map_err(|e| e.to_string())?,
     )
     .map_err(|e| format!("invalid task: {e}"))?;
-    let term: Term = serde_json::from_str(
-        &std::fs::read_to_string(term_path).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| format!("invalid term: {e}"))?;
+    let term = load_term(term_path)?;
 
     let store = open_store()?;
     let report = tasks::check(&store, &task, &term)?;

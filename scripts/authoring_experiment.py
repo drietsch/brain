@@ -273,7 +273,19 @@ def main() -> int:
             parser.error("--score takes exactly one task file")
         path, is_edit = jobs[0]
         task = json.loads(path.read_text())
-        text = pathlib.Path(args.score).read_text()
+        raw = pathlib.Path(args.score).read_text()
+        is_notation = args.score.endswith(".term")
+        if is_notation:
+            # Canonicalize via the CLI; validity = the notation parsed.
+            proc = subprocess.run(
+                brain_cmd() + ["notation", args.score],
+                cwd=ROOT, capture_output=True, text=True,
+            )
+            text = proc.stdout if proc.returncode == 0 else ""
+            notation_error = proc.stderr.strip()
+        else:
+            text = raw
+            notation_error = ""
         row = {
             "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "model": args.model,
@@ -284,11 +296,16 @@ def main() -> int:
             "repairs_used": 0,
             "edit_locality": None,
             "detail": "",
+            "encoding": "term" if is_notation else "json",
+            "emission_bytes": len(raw),
         }
         try:
-            parsed = json.loads(extract_json(text))
-            row["valid_json"] = True
-            row["term_nodes"] = term_nodes(parsed)
+            parsed = json.loads(extract_json(text)) if text else None
+            if parsed is not None:
+                row["valid_json"] = True
+                row["term_nodes"] = term_nodes(parsed)
+            else:
+                row["detail"] = f"invalid notation: {notation_error}"
         except json.JSONDecodeError as e:
             parsed = None
             row["detail"] = f"invalid JSON: {e}"
