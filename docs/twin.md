@@ -64,8 +64,10 @@ brain observations twin/app/src/main.rs      # full observation timeline
 - **Continuous by design:** `brain hook install` wires refresh into git —
   every commit and push triggers the brain (post-commit / pre-push, with
   stale-doc and failing-test warnings at the moment of change; `--docs`
-  regenerates projections on push). Hooks are fail-open: a sense organ,
-  never a gate. `brain watch` covers the between-commits interval.
+  regenerates projections on push; `--tests` runs the repo's test command
+  post-commit and imports the protocol automatically). Hooks are
+  fail-open: a sense organ, never a gate. `brain watch` covers the
+  between-commits interval.
 
 ## Languages and precision (honest limits)
 
@@ -234,7 +236,11 @@ covering spec, the concentrated-risk list.
 
 **Dynamic (protocols).** `brain testrun import` ingests a report — raw
 `cargo test` output, or JUnit XML, the interchange format Playwright,
-pytest, PHPUnit, and Jest all export:
+pytest, PHPUnit, and Jest all export. With `brain hook install --tests`,
+this happens automatically on every commit: the test command (inferred
+from the repo's manifest, or set with `--test-cmd`) is stored as a
+`test_command` observation on the repo entity — change it any time
+without touching the hooks, and it replicates with the graph:
 
 ```bash
 cargo test 2>&1 | brain testrun import - --prefix twin/app

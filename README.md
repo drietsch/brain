@@ -43,7 +43,7 @@ cargo test                 # 67 tests, including crash recovery
 cargo run -p brain -- init
 cargo run -p brain -- demo            # author -> store -> bind -> run
 cargo run -p brain -- twin refresh . --prefix twin/self   # the brain twins itself
-cargo run -p brain -- hook install     # every git commit/push refreshes the twin
+cargo run -p brain -- hook install --tests   # every commit: refresh + run tests + import protocol
 cargo run -p brain -- twin symbols twin/self/crates/brain-core/src/object.rs
 cargo run -p brain -- twin rdeps twin/self/crates/brain-observe/src/symbols.rs
 cargo run -p brain -- note twin/self/README.md "docs entry point"

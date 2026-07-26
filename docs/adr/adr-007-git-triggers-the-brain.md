@@ -25,6 +25,18 @@ gate. `hook run` swallows its own errors and the hook script ends in
 hooks are respected: install refuses to overwrite them without `--force`,
 uninstall removes only hooks carrying the brain marker.
 
+## Amendment: opt-in test protocols per commit (`--tests`)
+
+`brain hook install --tests [--test-cmd "<cmd>"]` extends post-commit:
+the repo's test command — inferred from its manifest (Cargo.toml → `cargo
+test`, package.json → `npm test`, pyproject → `pytest`, phpunit.xml) or
+given explicitly — runs after each commit and its output is imported as a
+protocol automatically. The command is stored as a `test_command`
+observation on the repo entity, not in the hook file: change it any time
+without reinstalling, and it replicates with the graph. Still fail-open:
+failing tests are recorded and reported, never a reason to block; runs
+stay content-addressed, so an unchanged suite re-imports as a no-op.
+
 ## Consequences
 
 - The growth series gains a point per meaningful commit; git_commit
