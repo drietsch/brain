@@ -189,6 +189,33 @@ impl Store {
         Ok(out)
     }
 
+    /// All object ids ever put, in event-log order. This is the replay feed
+    /// for derived indexes: a system of query is rebuilt from this history,
+    /// never treated as a second system of record.
+    pub fn put_history(&self) -> Result<Vec<NodeId>, StoreError> {
+        let path = self.root.join("events.jsonl");
+        let mut out = Vec::new();
+        if !path.exists() {
+            return Ok(out);
+        }
+        for line in fs::read_to_string(&path)?.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let v: serde_json::Value = serde_json::from_str(line)?;
+            if v.get("kind").and_then(|k| k.as_str()) == Some("put") {
+                if let Some(id) = v
+                    .get("detail")
+                    .and_then(|d| d.get("id"))
+                    .and_then(|i| i.as_str())
+                {
+                    out.push(NodeId::parse(id)?);
+                }
+            }
+        }
+        Ok(out)
+    }
+
     // ---- event log ----
 
     fn append_event(&self, kind: &str, detail: serde_json::Value) -> Result<(), StoreError> {

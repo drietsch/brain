@@ -56,6 +56,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "brain-index"
+version = "0.1.0"
+dependencies = [
+ "brain-core",
+ "brain-store",
+ "tempfile",
+]
+
+[[package]]
 name = "brain-observe"
 version = "0.1.0"
 dependencies = [

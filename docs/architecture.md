@@ -37,6 +37,19 @@ gradient — describe → observe → govern → absorb — not an event.
 6. **Replication** — not yet built. Content-addressed sync between stores is
    how code moves; it replaces deployment.
 
+## The index seam: system of record vs. system of query
+
+The CAS and event log are the only systems of record. Everything that makes
+them queryable — reverse edges, subject lookups, eventually similarity search
+— is a *derived* structure behind the `brain-index::Index` trait: disposable,
+rebuilt by replaying `Store::put_history()`, and never a second source of
+truth. Backends must be idempotent under replay. `MemIndex` is the naive
+reference implementation and the baseline any embedded graph engine
+(candidates: OverGraph, Graph_D) must beat on real workloads before it earns
+adoption; because nothing authoritative lives in an index, backend risk is
+contained to performance, never correctness. Edge semantics are defined once,
+in `object_edges` — every backend shares them.
+
 ## Authority model
 
 - Possibility is never permission: the existence of a foreign symbol does not

@@ -1,0 +1,12 @@
+[package]
+name = "brain-index"
+version.workspace = true
+edition.workspace = true
+description = "The index seam: derived, disposable query structures over the authoritative graph"
+
+[dependencies]
+brain-core = { workspace = true }
+brain-store = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

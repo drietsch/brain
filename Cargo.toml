@@ -5,6 +5,7 @@ members = [
     "crates/brain-store",
     "crates/brain-runtime",
     "crates/brain-observe",
+    "crates/brain-index",
     "crates/brain-cli",
 ]
 
@@ -23,3 +24,4 @@ brain-core = { path = "crates/brain-core" }
 brain-store = { path = "crates/brain-store" }
 brain-runtime = { path = "crates/brain-runtime" }
 brain-observe = { path = "crates/brain-observe" }
+brain-index = { path = "crates/brain-index" }

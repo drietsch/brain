@@ -43,6 +43,7 @@ leaves the intent/receipt trail in the store for inspection.
 | `brain-store` | Content-addressed store, namespace lineage ("version control"), event log, durable intent log. |
 | `brain-runtime` | Fuel-metered interpreter; capabilities checked before effects; effects only through the intent/receipt boundary. |
 | `brain-observe` | Reflective mode: ingest external source trees as entities + time-bound observations. |
+| `brain-index` | The system-of-query seam: derived, disposable indexes rebuilt by replaying the event log. `MemIndex` is the reference backend; embedded graph engines can implement the same trait. |
 | `brain-cli` | Projection instrument; holds no state of its own. |
 
 ## Invariants the scaffold already enforces
