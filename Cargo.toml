@@ -6,7 +6,7 @@ members = [
     "crates/brain-runtime",
     "crates/brain-observe",
     "crates/brain-index",
-    "crates/braingraf",
+    "crates/cortex",
     "crates/brain-cli",
 ]
 
@@ -26,7 +26,7 @@ brain-store = { path = "crates/brain-store" }
 brain-runtime = { path = "crates/brain-runtime" }
 brain-observe = { path = "crates/brain-observe" }
 brain-index = { path = "crates/brain-index" }
-braingraf = { path = "crates/braingraf" }
+cortex = { path = "crates/cortex" }
 
 # The monolithic `brain` binary ships lean: one file, symbols stripped.
 [profile.release]

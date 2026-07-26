@@ -47,7 +47,7 @@ cargo run -p brain -- hook install --tests   # every commit: refresh + run tests
 cargo run -p brain -- twin symbols twin/self/crates/brain-core/src/object.rs
 cargo run -p brain -- twin rdeps twin/self/crates/brain-observe/src/symbols.rs --transitive  # blast radius
 cargo run -p brain -- twin at twin/self 2h        # the twin as it was (also takes a git hash)
-cargo run -p brain -- bench index                 # braingraf vs cold replay, answers verified
+cargo run -p brain -- bench index                 # cortex vs cold replay, answers verified
 cargo run -p brain -- note twin/self/README.md "docs entry point"
 cargo run -p brain -- plan add ~/.claude/plans/feature.md --prefix twin/self  # Claude Code plans
 cargo run -p brain -- adr list twin/self       # decisions (auto-captured from docs/adr/)
@@ -95,7 +95,7 @@ leaves the intent/receipt trail in the store for inspection.
 | `brain-runtime` | Fuel-metered interpreter; capabilities checked before effects; effects only through the intent/receipt boundary. |
 | `brain-observe` | Reflective mode — the twin: drift-aware observation of external software with symbols, import relations, agent notes, decisions/plans (ADRs), skills and agent configuration. See `docs/twin.md`. |
 | `brain-index` | The system-of-query seam: derived, disposable indexes rebuilt by replaying the event log. `MemIndex` is the reference backend. |
-| `braingraf` | Our own persistent graph-query engine on that seam: checkpoint + event-log delta-replay (O(new events) warm opens), recursive traversal (`--transitive`), bi-temporal reads (`twin at`). Disposable by contract. |
+| `cortex` | Our own persistent graph-query engine on that seam: checkpoint + event-log delta-replay (O(new events) warm opens), recursive traversal (`--transitive`), bi-temporal reads (`twin at`). Disposable by contract. |
 | `brain` (in `crates/brain-cli`) | The monolithic binary: projection instrument plus the embedded docs pipeline; holds no state of its own. |
 
 ## Invariants the scaffold already enforces

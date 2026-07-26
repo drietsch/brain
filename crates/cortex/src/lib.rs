@@ -1,9 +1,9 @@
-//! braingraf: brain's own persistent graph-query engine.
+//! cortex: brain's own persistent graph-query engine.
 //!
 //! Learned from minigraf (single-file persistence, recursive graph
 //! queries, temporal reads) and then radically simplified by one
 //! observation: **brain already has a WAL** — the store's event log. So
-//! braingraf has no write path of its own. It is a checkpoint of derived
+//! cortex has no write path of its own. It is a checkpoint of derived
 //! index state plus delta-replay from a cursor into `put_history()`:
 //!
 //! - warm open is O(new events since the last checkpoint), not O(graph);
@@ -12,7 +12,7 @@
 //! - it is local by design and never replicates: truth travels as
 //!   objects, indexes are grown where they are needed.
 //!
-//! `Graf` derefs to [`MemIndex`], so every existing query path works
+//! `Cortex` derefs to [`MemIndex`], so every existing query path works
 //! unchanged; on top it adds what a flat index cannot express —
 //! transitive reachability over relation edges.
 
@@ -31,14 +31,14 @@ use std::path::PathBuf;
 const FORMAT_VERSION: u32 = 1;
 
 #[derive(Serialize, Deserialize)]
-struct GrafFile {
+struct CortexFile {
     version: u32,
     /// Number of event-log entries already folded into the snapshot.
     cursor: usize,
     snapshot: IndexSnapshot,
 }
 
-pub struct Graf {
+pub struct Cortex {
     index: MemIndex,
     cursor: usize,
     path: PathBuf,
@@ -46,18 +46,18 @@ pub struct Graf {
     checkpointed: usize,
 }
 
-impl Deref for Graf {
+impl Deref for Cortex {
     type Target = MemIndex;
     fn deref(&self) -> &MemIndex {
         &self.index
     }
 }
 
-impl Graf {
+impl Cortex {
     /// Open the persistent index for a store: load the checkpoint if one
     /// is usable, then catch up on the event-log delta.
-    pub fn open(store: &Store) -> Result<Graf, StoreError> {
-        let path = store.root().join("index.graf");
+    pub fn open(store: &Store) -> Result<Cortex, StoreError> {
+        let path = store.root().join("cortex.json");
         let (mut index, mut cursor) = match Self::load(&path) {
             Some((idx, cur)) => (idx, cur),
             None => (MemIndex::new(), 0),
@@ -75,25 +75,25 @@ impl Graf {
             index.on_object(id, &obj);
         }
         cursor = history.len();
-        Ok(Graf { index, cursor, path, checkpointed })
+        Ok(Cortex { index, cursor, path, checkpointed })
     }
 
     /// A cold, non-persisting build: the reference behavior, for
     /// benchmarking and `BRAIN_INDEX=mem` paranoia. `checkpoint()` on an
-    /// ephemeral Graf is a no-op.
-    pub fn open_ephemeral(store: &Store) -> Result<Graf, StoreError> {
+    /// ephemeral Cortex is a no-op.
+    pub fn open_ephemeral(store: &Store) -> Result<Cortex, StoreError> {
         let mut index = MemIndex::new();
         let history = store.put_history()?;
         for id in &history {
             index.on_object(id, &store.get(id)?);
         }
         let cursor = history.len();
-        Ok(Graf { index, cursor, path: store.root().join("index.graf"), checkpointed: cursor })
+        Ok(Cortex { index, cursor, path: store.root().join("cortex.json"), checkpointed: cursor })
     }
 
     fn load(path: &PathBuf) -> Option<(MemIndex, usize)> {
         let bytes = fs::read(path).ok()?;
-        let file: GrafFile = serde_json::from_slice(&bytes).ok()?;
+        let file: CortexFile = serde_json::from_slice(&bytes).ok()?;
         if file.version != FORMAT_VERSION {
             return None;
         }
@@ -106,12 +106,12 @@ impl Graf {
         if self.cursor == self.checkpointed {
             return Ok(());
         }
-        let file = GrafFile {
+        let file = CortexFile {
             version: FORMAT_VERSION,
             cursor: self.cursor,
             snapshot: self.index.snapshot(),
         };
-        let tmp = self.path.with_extension("graf.tmp");
+        let tmp = self.path.with_extension("json.tmp");
         fs::write(&tmp, serde_json::to_vec(&file)?)?;
         fs::rename(&tmp, &self.path)?;
         Ok(())
@@ -164,7 +164,7 @@ impl Graf {
 }
 
 /// Compare two indexes across the whole Index API for a set of probes —
-/// the correctness harness behind "braingraf answers exactly like the
+/// the correctness harness behind "cortex answers exactly like the
 /// reference backend".
 pub fn answers_match(
     a: &dyn Index,
@@ -248,10 +248,10 @@ mod tests {
         let (sids, nodes) = populate(&store, 10);
 
         // Cold open + checkpoint, then a second (warm) open.
-        let cold = Graf::open(&store).unwrap();
+        let cold = Cortex::open(&store).unwrap();
         assert!(cold.delta() > 0);
         cold.checkpoint().unwrap();
-        let warm = Graf::open(&store).unwrap();
+        let warm = Cortex::open(&store).unwrap();
         assert_eq!(warm.delta(), 0, "nothing new after checkpoint");
 
         let mut reference = MemIndex::new();
@@ -271,7 +271,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(dir.path()).unwrap();
         let (mut sids, mut nodes) = populate(&store, 5);
-        Graf::open(&store).unwrap().checkpoint().unwrap();
+        Cortex::open(&store).unwrap().checkpoint().unwrap();
 
         // New objects after the checkpoint are seen via delta replay.
         let (more_sids, more_nodes) = {
@@ -287,13 +287,13 @@ mod tests {
         };
         sids.extend(more_sids.clone());
         nodes.extend(more_nodes);
-        let warm = Graf::open(&store).unwrap();
+        let warm = Cortex::open(&store).unwrap();
         assert!(warm.delta() > 0, "delta replay saw the new objects");
         assert_eq!(warm.entity_nodes(&more_sids[0]).len(), 1);
 
         // Corrupting the checkpoint is not an error — just a cold rebuild.
-        fs::write(dir.path().join("index.graf"), b"not json at all").unwrap();
-        let rebuilt = Graf::open(&store).unwrap();
+        fs::write(dir.path().join("cortex.json"), b"not json at all").unwrap();
+        let rebuilt = Cortex::open(&store).unwrap();
         let mut reference = MemIndex::new();
         replay(&store, &mut reference).unwrap();
         assert!(answers_match(&*rebuilt, &reference, &nodes, &sids, &["source_file"], &["imports"]));
@@ -314,7 +314,7 @@ mod tests {
                 observed_at_ms: 99,
             })
             .unwrap();
-        let graf = Graf::open(&store).unwrap();
+        let graf = Cortex::open(&store).unwrap();
 
         // Forward: everything f0 transitively imports, with depths.
         let fwd = graf.reach(&store, &sids[0], "imports", false, 10).unwrap();

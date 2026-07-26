@@ -428,11 +428,11 @@ change as ordinary drift, and the change entity's `changes` relation ties
 the drift to its reason. See
 docs/adr/adr-010-governed-mode.md.
 
-## braingraf — the query engine underneath
+## cortex — the query engine underneath
 
-Every query above runs on **braingraf** (`crates/braingraf`), brain's own
+Every query above runs on **cortex** (`crates/cortex`), brain's own
 persistent graph-query engine — learned from minigraf, then simplified by
-one observation: brain's event log already is a WAL, so braingraf is just
+one observation: brain's event log already is a WAL, so cortex is just
 a checkpoint (`.brain/index.graf`) plus delta-replay from a cursor:
 
 - warm opens are O(new events) — measured ~15x faster than a cold replay
@@ -449,7 +449,7 @@ a checkpoint (`.brain/index.graf`) plus delta-replay from a cursor:
 
 The `.graf` file never replicates: truth travels as objects with
 `brain pull`; each store grows its own index. See
-docs/adr/adr-011-braingraf.md.
+docs/adr/adr-011-cortex.md.
 
 ## Relation to the founding architecture
 

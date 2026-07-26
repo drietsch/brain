@@ -37,7 +37,7 @@ fn usage() -> &'static str {
        brain twin files <prefix>                 twinned files with freshness\n\
        brain twin symbols|imports|rdeps <name> [--transitive]   structure queries (recursive walk)\n\
        brain twin at <prefix> <ms|30m|2h|git-hash>   the twin as it was (bi-temporal read)\n\
-       brain bench index                  braingraf vs cold replay: the earn-adoption gate\n\
+       brain bench index                  cortex vs cold replay: the earn-adoption gate\n\
        brain twin search <substring>             find twinned entities by name\n\
        brain twin insights <prefix>              synthesized picture: churn, hubs, growth\n\
        brain note <name> <text...>        attach a durable note to an entity\n\
@@ -483,7 +483,7 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             let index = build_index(&store)?;
             let sid = entity_sid(&store, name)?;
             if args.iter().any(|a| a == "--transitive") {
-                // braingraf's recursive walk: the full (blast) radius.
+                // cortex's recursive walk: the full (blast) radius.
                 let reached = index
                     .reach(&store, &sid, "imports", reverse, 64)
                     .map_err(|e| e.to_string())?;
@@ -1421,7 +1421,7 @@ fn cmd_watch(args: &[String]) -> Result<(), String> {
 }
 
 /// `brain bench index` — the earn-adoption gate: honest numbers, cold
-/// reference replay vs braingraf warm open, plus a real query mix, with
+/// reference replay vs cortex warm open, plus a real query mix, with
 /// answers verified identical before any timing is trusted.
 fn cmd_bench(args: &[String]) -> Result<(), String> {
     if args.first().map(String::as_str) != Some("index") {
@@ -1436,15 +1436,15 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
     let objects = store.count_objects().map_err(|e| e.to_string())?;
 
     let t0 = std::time::Instant::now();
-    let cold = braingraf::Graf::open_ephemeral(&store).map_err(|e| e.to_string())?;
+    let cold = cortex::Cortex::open_ephemeral(&store).map_err(|e| e.to_string())?;
     let cold_time = t0.elapsed();
 
     // Ensure a checkpoint exists, then measure the warm path.
-    braingraf::Graf::open(&store)
+    cortex::Cortex::open(&store)
         .and_then(|g| g.checkpoint().map(|_| ()))
         .map_err(|e| e.to_string())?;
     let t1 = std::time::Instant::now();
-    let warm = braingraf::Graf::open(&store).map_err(|e| e.to_string())?;
+    let warm = cortex::Cortex::open(&store).map_err(|e| e.to_string())?;
     let warm_time = t1.elapsed();
 
     // Correctness first: identical answers over real probes, or no bench.
@@ -1456,7 +1456,7 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    if !braingraf::answers_match(
+    if !cortex::answers_match(
         &*cold,
         &*warm,
         &[],
@@ -1464,7 +1464,7 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
         &["source_file", "decision", "test_run"],
         &["imports", "contains", "mentions"],
     ) {
-        return Err("backends disagree — braingraf does not earn adoption".to_string());
+        return Err("backends disagree — cortex does not earn adoption".to_string());
     }
 
     // A real query mix over the warm index.
@@ -1482,7 +1482,7 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
     println!("store: {objects} objects; probes: {} entities, {edges} edge answers", sids.len());
     println!("cold replay (BRAIN_INDEX=mem behavior): {cold_time:?}");
     println!(
-        "warm braingraf open (delta {} event(s)):   {warm_time:?}  ({:.1}x faster)",
+        "warm cortex open (delta {} event(s)):   {warm_time:?}  ({:.1}x faster)",
         warm.delta(),
         cold_time.as_secs_f64() / warm_time.as_secs_f64().max(1e-9)
     );
@@ -1857,15 +1857,15 @@ fn describe(store: &Store, names: &std::collections::BTreeMap<NodeId, Vec<String
     format!("{id:?}  {kind}{bound}")
 }
 
-/// The CLI's query backend: braingraf — a persisted checkpoint plus
+/// The CLI's query backend: cortex — a persisted checkpoint plus
 /// event-log delta replay, O(new events) on a warm open. It derefs to
 /// MemIndex, so every query path below is written against the reference
 /// backend. `BRAIN_INDEX=mem` forces a cold, non-persisting rebuild.
-fn build_index(store: &Store) -> Result<braingraf::Graf, String> {
+fn build_index(store: &Store) -> Result<cortex::Cortex, String> {
     if std::env::var("BRAIN_INDEX").as_deref() == Ok("mem") {
-        return braingraf::Graf::open_ephemeral(store).map_err(|e| e.to_string());
+        return cortex::Cortex::open_ephemeral(store).map_err(|e| e.to_string());
     }
-    let graf = braingraf::Graf::open(store).map_err(|e| e.to_string())?;
+    let graf = cortex::Cortex::open(store).map_err(|e| e.to_string())?;
     // Best-effort persistence: a failed checkpoint costs only warmth.
     let _ = graf.checkpoint();
     Ok(graf)

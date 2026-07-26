@@ -166,7 +166,7 @@ pub struct MemIndex {
 
 /// A serde-friendly checkpoint of a [`MemIndex`]: pure data, tuples in
 /// arrays (JSON-safe, unlike tuple map keys). Exists so a persistent
-/// backend (braingraf) can checkpoint derived state and catch up from the
+/// backend (cortex) can checkpoint derived state and catch up from the
 /// event log — the snapshot is disposable by contract, never truth.
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct IndexSnapshot {
