@@ -53,6 +53,7 @@ fn generate(store: &Store, dir: &Path, prefix: &str, out: &Path) -> Result<(), S
         ("decisions", vec!["adr", "list", prefix]),
         ("tests", vec!["twin", "tests", prefix]),
         ("protocols", vec!["testrun", "list", prefix]),
+        ("attention", vec!["attend", prefix]),
     ];
     let mut captured: Vec<(String, String, String)> = Vec::new(); // id, cmd, text
     for (id, args) in &sections {
@@ -71,6 +72,7 @@ fn generate(store: &Store, dir: &Path, prefix: &str, out: &Path) -> Result<(), S
         ("decisions", "Decisions (`brain adr list`)"),
         ("tests", "Tests (`brain twin tests`)"),
         ("protocols", "Test protocols (`brain testrun list`)"),
+        ("attention", "Attention (`brain attend`)"),
     ];
     for ((_, title), (_, _, text)) in titles.iter().zip(&captured) {
         tour.push_str(&format!("## {title}\n```\n{text}\n```\n\n"));

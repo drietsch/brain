@@ -365,6 +365,38 @@ scripts/twin_watch.sh . twin/self 60   # refresh + insights every 60s
 or wire `brain twin refresh` into a git post-commit hook / session-start
 hook and read `brain twin insights` whenever you want the picture.
 
+## The functional brain
+
+The name is taken seriously — by function, not by structure (see
+docs/adr/adr-009-functional-brain-not-structural.md; simulated neurons are
+deliberately rejected: the LLM agent is the neural layer, the graph is the
+exact memory it thinks against):
+
+| Organ | Mechanism |
+|---|---|
+| Senses | the observers: files, symbols, tests, protocols, git |
+| Reflexes | git hooks — stimulus → response, fail-open |
+| Long-term memory | the immutable graph and its timelines |
+| Learning | graph-defined capture rules |
+| **Attention** | `brain attend <prefix>` — one ranked list of what matters now |
+| **Consolidation** | `brain sleep <prefix>` — distill history into durable memory |
+| **Association** | `brain related <name>` — what is related, and why |
+
+```bash
+brain attend twin/app          # churn × blast-radius × untested × failing × stale
+brain related twin/app/src/checkout.rs   # "changed together 6×", "both mentioned by adr-007"
+brain sleep twin/app           # writes session_summary + per-file memory digests
+```
+
+Attention is computed at query time and never stored (salience is a
+judgment about now). Sleep only ever *adds* — per-file `memory` digests
+and a repo `session_summary` that insights shows as "last sleep", so a
+long-lived twin orients from consolidated experience instead of replaying
+raw history. Association lives at the Index seam: derived, disposable,
+rebuildable — fuzzy recall that can never become a second source of
+truth. The intended rhythm: **wake with `attend`, work, `sleep` before
+you go.**
+
 ## Relation to the founding architecture
 
 The twin is the "describe → observe" half of the adoption gradient in

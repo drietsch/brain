@@ -12,7 +12,8 @@ Use the graph as persistent memory across sessions.
 ```bash
 cargo build -p brain -q
 target/debug/brain twin refresh . --prefix twin/self   # record drift since last session
-target/debug/brain twin insights twin/self             # churn, hubs, decisions, plans, notes
+target/debug/brain attend twin/self                    # wake: what matters now, ranked
+target/debug/brain twin insights twin/self             # churn, hubs, decisions, last sleep
 target/debug/brain notes twin/self                     # repo-level breadcrumbs
 ```
 
@@ -32,3 +33,5 @@ target/debug/brain notes twin/self                     # repo-level breadcrumbs
   `Status:` line; the next refresh captures and links it.
 - `brain twin refresh . --prefix twin/self` once more so the twin's last
   state matches what you leave behind.
+- `brain sleep twin/self` — consolidate the session; the next agent wakes
+  to the summary, not the raw history.

@@ -59,6 +59,9 @@ fn usage() -> &'static str {
        brain testrun list <prefix>                   imported protocols, newest first\n\
        brain twin tests <prefix>                     test files, frameworks, failing cases\n\
        brain twin stale <prefix>                     docs invalidated by later file changes\n\
+       brain attend <prefix> [--top N]               attention: what matters now, ranked\n\
+       brain sleep <prefix>                          consolidate history into durable memory\n\
+       brain related <name> [--top N]                association: what is related, and why\n\
        brain ingest <dir> [--prefix <p>]  alias for twin refresh\n\
        brain pull <store-root>            replicate another store into this one\n\
        brain push <store-root>            replicate this store into another\n\
@@ -105,6 +108,9 @@ fn main() -> ExitCode {
         Some("feature") => cmd_feature(&args[1..]),
         Some("done") => cmd_done(&args[1..]),
         Some("testrun") => cmd_testrun(&args[1..]),
+        Some("attend") => cmd_attend(&args[1..]),
+        Some("sleep") => cmd_sleep(&args[1..]),
+        Some("related") => cmd_related(&args[1..]),
         Some("docs") => docsgen::cmd_docs(&args[1..], open_store),
         Some("hook") => hooks::cmd_hook(&args[1..], open_store),
         Some("watch") => cmd_watch(&args[1..]),
@@ -484,6 +490,18 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             let ins = brain_observe::twin::insights(&store, prefix).map_err(|e| e.to_string())?;
             let now = now_ms();
             println!("== twin insights: {prefix} ==");
+            {
+                // The last consolidated memory, if the twin has ever slept.
+                let index = build_index(&store)?;
+                let repo = brain_core::ids::StableId::derive(&["repo", prefix.as_str()]);
+                if let Some((at, s)) =
+                    brain_observe::twin::latest_at(&index, &store, &repo, "session_summary")
+                        .map_err(|e| e.to_string())?
+                {
+                    let age = now.saturating_sub(at) / 1000;
+                    println!("last sleep ({age}s ago): {s}");
+                }
+            }
             println!(
                 "files: {} present, {} deleted   symbols: {}   relations: {}",
                 ins.files, ins.deleted_files, ins.symbols, ins.relations
@@ -1349,6 +1367,80 @@ fn cmd_watch(args: &[String]) -> Result<(), String> {
         }
         std::thread::sleep(std::time::Duration::from_secs(interval));
     }
+}
+
+/// `brain attend` — the attention organ: what deserves attention now.
+fn cmd_attend(args: &[String]) -> Result<(), String> {
+    let prefix = args.first().filter(|a| !a.starts_with("--")).ok_or("usage: brain attend <prefix> [--top N]")?;
+    let top = parse_top(args, 10)?;
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let ranked =
+        brain_observe::attention::attend(&store, &index, prefix).map_err(|e| e.to_string())?;
+    if ranked.is_empty() {
+        println!("nothing demands attention under {prefix}");
+    }
+    for (i, a) in ranked.iter().take(top).enumerate() {
+        println!("{:>2}. [{:>3}] {} ({})  — {}", i + 1, a.score, a.label, a.kind, a.reasons.join(", "));
+    }
+    Ok(())
+}
+
+/// `brain sleep` — the consolidation organ: distill history into memory.
+fn cmd_sleep(args: &[String]) -> Result<(), String> {
+    let prefix = args.first().ok_or("usage: brain sleep <prefix>")?;
+    let store = open_store()?;
+    let report = brain_observe::sleep::sleep(&store, prefix).map_err(|e| e.to_string())?;
+    if report.wrote {
+        println!("slept: {}", report.summary);
+    } else {
+        println!("{}", report.summary);
+    }
+    Ok(())
+}
+
+/// `brain related` — the association organ: soft, derived, disposable.
+fn cmd_related(args: &[String]) -> Result<(), String> {
+    let name = args.first().filter(|a| !a.starts_with("--")).ok_or("usage: brain related <name> [--top N]")?;
+    let top = parse_top(args, 10)?;
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let sid = entity_sid(&store, name)?;
+    // The prefix is the longest bound repo entity whose name prefixes ours
+    // (twin/self/src/main.rs -> twin/self).
+    let mut prefix = String::new();
+    for (n, node) in store.namespace().map_err(|e| e.to_string())? {
+        if name.starts_with(&format!("{n}/")) && n.len() > prefix.len() {
+            if let Ok(Object::Entity { entity_kind, .. }) = store.get(&node) {
+                if entity_kind == "repo" {
+                    prefix = n;
+                }
+            }
+        }
+    }
+    if prefix.is_empty() {
+        return Err(format!("cannot find a twin prefix for '{name}'"));
+    }
+    let assoc = brain_observe::assoc::AssocIndex::build(&store, &index, &prefix)
+        .map_err(|e| e.to_string())?;
+    let related = assoc.related(&sid);
+    if related.is_empty() {
+        println!("no associations for {name} (yet — associations grow with history)");
+    }
+    for (label, score, reasons) in related.into_iter().take(top) {
+        println!("[{score:>3}] {label}  — {}", reasons.join(", "));
+    }
+    Ok(())
+}
+
+fn parse_top(args: &[String], default: usize) -> Result<usize, String> {
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        if a == "--top" {
+            return it.next().and_then(|v| v.parse().ok()).ok_or("--top needs a number".into());
+        }
+    }
+    Ok(default)
 }
 
 /// `brain testrun ...` — test protocols in the graph.

@@ -286,6 +286,22 @@ fn run_event(
             ins.failing.len()
         );
     }
+    // The reflex points the eye: one line of top salience.
+    {
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).map_err(|e| e.to_string())?;
+        if let Some(top) = brain_observe::attention::attend(&store, &index, prefix)
+            .map_err(|e| e.to_string())?
+            .first()
+        {
+            println!(
+                "brain[{event}]: attention -> {} ({})",
+                top.label,
+                top.reasons.join(", ")
+            );
+        }
+    }
+
     if docs && event == "pre-push" {
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let ok = Command::new(exe)

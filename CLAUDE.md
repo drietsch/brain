@@ -18,7 +18,8 @@ only below the semantic line. Read `README.md` first, then
 
 ```bash
 target/debug/brain twin refresh . --prefix twin/self
-target/debug/brain twin insights twin/self     # churn, hubs, decisions, plans
+target/debug/brain attend twin/self            # what matters now, ranked
+target/debug/brain twin insights twin/self     # churn, hubs, decisions, plans, last sleep
 target/debug/brain notes twin/self             # what previous sessions learned
 ```
 
@@ -45,4 +46,5 @@ target/debug/brain notes twin/self             # what previous sessions learned
 - Before finishing: `brain twin stale twin/self` (fix rotted docs) and
   `brain docs generate` (docs/generated/ is a
   projection — regenerate, never edit).
-- Leave `brain note` breadcrumbs for the next session.
+- Leave `brain note` breadcrumbs, then `brain sleep twin/self` — the next
+  session wakes to the consolidated summary instead of raw history.

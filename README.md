@@ -60,6 +60,9 @@ cargo run -p brain -- twin tests twin/self     # frameworks, covers-relations, f
 cargo run -p brain -- twin stale twin/self     # docs invalidated by later file changes
 brain docs generate            # regenerate docs: md + screenshots + narrated screencast
 cargo run -p brain -- twin insights twin/self   # churn, hubs, growth, notes, decisions
+cargo run -p brain -- attend twin/self          # attention: what matters now, ranked with reasons
+cargo run -p brain -- related twin/self/crates/brain-observe/src/twin.rs  # association, with why
+cargo run -p brain -- sleep twin/self           # consolidation: distill the session into memory
 cargo run -p brain -- watch . --prefix twin/self --interval 60   # continuous loop, built in
 cargo run -p brain -- status
 cargo run -p brain -- names

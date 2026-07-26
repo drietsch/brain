@@ -23,8 +23,11 @@
 //! refreshes observations and surfaces drift as new nodes, never overwrites.
 
 pub mod agents;
+pub mod assoc;
+pub mod attention;
 pub mod docs;
 pub mod features;
+pub mod sleep;
 pub mod symbols;
 pub mod templates;
 pub mod testing;
