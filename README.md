@@ -22,7 +22,7 @@ native implementations without re-modeling.
 ## Quickstart
 
 ```bash
-cargo test                 # 62 tests, including crash recovery
+cargo test                 # 66 tests, including crash recovery
 cargo run -p brain-cli -- init
 cargo run -p brain-cli -- demo            # author -> store -> bind -> run
 cargo run -p brain-cli -- twin refresh . --prefix twin/self   # the brain twins itself
@@ -35,6 +35,8 @@ cargo run -p brain-cli -- skill list twin/self     # agent skills (SKILL.md, aut
 cargo run -p brain-cli -- agentcfg list twin/self  # CLAUDE.md/AGENTS.md/.cursorrules/settings
 cargo run -p brain-cli -- deliverable new adr --title "Use X"  # scaffold from graph template
 cargo run -p brain-cli -- feature matrix twin/self # definition-of-done as a rendered query
+cargo test 2>&1 | cargo run -p brain-cli -- testrun import - --prefix twin/self  # protocol -> graph
+cargo run -p brain-cli -- twin tests twin/self     # frameworks, covers-relations, failing
 cargo run -p brain-cli -- twin insights twin/self   # churn, hubs, growth, notes, decisions
 scripts/twin_watch.sh . twin/self 60               # continuous refresh + insights
 cargo run -p brain-cli -- status

@@ -16,6 +16,8 @@
 //!   required fields, and recorded (never enforced) conformance.
 //! - [`features`] — the feature registry: done-ness as a graph query
 //!   against the template-defined definition of done.
+//! - [`testing`] — tests as graph citizens: framework classification,
+//!   `covers` relations, and test-run protocols with result timelines.
 //!
 //! Observers are sense organs, meant to run continuously; re-ingesting
 //! refreshes observations and surfaces drift as new nodes, never overwrites.
@@ -25,6 +27,7 @@ pub mod docs;
 pub mod features;
 pub mod symbols;
 pub mod templates;
+pub mod testing;
 pub mod twin;
 
 use std::fs;

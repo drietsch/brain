@@ -51,6 +51,9 @@ fn usage() -> &'static str {
        brain feature link <prefix> <slug> <predicate> <target>         link into the graph\n\
        brain feature list|matrix <prefix>            registry / rendered DoD matrix\n\
        brain done <prefix> <slug>                    evaluate a feature against the DoD\n\
+       brain testrun import <report> --prefix <p>    ingest cargo-test output or JUnit XML\n\
+       brain testrun list <prefix>                   imported protocols, newest first\n\
+       brain twin tests <prefix>                     test files, frameworks, failing cases\n\
        brain ingest <dir> [--prefix <p>]  alias for twin refresh\n\
        brain pull <store-root>            replicate another store into this one\n\
        brain push <store-root>            replicate this store into another\n\
@@ -90,6 +93,7 @@ fn main() -> ExitCode {
         Some("deliverable") => cmd_deliverable(&args[1..]),
         Some("feature") => cmd_feature(&args[1..]),
         Some("done") => cmd_done(&args[1..]),
+        Some("testrun") => cmd_testrun(&args[1..]),
         Some("pull") => cmd_sync(&args[1..], true),
         Some("push") => cmd_sync(&args[1..], false),
         Some("refs") => cmd_refs(&args[1..]),
@@ -469,6 +473,26 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             if let (Some(branch), Some(commit)) = (&ins.git_branch, &ins.git_commit) {
                 println!("git: {branch} @ {}", &commit[..commit.len().min(12)]);
             }
+            if ins.test_files + ins.tests_declared > 0 {
+                let last = ins
+                    .last_run
+                    .map(|(at, total, passed, failed)| {
+                        let age = now.saturating_sub(at) / 1000;
+                        let verdict = if failed == 0 { "ok" } else { "FAILED" };
+                        format!("; last run {age}s ago: {verdict} ({passed}/{total} passed, {failed} failed)")
+                    })
+                    .unwrap_or_else(|| "; no runs imported".to_string());
+                println!(
+                    "tests: {} test file(s), {} declared{last}",
+                    ins.test_files, ins.tests_declared
+                );
+            }
+            if !ins.failing.is_empty() {
+                println!("failing tests:");
+                for name in &ins.failing {
+                    println!("  ✗ {name}");
+                }
+            }
             let list = |title: &str, items: &[(String, usize)], unit: &str| {
                 if !items.is_empty() {
                     println!("{title}:");
@@ -485,6 +509,7 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                 }
             }
             list("hubs (most imported)", &ins.hubs, "importers");
+            list("untested hubs (imported, no tests)", &ins.untested_hubs, "importers");
             list("largest (symbols declared)", &ins.largest, "symbols");
             list("external deps (unresolved imports)", &ins.external_modules, "uses");
             if !ins.decisions.is_empty() {
@@ -535,6 +560,50 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                 for (at, f, s, r) in &ins.series {
                     let age = now.saturating_sub(*at) / 1000;
                     println!("  -{age:>6}s  {f} files  {s} symbols  {r} relations");
+                }
+            }
+            Ok(())
+        }
+        Some("tests") => {
+            let prefix = args.get(1).ok_or("usage: brain twin tests <prefix>")?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            for (name, node) in store.namespace().map_err(|e| e.to_string())? {
+                let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
+                let Ok(Object::Entity { id: sid, .. }) = store.get(&node) else { continue };
+                let Some(framework) = brain_observe::twin::latest(&index, &store, &sid, "test_framework")
+                    .map_err(|e| e.to_string())?
+                else {
+                    continue;
+                };
+                let declared = brain_observe::twin::latest(&index, &store, &sid, "tests_declared")
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or_else(|| "0".to_string());
+                let role = brain_observe::twin::latest(&index, &store, &sid, "file_role")
+                    .map_err(|e| e.to_string())?
+                    .map(|_| "test file")
+                    .unwrap_or("inline tests");
+                let covers = relation_targets(&store, &index, &sid, "covers")?;
+                let covering = if covers.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "  covers {}",
+                        covers
+                            .iter()
+                            .map(|t| entity_label(&store, &index, t))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
+                println!("{rel}  [{framework}] {declared} test(s), {role}{covering}");
+            }
+            let failing = brain_observe::testing::failing_cases(&store, &index, prefix)
+                .map_err(|e| e.to_string())?;
+            if !failing.is_empty() {
+                println!("failing now:");
+                for name in failing {
+                    println!("  ✗ {name}");
                 }
             }
             Ok(())
@@ -1035,6 +1104,70 @@ fn cmd_done(args: &[String]) -> Result<(), String> {
     println!("{}: {}", slug, if report.done { "DONE" } else { "not done" });
     features::record_done(&store, &index, prefix, slug, &report).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// `brain testrun ...` — test protocols in the graph.
+fn cmd_testrun(args: &[String]) -> Result<(), String> {
+    use brain_observe::testing;
+    let usage = "usage: brain testrun import <report-file|-> --prefix <p> | brain testrun list <prefix>";
+    match args.first().map(String::as_str) {
+        Some("import") => {
+            let mut file = None;
+            let mut prefix = None;
+            let mut it = args[1..].iter();
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--prefix" => prefix = it.next().cloned(),
+                    other if file.is_none() => file = Some(other.to_string()),
+                    other => return Err(format!("unexpected argument '{other}'\n{usage}")),
+                }
+            }
+            let file = file.ok_or(usage)?;
+            let prefix = prefix.ok_or_else(|| format!("--prefix is required\n{usage}"))?;
+            let raw = if file == "-" {
+                use std::io::Read as _;
+                let mut buf = String::new();
+                std::io::stdin().read_to_string(&mut buf).map_err(|e| e.to_string())?;
+                buf
+            } else {
+                std::fs::read_to_string(&file).map_err(|e| format!("cannot read '{file}': {e}"))?
+            };
+            let report = testing::parse_report(&raw);
+            if report.cases.is_empty() {
+                return Err("no test cases recognized (expected cargo-test output or JUnit XML)"
+                    .to_string());
+            }
+            let store = open_store()?;
+            let out =
+                testing::record_run(&store, &prefix, &report, &raw).map_err(|e| e.to_string())?;
+            let state = if out.wrote { "recorded" } else { "already imported (unchanged)" };
+            println!(
+                "run {state}: {} total, {} passed, {} failed, {} skipped ({}); {} transition(s)",
+                out.total, out.passed, out.failed, out.skipped, report.format, out.transitions
+            );
+            for name in &out.failing {
+                println!("  FAILED {name}");
+            }
+            Ok(())
+        }
+        Some("list") => {
+            let prefix = args.get(1).ok_or(usage)?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let now = now_ms();
+            let runs = testing::runs(&store, &index, prefix).map_err(|e| e.to_string())?;
+            if runs.is_empty() {
+                println!("no test runs under {prefix}");
+            }
+            for (at, total, passed, failed, format) in runs {
+                let age = now.saturating_sub(at) / 1000;
+                let verdict = if failed == 0 { "ok" } else { "FAILED" };
+                println!("[{age:>6}s ago] {verdict}: {passed}/{total} passed, {failed} failed ({format})");
+            }
+            Ok(())
+        }
+        _ => Err(usage.to_string()),
+    }
 }
 
 /// Resolve a CLI argument that may be a bound name or a literal b3: hash.

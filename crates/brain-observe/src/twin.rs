@@ -14,6 +14,7 @@ use crate::agents::{self, AgentDoc};
 use crate::collect_files;
 use crate::docs::{self, DocMeta};
 use crate::symbols;
+use crate::testing;
 use brain_core::ids::{NodeId, StableId};
 use brain_core::object::Object;
 use brain_index::{replay, Index, MemIndex};
@@ -134,7 +135,11 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
             }
             None => false,
         };
-        if !changed && !structure_missing && !doc_missing && !agent_missing {
+        // And for test classification (files twinned before it existed).
+        let test_info = testing::classify(rel, structure.language, &text);
+        let test_missing = test_info.is_some()
+            && latest(&index, store, &sid, "test_framework")?.is_none();
+        if !changed && !structure_missing && !doc_missing && !agent_missing && !test_missing {
             continue;
         }
 
@@ -181,8 +186,9 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
         }
 
         for import in &structure.imports {
-            let target = match resolve_import(rel, import, &file_set) {
-                Some(target_rel) => StableId::derive(&["file", &target_rel]),
+            let resolved = resolve_import(rel, import, &file_set);
+            let target = match &resolved {
+                Some(target_rel) => StableId::derive(&["file", target_rel]),
                 None => {
                     let module_sid = StableId::derive(&["module", import]);
                     let mut labels = BTreeMap::new();
@@ -197,6 +203,31 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
             };
             if relate(store, &index, &mut written_relations, &sid, "imports", &target, now)? {
                 report.relations += 1;
+            }
+            // A test file covers the twinned files it imports.
+            if resolved.is_some() && test_info.as_ref().is_some_and(|t| t.is_test_file) {
+                if relate(store, &index, &mut written_relations, &sid, "covers", &target, now)? {
+                    report.relations += 1;
+                }
+            }
+        }
+
+        // Test classification: framework, declared count, and role — so
+        // "what is a test here" and "which tests cover this file" are
+        // graph queries, not directory lore.
+        if let Some(t) = &test_info {
+            if latest(&index, store, &sid, "test_framework")?.as_deref() != Some(t.framework) {
+                observe(store, &sid, "test_framework", t.framework, now)?;
+            }
+            let declared = t.declared.to_string();
+            if latest(&index, store, &sid, "tests_declared")?.as_deref() != Some(declared.as_str())
+            {
+                observe(store, &sid, "tests_declared", &declared, now)?;
+            }
+            if t.is_test_file
+                && latest(&index, store, &sid, "file_role")?.as_deref() != Some("test")
+            {
+                observe(store, &sid, "file_role", "test", now)?;
             }
         }
 
@@ -348,6 +379,15 @@ pub struct Insights {
     pub nonconforming: Vec<(String, String, String)>,
     /// Features under the prefix: (slug, status, done-fraction like "3/4").
     pub features: Vec<(String, String, String)>,
+    /// Test files (by role) and total declared test cases across all files.
+    pub test_files: usize,
+    pub tests_declared: usize,
+    /// Latest imported run: (at_ms, total, passed, failed).
+    pub last_run: Option<(u64, usize, usize, usize)>,
+    /// Test cases whose latest recorded result is `fail`.
+    pub failing: Vec<String>,
+    /// Most-imported files with no declared tests and no covering test file.
+    pub untested_hubs: Vec<(String, usize)>,
 }
 
 const TOP: usize = 5;
@@ -470,6 +510,7 @@ pub fn insights_with(
     let mut churn: Vec<(String, usize)> = Vec::new();
     let mut hubs: Vec<(String, usize)> = Vec::new();
     let mut largest: Vec<(String, usize)> = Vec::new();
+    let mut untested: Vec<(String, usize)> = Vec::new();
     let mut modules: BTreeMap<String, usize> = BTreeMap::new();
 
     for (rel, sid) in &file_sids {
@@ -496,9 +537,22 @@ pub fn insights_with(
         }
         ins.symbols += contains;
 
+        let declared: usize = latest(index, store, sid, "tests_declared")?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        ins.tests_declared += declared;
+        if latest(index, store, sid, "file_role")?.as_deref() == Some("test") {
+            ins.test_files += 1;
+        }
+
         let importers = index.relations_to(sid, "imports").len();
         if importers > 0 {
             hubs.push((rel.clone(), importers));
+            // A hub nobody tests is concentrated risk: no declared tests
+            // in the file, no test file covering it.
+            if declared == 0 && index.relations_to(sid, "covers").is_empty() {
+                untested.push((rel.clone(), importers));
+            }
         }
 
         // Is this file covered by a decision? (Any `mentions` from an ADR.)
@@ -535,7 +589,17 @@ pub fn insights_with(
     ins.churn = top(churn);
     ins.hubs = top(hubs);
     ins.largest = top(largest);
+    ins.untested_hubs = top(untested);
     ins.external_modules = top(modules.into_iter().collect());
+
+    // Test protocols: the latest imported run and currently-failing cases.
+    if let Some((at, total, passed, failed, _)) =
+        testing::runs(store, index, prefix)?.into_iter().next()
+    {
+        ins.last_run = Some((at, total, passed, failed));
+    }
+    ins.failing = testing::failing_cases(store, index, prefix)?;
+    ins.failing.truncate(TOP);
 
     // Notes across all twinned files plus the repo entity, newest first.
     let repo_sid = StableId::derive(&["repo", prefix]);
@@ -1507,6 +1571,104 @@ mod tests {
         // Insights render the matrix fraction.
         let ins = insights(&store, "twin/app").unwrap();
         assert!(ins.features.iter().any(|(s, st, f)| s == "render" && st == "building" && f == "4/4"));
+    }
+
+    #[test]
+    fn tests_classify_cover_and_protocols_form_timelines() {
+        let (src, store_dir) = fixture();
+        let store = Store::open(store_dir.path()).unwrap();
+        fs::write(
+            src.path().join("web/app.test.js"),
+            "import { render } from './app';\ntest('renders', () => {});\nit('updates', () => {});\n",
+        )
+        .unwrap();
+        fs::write(
+            src.path().join("src/calc.rs"),
+            "pub fn add(a: i64, b: i64) -> i64 { a + b }\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn t_add() {}\n}\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        let index = fresh_index(&store);
+        let spec = StableId::derive(&["file", "web/app.test.js"]);
+        let app = StableId::derive(&["file", "web/app.js"]);
+        let calc = StableId::derive(&["file", "src/calc.rs"]);
+        assert_eq!(latest(&index, &store, &spec, "test_framework").unwrap().as_deref(), Some("jest"));
+        assert_eq!(latest(&index, &store, &spec, "tests_declared").unwrap().as_deref(), Some("2"));
+        assert_eq!(latest(&index, &store, &spec, "file_role").unwrap().as_deref(), Some("test"));
+        // The spec covers the file it imports; inline Rust tests classify
+        // the file without marking it role=test.
+        assert_eq!(index.relations_to(&app, "covers").len(), 1);
+        assert_eq!(latest(&index, &store, &calc, "test_framework").unwrap().as_deref(), Some("rust"));
+        assert_eq!(latest(&index, &store, &calc, "file_role").unwrap(), None);
+
+        // Refresh stays idempotent with test classification present.
+        let before = store.count_objects().unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(store.count_objects().unwrap(), before, "no graph growth");
+
+        // Protocol 1: a cargo run with one failure.
+        let run1 = "test calc::tests::t_add ... ok\ntest web::render ... FAILED\n";
+        let report = testing::parse_report(run1);
+        let out = testing::record_run(&store, "twin/app", &report, run1).unwrap();
+        assert!(out.wrote);
+        assert_eq!((out.total, out.passed, out.failed), (2, 1, 1));
+        assert_eq!(out.failing, vec!["web::render".to_string()]);
+        assert_eq!(out.transitions, 0, "first observations are not transitions");
+
+        // Re-importing the identical report writes nothing.
+        let before = store.count_objects().unwrap();
+        let again = testing::record_run(&store, "twin/app", &report, run1).unwrap();
+        assert!(!again.wrote);
+        assert_eq!(store.count_objects().unwrap(), before);
+
+        // The failing case is queryable, and the run left Behavioral
+        // evidence on the repo entity.
+        let index = fresh_index(&store);
+        assert_eq!(
+            testing::failing_cases(&store, &index, "twin/app").unwrap(),
+            vec!["web::render".to_string()]
+        );
+        let repo_sid = StableId::derive(&["repo", "twin/app"]);
+        let repo_node = index.entity_nodes(&repo_sid)[0];
+        let evidence = index.evidence_for(&repo_node);
+        assert_eq!(evidence.len(), 1);
+        match store.get(&evidence[0]).unwrap() {
+            Object::Evidence { passed, level, .. } => {
+                assert!(!passed);
+                assert_eq!(level, brain_core::object::VerificationLevel::Behavioral);
+            }
+            other => panic!("expected evidence, got {other:?}"),
+        }
+
+        // Protocol 2: the failure is fixed — a pass->fail->pass timeline.
+        let run2 = "test calc::tests::t_add ... ok\ntest web::render ... ok\n";
+        let out = testing::record_run(&store, "twin/app", &testing::parse_report(run2), run2)
+            .unwrap();
+        assert!(out.wrote);
+        assert_eq!(out.transitions, 1, "fail -> pass is a recorded transition");
+        let index = fresh_index(&store);
+        assert!(testing::failing_cases(&store, &index, "twin/app").unwrap().is_empty());
+        assert_eq!(testing::runs(&store, &index, "twin/app").unwrap().len(), 2);
+
+        // A JUnit (Playwright-style) run links cases to their spec file.
+        let junit = "<testsuite>\n  <testcase classname=\"web/app.test.js\" name=\"renders\"/>\n</testsuite>\n";
+        testing::record_run(&store, "twin/app", &testing::parse_report(junit), junit).unwrap();
+        let index = fresh_index(&store);
+        let case = StableId::derive(&["test", "twin/app", "web/app.test.js::renders"]);
+        assert_eq!(index.relations_from(&case, "defined_in").len(), 1);
+
+        // Insights: totals, last run, and the untested hub (src/util.rs is
+        // imported but has no tests and no covering spec; web/app.js is
+        // covered by the spec).
+        let ins = insights(&store, "twin/app").unwrap();
+        assert_eq!(ins.test_files, 1);
+        assert!(ins.tests_declared >= 3);
+        let (_, total, passed, failed) = ins.last_run.unwrap();
+        assert_eq!((total, passed, failed), (1, 1, 0));
+        assert!(ins.failing.is_empty());
+        assert!(ins.untested_hubs.iter().any(|(f, _)| f == "src/util.rs"));
+        assert!(!ins.untested_hubs.iter().any(|(f, _)| f == "web/app.js"));
     }
 
     #[test]

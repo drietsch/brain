@@ -215,6 +215,46 @@ is also the status-change mechanism); `done` flips are observations — a
 feature that regresses out of done-ness is a recorded event, not a silent
 cell change in a spreadsheet.
 
+## Tests and test protocols
+
+Tests are graph citizens on both axes — what test code *exists*, and what
+happened when it *ran*:
+
+**Static (zero-config, at refresh).** Twinned files are classified by
+framework — Rust `#[test]`, Playwright/Jest specs (`.test.` / `.spec.` /
+`@playwright/test`), pytest files, PHPUnit classes — as `test_framework`,
+`tests_declared`, and `file_role=test` observations. A test file gets
+`covers` relations to the twinned files it imports, so "which tests cover
+this file?" is `relations_to(file, covers)` — and insights surface
+**untested hubs**: heavily-imported files with no declared tests and no
+covering spec, the concentrated-risk list.
+
+**Dynamic (protocols).** `brain testrun import` ingests a report — raw
+`cargo test` output, or JUnit XML, the interchange format Playwright,
+pytest, PHPUnit, and Jest all export:
+
+```bash
+cargo test 2>&1 | brain testrun import - --prefix twin/app
+npx playwright test --reporter=junit | brain testrun import - --prefix twin/app
+brain testrun list twin/app
+brain twin tests twin/app        # files, frameworks, covers, failing cases
+```
+
+What the graph gives you:
+
+- **Content-addressed runs.** A run's identity is the hash of its raw
+  report; re-importing the same report writes nothing.
+- **Result timelines = flake history.** Each test case is an entity whose
+  `result` observations are guarded — only *transitions* (pass→fail,
+  fail→pass) are recorded, so a flaky test is literally a case with many
+  result observations.
+- **Evidence, not just data.** Every run writes a Behavioral-level
+  Evidence object on the repo entity (`testrun@<hash>`), tying test
+  protocols into the same verification taxonomy native code uses.
+- **File linkage.** JUnit classnames that are twinned paths (Playwright's
+  convention) produce `test_case -defined_in-> file` relations.
+- **Replication.** Runs, timelines, and evidence travel with `brain pull`.
+
 ## Continuous insights
 
 `brain twin insights <prefix>` synthesizes the twin into a picture of the
@@ -230,6 +270,8 @@ software — built for watching what agents build:
   entries covered by a decision are tagged `[decided]`.
 - **Features**: DoD progress per feature; **nonconforming docs**: template
   contract violations.
+- **Tests**: test files and declared cases, the last imported run,
+  currently-failing cases, and untested hubs.
 - **Growth series**: files/symbols/relations over time. Every refresh that
   changes the totals records one complete series point on the repo entity —
   so trends are graph objects: they persist, replicate with `brain pull`,
