@@ -42,6 +42,9 @@ fn usage() -> &'static str {
        brain plan add <md-file> --prefix <p> [--title T]               record a plan\n\
        brain adr|plan list <prefix>       decisions/plans under a prefix\n\
        brain adr|plan show <prefix> <slug>   full document, status timeline, mentions\n\
+       brain skill add <SKILL.md> --prefix <p>       record an agent skill\n\
+       brain agentcfg add <file> --prefix <p> [--agent A] [--role R]   record agent config\n\
+       brain skill|agentcfg list <prefix> | show <prefix> <slug>       browse them\n\
        brain ingest <dir> [--prefix <p>]  alias for twin refresh\n\
        brain pull <store-root>            replicate another store into this one\n\
        brain push <store-root>            replicate this store into another\n\
@@ -75,6 +78,8 @@ fn main() -> ExitCode {
         Some("notes") => cmd_notes(&args[1..]),
         Some("adr") => cmd_doc(&args[1..], brain_observe::docs::DocKind::Decision),
         Some("plan") => cmd_doc(&args[1..], brain_observe::docs::DocKind::Plan),
+        Some("skill") => cmd_agent_doc(&args[1..], brain_observe::agents::AgentDocKind::Skill),
+        Some("agentcfg") => cmd_agent_doc(&args[1..], brain_observe::agents::AgentDocKind::Config),
         Some("pull") => cmd_sync(&args[1..], true),
         Some("push") => cmd_sync(&args[1..], false),
         Some("refs") => cmd_refs(&args[1..]),
@@ -477,6 +482,18 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     println!("  {slug}: {title}");
                 }
             }
+            if !ins.skills.is_empty() {
+                println!("agent skills:");
+                for (slug, agent, desc) in &ins.skills {
+                    println!("  [{agent}] {slug}: {desc}");
+                }
+            }
+            if !ins.agent_configs.is_empty() {
+                println!("agent config:");
+                for (slug, agent, role) in &ins.agent_configs {
+                    println!("  [{agent}] {slug} ({role})");
+                }
+            }
             if !ins.notes.is_empty() {
                 println!("recent notes:");
                 for (at, entity, text) in &ins.notes {
@@ -657,6 +674,133 @@ fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), St
                 for (at, s) in statuses {
                     println!("{at}  {s}");
                 }
+            }
+            let mentions = relation_targets(&store, &index, &sid, "mentions")?;
+            if !mentions.is_empty() {
+                println!("--- mentions ---");
+                for m in mentions {
+                    println!("{}", entity_label(&store, &index, &m));
+                }
+            }
+            Ok(())
+        }
+        _ => Err(usage),
+    }
+}
+
+/// `brain skill ...` / `brain agentcfg ...` — the agent-operating layer.
+fn cmd_agent_doc(args: &[String], kind: brain_observe::agents::AgentDocKind) -> Result<(), String> {
+    use brain_observe::{agents, twin};
+    let noun = kind.as_str();
+    let cmd = match kind {
+        agents::AgentDocKind::Skill => "skill",
+        agents::AgentDocKind::Config => "agentcfg",
+    };
+    let usage = format!(
+        "usage: brain {cmd} add <file> --prefix <p> [--agent A] [--role R] | \
+         brain {cmd} list <prefix> | brain {cmd} show <prefix> <slug>"
+    );
+    match args.first().map(String::as_str) {
+        Some("add") => {
+            let mut file = None;
+            let mut prefix = None;
+            let mut agent = None;
+            let mut role = None;
+            let mut it = args[1..].iter();
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--prefix" => prefix = it.next().cloned(),
+                    "--agent" => agent = it.next().cloned(),
+                    "--role" => role = it.next().cloned(),
+                    other if file.is_none() && !other.starts_with("--") => {
+                        file = Some(other.to_string())
+                    }
+                    other => return Err(format!("unexpected argument '{other}'\n{usage}")),
+                }
+            }
+            let file = file.ok_or_else(|| usage.clone())?;
+            let prefix = prefix.ok_or_else(|| format!("--prefix is required\n{usage}"))?;
+            let content = std::fs::read_to_string(&file)
+                .map_err(|e| format!("cannot read '{file}': {e}"))?;
+            // Detect slug/agent/role from the path conventions when they
+            // apply, then let explicit flags override.
+            let normalized = file.replace('\\', "/");
+            let (slug, det_agent, det_role) = match agents::path_agent_doc(&normalized) {
+                Some((k, slug, a, r)) if k == kind => (slug, a, r),
+                _ => {
+                    let stem = normalized.rsplit('/').next().unwrap_or(&normalized);
+                    let stem = stem.strip_suffix(".md").unwrap_or(stem).to_lowercase();
+                    let default_role =
+                        if cmd == "skill" { "skill" } else { "instructions" };
+                    (stem, "generic".to_string(), default_role.to_string())
+                }
+            };
+            let doc = agents::parse_agent_content(
+                kind,
+                &slug,
+                agent.as_deref().unwrap_or(&det_agent),
+                role.as_deref().unwrap_or(&det_role),
+                &content,
+            );
+            let store = open_store()?;
+            let out = twin::add_agent_doc(&store, &prefix, &doc, &content, "claude-code")
+                .map_err(|e| e.to_string())?;
+            let state = if out.wrote { "recorded" } else { "already recorded (unchanged)" };
+            println!(
+                "{noun} '{slug}' {state} under {prefix} (agent: {}, role: {}, {} mention(s))",
+                doc.agent,
+                doc.role,
+                out.mentions.len()
+            );
+            for m in &out.mentions {
+                println!("  mentions {prefix}/{m}");
+            }
+            Ok(())
+        }
+        Some("list") => {
+            let prefix = args.get(1).ok_or_else(|| usage.clone())?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let mut seen = BTreeSet::new();
+            let mut any = false;
+            for node in index.entities_by_kind(noun) {
+                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+                if labels.get("prefix") != Some(prefix) || !seen.insert(id.clone()) {
+                    continue;
+                }
+                let slug = labels.get("slug").cloned().unwrap_or_default();
+                let agent = brain_observe::twin::latest(&index, &store, &id, "agent")
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or_else(|| "generic".to_string());
+                let role = brain_observe::twin::latest(&index, &store, &id, "role")
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or_default();
+                let desc = brain_observe::twin::latest(&index, &store, &id, "description")
+                    .map_err(|e| e.to_string())?
+                    .map(|d| format!("  — {d}"))
+                    .unwrap_or_default();
+                println!("[{agent}] {slug} ({role}){desc}");
+                any = true;
+            }
+            if !any {
+                println!("no {noun}s under {prefix}");
+            }
+            Ok(())
+        }
+        Some("show") => {
+            let (prefix, slug) = match (args.get(1), args.get(2)) {
+                (Some(p), Some(s)) => (p, s),
+                _ => return Err(usage),
+            };
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = brain_core::ids::StableId::derive(&[noun, prefix, slug]);
+            let content = brain_observe::twin::latest(&index, &store, &sid, "content")
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("no {noun} '{slug}' under {prefix}"))?;
+            print!("{content}");
+            if !content.ends_with('\n') {
+                println!();
             }
             let mentions = relation_targets(&store, &index, &sid, "mentions")?;
             if !mentions.is_empty() {

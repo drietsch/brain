@@ -10,10 +10,13 @@
 //! - [`symbols`] — lightweight per-language symbol and import extraction.
 //! - [`docs`] — parsing for decision records (ADRs) and plans, the *why*
 //!   documents captured alongside structure.
+//! - [`agents`] — parsing for skills and agent configuration (CLAUDE.md,
+//!   AGENTS.md, .cursorrules, subagents, settings): *how it is built*.
 //!
 //! Observers are sense organs, meant to run continuously; re-ingesting
 //! refreshes observations and surfaces drift as new nodes, never overwrites.
 
+pub mod agents;
 pub mod docs;
 pub mod symbols;
 pub mod twin;
@@ -25,8 +28,10 @@ use brain_store::StoreError;
 
 /// File extensions worth twinning in a source tree.
 pub(crate) const INGEST_EXTENSIONS: &[&str] = &[
-    "rs", "toml", "md", "json", "php", "py", "js", "jsx", "ts", "tsx",
+    "rs", "toml", "md", "json", "php", "py", "js", "jsx", "ts", "tsx", "mdc",
 ];
+/// Extensionless files worth twinning by exact name (agent configuration).
+pub(crate) const INGEST_FILENAMES: &[&str] = &[".cursorrules"];
 /// Directories that are build products or substrate internals, not software.
 pub(crate) const SKIP_DIRS: &[&str] = &[".git", "target", ".brain", "node_modules", "vendor"];
 
@@ -40,8 +45,11 @@ pub(crate) fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> R
                 continue;
             }
             collect_files(root, &path, out)?;
-        } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            if INGEST_EXTENSIONS.contains(&ext) {
+        } else {
+            let ext = path.extension().and_then(|e| e.to_str());
+            let keep = ext.is_some_and(|e| INGEST_EXTENSIONS.contains(&e))
+                || INGEST_FILENAMES.contains(&name.as_str());
+            if keep {
                 if let Ok(rel) = path.strip_prefix(root) {
                     out.push(rel.to_string_lossy().replace('\\', "/"));
                 }

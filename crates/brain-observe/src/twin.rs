@@ -10,6 +10,7 @@
 //! Nothing is ever overwritten: the twin's history of a file is its
 //! observation timeline, and "deleted" is itself just an observation.
 
+use crate::agents::{self, AgentDoc};
 use crate::collect_files;
 use crate::docs::{self, DocMeta};
 use crate::symbols;
@@ -112,7 +113,13 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
             Some(m) => latest(&index, store, &doc_sid(prefix, m), "content")?.is_none(),
             None => false,
         };
-        if !changed && !structure_missing && !doc_missing {
+        // And for skills / agent configuration.
+        let agent_meta = agents::parse_agent_doc(rel, &text);
+        let agent_missing = match &agent_meta {
+            Some(a) => latest(&index, store, &agent_doc_sid(prefix, a), "content")?.is_none(),
+            None => false,
+        };
+        if !changed && !structure_missing && !doc_missing && !agent_missing {
             continue;
         }
 
@@ -186,6 +193,27 @@ fn run(store: &Store, root: &Path, prefix: &str, write: bool) -> Result<TwinRepo
                 &index,
                 prefix,
                 meta,
+                &text,
+                "twin",
+                Some(rel),
+                &file_set,
+                &mut written_relations,
+                now,
+            )?;
+            report.relations += out.relations;
+            if out.wrote {
+                report.docs.push(rel.clone());
+            }
+        }
+
+        // A skill or agent-configuration file is a *how it is built*
+        // document: capture it the same way.
+        if let Some(doc) = &agent_meta {
+            let out = record_agent_doc(
+                store,
+                &index,
+                prefix,
+                doc,
                 &text,
                 "twin",
                 Some(rel),
@@ -297,6 +325,10 @@ pub struct Insights {
     pub plans: Vec<(String, String)>,
     /// Files a decision mentions — hotspots with documented rationale.
     pub decided: BTreeSet<String>,
+    /// Agent skills under the prefix: (slug, agent, description-or-name).
+    pub skills: Vec<(String, String, String)>,
+    /// Agent configuration under the prefix: (slug, agent, role).
+    pub agent_configs: Vec<(String, String, String)>,
 }
 
 const TOP: usize = 5;
@@ -358,6 +390,38 @@ pub fn insights_with(
     plans.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     plans.truncate(TOP);
     ins.plans = plans.into_iter().map(|(_, s, t)| (s, t)).collect();
+
+    // Skills and agent configuration under this prefix.
+    for kind in ["skill", "agent_config"] {
+        let mut seen: BTreeSet<StableId> = BTreeSet::new();
+        let mut rows: Vec<(String, String, String)> = Vec::new();
+        for node in index.entities_by_kind(kind) {
+            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+            if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone())
+            {
+                continue;
+            }
+            let slug = labels.get("slug").cloned().unwrap_or_default();
+            let agent = latest(index, store, &id, "agent")?
+                .or_else(|| labels.get("agent").cloned())
+                .unwrap_or_else(|| "generic".to_string());
+            let third = if kind == "skill" {
+                latest(index, store, &id, "description")?
+                    .or_else(|| latest(index, store, &id, "name").ok().flatten())
+                    .unwrap_or_else(|| slug.clone())
+            } else {
+                latest(index, store, &id, "role")?.unwrap_or_else(|| "config".to_string())
+            };
+            rows.push((slug, agent, third));
+        }
+        rows.sort();
+        rows.truncate(TOP);
+        if kind == "skill" {
+            ins.skills = rows;
+        } else {
+            ins.agent_configs = rows;
+        }
+    }
 
     let mut churn: Vec<(String, usize)> = Vec::new();
     let mut hubs: Vec<(String, usize)> = Vec::new();
@@ -706,16 +770,24 @@ pub struct DocOutcome {
     pub mentions: Vec<String>,
 }
 
-/// Record a decision/plan document into the twin. Every observation is
-/// guarded by [`latest`], so re-recording an unchanged document writes
-/// nothing — and a changed `Status:` line becomes a new `status`
-/// observation, giving decisions a status timeline for free.
+/// Stable identity of a skill/agent-config document under a prefix.
+pub fn agent_doc_sid(prefix: &str, doc: &AgentDoc) -> StableId {
+    StableId::derive(&[doc.kind.as_str(), prefix, &doc.slug])
+}
+
+/// The shared recording core for semantic documents (decisions, plans,
+/// skills, agent configuration). Every observation is guarded by [`latest`],
+/// so re-recording an unchanged document writes nothing — and a changed
+/// property value becomes a new observation: a timeline, never an overwrite.
 #[allow(clippy::too_many_arguments)]
-pub fn record_doc(
+fn record_entity_doc(
     store: &Store,
     index: &MemIndex,
     prefix: &str,
-    meta: &DocMeta,
+    entity_kind: &str,
+    slug: &str,
+    extra_labels: &[(&str, &str)],
+    props: &[(&str, &str)],
     content: &str,
     source: &str,
     rel_path: Option<&str>,
@@ -723,27 +795,25 @@ pub fn record_doc(
     written_relations: &mut BTreeSet<(StableId, String, StableId)>,
     now: u64,
 ) -> Result<DocOutcome, StoreError> {
-    let sid = doc_sid(prefix, meta);
+    let sid = StableId::derive(&[entity_kind, prefix, slug]);
     let mut labels = BTreeMap::new();
-    labels.insert("title".to_string(), meta.title.clone());
     labels.insert("prefix".to_string(), prefix.to_string());
-    labels.insert("slug".to_string(), meta.slug.clone());
+    labels.insert("slug".to_string(), slug.to_string());
+    for (k, v) in extra_labels {
+        labels.insert(k.to_string(), v.to_string());
+    }
     if let Some(rel) = rel_path {
         labels.insert("path".to_string(), rel.to_string());
     }
     store.put(&Object::Entity {
         id: sid.clone(),
-        entity_kind: meta.kind.as_str().to_string(),
+        entity_kind: entity_kind.to_string(),
         labels,
     })?;
 
     let mut wrote = false;
-    let mut props: Vec<(&str, &str)> = vec![("content", content), ("title", &meta.title)];
-    if let Some(status) = &meta.status {
-        props.push(("status", status));
-    }
     for (prop, value) in props {
-        if latest(index, store, &sid, prop)?.as_deref() != Some(value) {
+        if latest(index, store, &sid, prop)?.as_deref() != Some(*value) {
             observe_src(store, &sid, prop, value, source, now)?;
             wrote = true;
         }
@@ -755,8 +825,8 @@ pub fn record_doc(
     if relate(store, index, written_relations, &sid, "concerns", &repo_sid, now)? {
         outcome.relations += 1;
     }
-    // Auto-detected docs keep their file entity too: the decision/plan is the
-    // semantic thing, the file is where it happens to be recorded.
+    // Auto-detected documents keep their file entity too: the document is
+    // the semantic thing, the file is where it happens to be recorded.
     if let Some(rel) = rel_path {
         let file_sid = StableId::derive(&["file", rel]);
         if relate(store, index, written_relations, &sid, "recorded_in", &file_sid, now)? {
@@ -774,16 +844,94 @@ pub fn record_doc(
         }
         outcome.mentions.push(cand.clone());
     }
-    if let Some(other) = &meta.supersedes {
-        let other_sid = StableId::derive(&["decision", prefix, other]);
-        if relate(store, index, written_relations, &sid, "supersedes", &other_sid, now)? {
-            outcome.relations += 1;
-        }
-    }
     if outcome.relations > 0 {
         outcome.wrote = true;
     }
     Ok(outcome)
+}
+
+/// Record a decision/plan document into the twin. A changed `Status:` line
+/// becomes a new `status` observation: decisions get a timeline for free.
+#[allow(clippy::too_many_arguments)]
+pub fn record_doc(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    meta: &DocMeta,
+    content: &str,
+    source: &str,
+    rel_path: Option<&str>,
+    candidates: &BTreeSet<String>,
+    written_relations: &mut BTreeSet<(StableId, String, StableId)>,
+    now: u64,
+) -> Result<DocOutcome, StoreError> {
+    let mut props: Vec<(&str, &str)> = vec![("content", content), ("title", &meta.title)];
+    if let Some(status) = &meta.status {
+        props.push(("status", status));
+    }
+    let mut outcome = record_entity_doc(
+        store,
+        index,
+        prefix,
+        meta.kind.as_str(),
+        &meta.slug,
+        &[("title", &meta.title)],
+        &props,
+        content,
+        source,
+        rel_path,
+        candidates,
+        written_relations,
+        now,
+    )?;
+    if let Some(other) = &meta.supersedes {
+        let other_sid = StableId::derive(&["decision", prefix, other]);
+        if relate(store, index, written_relations, &outcome.sid, "supersedes", &other_sid, now)? {
+            outcome.relations += 1;
+            outcome.wrote = true;
+        }
+    }
+    Ok(outcome)
+}
+
+/// Record a skill or agent-configuration document into the twin.
+#[allow(clippy::too_many_arguments)]
+pub fn record_agent_doc(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    doc: &AgentDoc,
+    content: &str,
+    source: &str,
+    rel_path: Option<&str>,
+    candidates: &BTreeSet<String>,
+    written_relations: &mut BTreeSet<(StableId, String, StableId)>,
+    now: u64,
+) -> Result<DocOutcome, StoreError> {
+    let mut props: Vec<(&str, &str)> = vec![
+        ("content", content),
+        ("name", &doc.name),
+        ("agent", &doc.agent),
+        ("role", &doc.role),
+    ];
+    if let Some(d) = &doc.description {
+        props.push(("description", d));
+    }
+    record_entity_doc(
+        store,
+        index,
+        prefix,
+        doc.kind.as_str(),
+        &doc.slug,
+        &[("name", &doc.name), ("agent", &doc.agent), ("role", &doc.role)],
+        &props,
+        content,
+        source,
+        rel_path,
+        candidates,
+        written_relations,
+        now,
+    )
 }
 
 /// Explicit ingestion for documents outside the observed tree — the path
@@ -801,6 +949,24 @@ pub fn add_doc(
     let mut written = BTreeSet::new();
     record_doc(
         store, &index, prefix, meta, content, source, None, &candidates, &mut written, now_ms(),
+    )
+}
+
+/// Explicit ingestion for agent skills/configuration outside the observed
+/// tree — user-level `~/.claude/skills`, `~/.claude/CLAUDE.md`, and the like.
+pub fn add_agent_doc(
+    store: &Store,
+    prefix: &str,
+    doc: &AgentDoc,
+    content: &str,
+    source: &str,
+) -> Result<DocOutcome, StoreError> {
+    let mut index = MemIndex::new();
+    replay(store, &mut index)?;
+    let candidates = twinned_paths(store, prefix)?;
+    let mut written = BTreeSet::new();
+    record_agent_doc(
+        store, &index, prefix, doc, content, source, None, &candidates, &mut written, now_ms(),
     )
 }
 
@@ -1083,6 +1249,81 @@ mod tests {
         assert!(ins.plans.iter().any(|(s, _)| s == "plan-v1"));
         assert!(ins.decided.contains("src/main.rs"));
         assert!(!ins.decided.contains("run.py"));
+    }
+
+    #[test]
+    fn skills_and_agent_config_are_captured() {
+        let (src, store_dir) = fixture();
+        let store = Store::open(store_dir.path()).unwrap();
+        fs::create_dir_all(src.path().join(".claude/skills/deploy")).unwrap();
+        fs::create_dir_all(src.path().join(".claude/agents")).unwrap();
+        fs::write(
+            src.path().join(".claude/skills/deploy/SKILL.md"),
+            "---\nname: deploy\ndescription: Ship src/main.rs safely\n---\n\n# Deploy\n",
+        )
+        .unwrap();
+        fs::write(src.path().join("CLAUDE.md"), "# Project rules\n\nStart at src/main.rs.\n")
+            .unwrap();
+        fs::write(
+            src.path().join(".claude/agents/reviewer.md"),
+            "---\nname: reviewer\ndescription: Reviews diffs\n---\nReview carefully.\n",
+        )
+        .unwrap();
+        fs::write(src.path().join(".cursorrules"), "Prefer small functions.\n").unwrap();
+
+        let r = refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(r.docs.len(), 4, "all agent docs captured: {:?}", r.docs);
+
+        let index = fresh_index(&store);
+        let skill = StableId::derive(&["skill", "twin/app", "deploy"]);
+        assert_eq!(
+            latest(&index, &store, &skill, "description").unwrap().as_deref(),
+            Some("Ship src/main.rs safely")
+        );
+        assert_eq!(latest(&index, &store, &skill, "agent").unwrap().as_deref(), Some("claude"));
+        // The skill mentions src/main.rs (from its description in content).
+        let main_sid = StableId::derive(&["file", "src/main.rs"]);
+        let mentioned: Vec<_> = index
+            .relations_from(&skill, "mentions")
+            .iter()
+            .filter_map(|id| match store.get(id) {
+                Ok(Object::Relation { to, .. }) => Some(to),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(mentioned, vec![main_sid]);
+
+        let claude_md = StableId::derive(&["agent_config", "twin/app", "claude.md"]);
+        assert_eq!(
+            latest(&index, &store, &claude_md, "role").unwrap().as_deref(),
+            Some("instructions")
+        );
+        let reviewer = StableId::derive(&["agent_config", "twin/app", "reviewer"]);
+        assert_eq!(latest(&index, &store, &reviewer, "role").unwrap().as_deref(), Some("subagent"));
+        let cursor = StableId::derive(&["agent_config", "twin/app", ".cursorrules"]);
+        assert_eq!(latest(&index, &store, &cursor, "agent").unwrap().as_deref(), Some("cursor"));
+
+        // Idempotence still holds with agent docs present.
+        let before = store.count_objects().unwrap();
+        let r2 = refresh(&store, src.path(), "twin/app").unwrap();
+        assert!(r2.docs.is_empty());
+        assert_eq!(store.count_objects().unwrap(), before, "no graph growth");
+
+        // Insights surface them.
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.skills.iter().any(|(s, a, d)| s == "deploy" && a == "claude" && d.contains("Ship")));
+        assert!(ins.agent_configs.iter().any(|(s, _, r)| s == "claude.md" && r == "instructions"));
+        assert!(ins.agent_configs.iter().any(|(s, _, r)| s == "reviewer" && r == "subagent"));
+
+        // Explicit add for an out-of-repo skill (user-level ~/.claude).
+        let content = "---\nname: triage\ndescription: Sort issues\n---\nSteps.\n";
+        let doc = agents::parse_agent_doc("home/.claude/skills/triage/SKILL.md", content).unwrap();
+        let out = add_agent_doc(&store, "twin/app", &doc, content, "claude-code").unwrap();
+        assert!(out.wrote);
+        let again = add_agent_doc(&store, "twin/app", &doc, content, "claude-code").unwrap();
+        assert!(!again.wrote, "explicit re-add of unchanged skill writes nothing");
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.skills.iter().any(|(s, _, _)| s == "triage"));
     }
 
     #[test]

@@ -136,6 +136,46 @@ The intended loop: after a Claude Code plan is approved, `brain plan add`
 it; after a significant decision, write an ADR into `docs/adr/` — the next
 refresh captures it automatically.
 
+## Skills and agent configuration — the *how it is built* layer
+
+Agentically-built software carries the files that configure the agents that
+build it. The twin captures them as `skill` and `agent_config` entities with
+`content`, `name`, `agent`, `role`, and `description` observations — so a
+changed CLAUDE.md or skill is a timeline of versions, and the operating
+setup replicates with the graph like everything else.
+
+Auto-detected conventions during refresh:
+
+| Path | Entity | agent / role |
+|---|---|---|
+| `**/<name>/SKILL.md` | skill | claude / skill (frontmatter `name:`/`description:` parsed) |
+| `CLAUDE.md` (any depth) | agent_config | claude / instructions |
+| `AGENTS.md` | agent_config | generic / instructions |
+| `GEMINI.md` | agent_config | gemini / instructions |
+| `.claude/agents/*.md` | agent_config | claude / subagent |
+| `.claude/commands/*.md` | agent_config | claude / command |
+| `.claude/settings(.local).json` | agent_config | claude / settings |
+| `.mcp.json` | agent_config | claude / mcp |
+| `.cursorrules`, `.cursor/rules/*.mdc` | agent_config | cursor / rules |
+| `.github/copilot-instructions.md` | agent_config | copilot / instructions |
+| `.codex/*` | agent_config | codex / settings |
+
+Nested instruction files keep distinct identities (the slug is the path), so
+`crates/core/CLAUDE.md` never collides with the root `CLAUDE.md`.
+
+Explicit add for user-level configuration outside the repo:
+
+```bash
+brain skill add ~/.claude/skills/deploy/SKILL.md --prefix twin/app
+brain agentcfg add ~/.claude/CLAUDE.md --prefix twin/app --agent claude
+brain skill list twin/app          # [agent] slug (role) — description
+brain agentcfg show twin/app claude.md
+```
+
+Mentions-scanning applies here too: a skill whose text names twinned files
+gets `mentions` relations to them, so "which skills touch this file?" is a
+reverse-relation query.
+
 ## Continuous insights
 
 `brain twin insights <prefix>` synthesizes the twin into a picture of the
