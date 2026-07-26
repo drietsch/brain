@@ -1,0 +1,15 @@
+{
+  "op": "lam",
+  "param": "name",
+  "body": {
+    "op": "foreign",
+    "symbol": "core/concat",
+    "arg": {
+      "op": "record",
+      "fields": {
+        "a": { "op": "lit", "value": { "type": "str", "value": "Hello, " } },
+        "b": { "op": "var", "name": "name" }
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "greet",
+  "description": "Given a name string, return the string \"Hello, \" followed by the name.",
+  "spec": { "input": "str", "output": "str" },
+  "cases": [
+    { "arg": "graph", "expect": "Hello, graph" },
+    { "arg": "", "expect": "Hello, " }
+  ]
+}

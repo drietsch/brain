@@ -3,8 +3,11 @@
 //! The CLI is a projection instrument: it renders and drives the graph, but
 //! holds no state of its own. All state lives in the store (default `.brain/`).
 
+mod tasks;
+
 use brain_core::ids::NodeId;
 use brain_core::object::{Object, Term};
+use brain_index::{object_edges, replay, Index, MemIndex};
 use brain_runtime::{
     eval_closed, value_to_json, CodeSource, EffectPort, EvalCtx, Registry, Value,
 };
@@ -26,6 +29,10 @@ fn usage() -> &'static str {
        brain run <name> [--cap <c>]...    evaluate the code bound to a name\n\
        brain recover                      mark pending intents indeterminate\n\
        brain ingest <dir> [--prefix <p>]  twin an external source tree\n\
+       brain refs <name|b3:hash>          who references this node (reverse edges)\n\
+       brain deps <name|b3:hash>          what this node references (forward edges)\n\
+       brain observations <name>          observations about a twinned entity\n\
+       brain task check <task.json> <term.json>   check a solution, record evidence\n\
        brain demo                         run the end-to-end demonstration\n"
 }
 
@@ -39,6 +46,10 @@ fn main() -> ExitCode {
         Some("run") => cmd_run(&args[1..]),
         Some("recover") => cmd_recover(),
         Some("ingest") => cmd_ingest(&args[1..]),
+        Some("refs") => cmd_refs(&args[1..]),
+        Some("deps") => cmd_deps(&args[1..]),
+        Some("observations") => cmd_observations(&args[1..]),
+        Some("task") => cmd_task(&args[1..]),
         Some("demo") => cmd_demo(),
         _ => {
             eprint!("{}", usage());
@@ -186,6 +197,147 @@ fn cmd_ingest(args: &[String]) -> Result<(), String> {
         "twinned {} file(s): {} entities, {} observations under '{prefix}/'",
         report.files, report.entities, report.observations
     );
+    Ok(())
+}
+
+/// Resolve a CLI argument that may be a bound name or a literal b3: hash.
+fn resolve_arg(store: &Store, arg: &str) -> Result<NodeId, String> {
+    if arg.starts_with("b3:") {
+        return NodeId::parse(arg).map_err(|e| e.to_string());
+    }
+    store
+        .resolve(arg)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("no binding for '{arg}'"))
+}
+
+/// Names currently bound to each node, for human-readable listings.
+fn names_of(store: &Store) -> Result<std::collections::BTreeMap<NodeId, Vec<String>>, String> {
+    let mut out: std::collections::BTreeMap<NodeId, Vec<String>> = Default::default();
+    for (name, id) in store.namespace().map_err(|e| e.to_string())? {
+        out.entry(id).or_default().push(name);
+    }
+    Ok(out)
+}
+
+fn kind_of(obj: &Object) -> &'static str {
+    match obj {
+        Object::Code { .. } => "code",
+        Object::Spec { .. } => "spec",
+        Object::Evidence { .. } => "evidence",
+        Object::Capability { .. } => "capability",
+        Object::Entity { .. } => "entity",
+        Object::Observation { .. } => "observation",
+        Object::Intent { .. } => "intent",
+        Object::Receipt { .. } => "receipt",
+        Object::Namespace { .. } => "namespace",
+    }
+}
+
+fn describe(store: &Store, names: &std::collections::BTreeMap<NodeId, Vec<String>>, id: &NodeId) -> String {
+    let kind = store.get(id).map(|o| kind_of(&o)).unwrap_or("missing");
+    let bound = names
+        .get(id)
+        .map(|n| format!("  ({})", n.join(", ")))
+        .unwrap_or_default();
+    format!("{id:?}  {kind}{bound}")
+}
+
+fn build_index(store: &Store) -> Result<MemIndex, String> {
+    let mut index = MemIndex::new();
+    replay(store, &mut index).map_err(|e| e.to_string())?;
+    Ok(index)
+}
+
+fn cmd_refs(args: &[String]) -> Result<(), String> {
+    let arg = args.first().ok_or("usage: brain refs <name|b3:hash>")?;
+    let store = open_store()?;
+    let target = resolve_arg(&store, arg)?;
+    let index = build_index(&store)?;
+    let names = names_of(&store)?;
+    let referrers = index.referrers(&target);
+    if referrers.is_empty() {
+        println!("nothing references {target:?}");
+    } else {
+        for id in referrers {
+            println!("{}", describe(&store, &names, &id));
+        }
+    }
+    Ok(())
+}
+
+fn cmd_deps(args: &[String]) -> Result<(), String> {
+    let arg = args.first().ok_or("usage: brain deps <name|b3:hash>")?;
+    let store = open_store()?;
+    let target = resolve_arg(&store, arg)?;
+    let obj = store.get(&target).map_err(|e| e.to_string())?;
+    let names = names_of(&store)?;
+    let edges = object_edges(&obj);
+    if edges.is_empty() {
+        println!("{target:?} references nothing");
+    } else {
+        for (kind, id) in edges {
+            println!("{kind:?}  {}", describe(&store, &names, &id));
+        }
+    }
+    Ok(())
+}
+
+fn cmd_observations(args: &[String]) -> Result<(), String> {
+    let arg = args.first().ok_or("usage: brain observations <name>")?;
+    let store = open_store()?;
+    let node = resolve_arg(&store, arg)?;
+    let stable = match store.get(&node).map_err(|e| e.to_string())? {
+        Object::Entity { id, .. } => id,
+        other => return Err(format!("'{arg}' is not an entity (found {})", kind_of(&other))),
+    };
+    let index = build_index(&store)?;
+    let mut rows = Vec::new();
+    for obs_id in index.observations_of(&stable) {
+        if let Object::Observation { property, value, source, observed_at_ms, .. } =
+            store.get(&obs_id).map_err(|e| e.to_string())?
+        {
+            rows.push((observed_at_ms, property, value, source));
+        }
+    }
+    rows.sort();
+    for (at, property, value, source) in rows {
+        println!("{at}  {property} = {value}  [{source}]");
+    }
+    Ok(())
+}
+
+fn cmd_task(args: &[String]) -> Result<(), String> {
+    let (task_path, term_path) = match args {
+        [sub, task, term] if sub == "check" => (task, term),
+        _ => return Err("usage: brain task check <task.json> <term.json>".to_string()),
+    };
+    let task: tasks::TaskDef = serde_json::from_str(
+        &std::fs::read_to_string(task_path).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("invalid task: {e}"))?;
+    let term: Term = serde_json::from_str(
+        &std::fs::read_to_string(term_path).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("invalid term: {e}"))?;
+
+    let store = open_store()?;
+    let report = tasks::check(&store, &task, &term)?;
+
+    println!("task: {}  —  {}", task.name, task.description);
+    if !task.spec.is_null() {
+        println!("spec: {}", task.spec);
+    }
+    for (i, r) in report.results.iter().enumerate() {
+        let mark = if r.passed { "pass" } else { "FAIL" };
+        println!("  case {i}: {mark}  {}  (fuel {})", r.detail, r.fuel_used);
+    }
+    println!("code:      {}", report.code_id);
+    println!("evidence:  {}  (behavioral, passed={})", report.evidence_id, report.all_passed);
+    println!("bound:     task/{}/latest", task.name);
+    if !report.all_passed {
+        return Err("task failed".to_string());
+    }
     Ok(())
 }
 

@@ -28,6 +28,10 @@ cargo run -p brain-cli -- demo            # author -> store -> bind -> run
 cargo run -p brain-cli -- ingest . --prefix twin/self   # the brain twins itself
 cargo run -p brain-cli -- status
 cargo run -p brain-cli -- names
+cargo run -p brain-cli -- refs demo/answer            # reverse edges
+cargo run -p brain-cli -- deps <b3:hash>              # forward edges
+cargo run -p brain-cli -- observations twin/self/README.md
+cargo run -p brain-cli -- task check tasks/t01-increment.json tasks/solutions/increment.json
 cargo run -p brain-cli -- recover         # marks pending intents indeterminate
 ```
 
@@ -63,4 +67,5 @@ leaves the intent/receipt trail in the store for inspection.
 
 See `docs/architecture.md` for the design, `docs/calculus.md` for the term
 language, `docs/schema/term.schema.json` for the shape agents author against,
-and `docs/roadmap.md` for where this is going.
+`docs/authoring.md` for the Stage 1 experiment protocol (with the task corpus
+in `tasks/`), and `docs/roadmap.md` for where this is going.

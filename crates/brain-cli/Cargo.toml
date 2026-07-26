@@ -13,4 +13,6 @@ brain-core = { workspace = true }
 brain-store = { workspace = true }
 brain-runtime = { workspace = true }
 brain-observe = { workspace = true }
+brain-index = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }

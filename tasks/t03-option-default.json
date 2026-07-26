@@ -1,0 +1,10 @@
+{
+  "name": "option-default",
+  "description": "Given a variant that is either some(int) or none(unit), return the int payload of some, or 0 for anything else.",
+  "spec": { "input": "variant<some: int, none: unit>", "output": "int" },
+  "cases": [
+    { "arg": { "$variant": "some", "payload": 5 }, "expect": 5 },
+    { "arg": { "$variant": "some", "payload": -3 }, "expect": -3 },
+    { "arg": { "$variant": "none", "payload": null }, "expect": 0 }
+  ]
+}

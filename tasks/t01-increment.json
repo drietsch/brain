@@ -1,0 +1,10 @@
+{
+  "name": "increment",
+  "description": "Return the input integer plus one.",
+  "spec": { "input": "int", "output": "int" },
+  "cases": [
+    { "arg": 1, "expect": 2 },
+    { "arg": 41, "expect": 42 },
+    { "arg": -1, "expect": 0 }
+  ]
+}

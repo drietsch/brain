@@ -1,0 +1,15 @@
+{
+  "op": "lam",
+  "param": "n",
+  "body": {
+    "op": "foreign",
+    "symbol": "core/add",
+    "arg": {
+      "op": "record",
+      "fields": {
+        "a": { "op": "var", "name": "n" },
+        "b": { "op": "lit", "value": { "type": "int", "value": 1 } }
+      }
+    }
+  }
+}
