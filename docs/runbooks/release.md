@@ -30,3 +30,14 @@ curl -fsSL https://raw.githubusercontent.com/drietsch/brain/main/install.sh | sh
 `cargo install` a previous tag (`--tag vX.Y.Z`); stores are forward-safe —
 objects are immutable and unknown observation properties are ignored by
 older binaries.
+
+## Making changes during a release freeze
+
+Route edits through governed mode so every mutation carries its reason,
+before/after hashes, intent, receipt, and verification:
+
+```bash
+brain change propose twin/self <path> --from <new-content> --reason "why"
+brain change apply   twin/self <slug> --cap fs
+brain change verify  twin/self <slug>     # must be VERIFIED before pushing
+```

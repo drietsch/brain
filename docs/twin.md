@@ -397,6 +397,37 @@ rebuildable — fuzzy recall that can never become a second source of
 truth. The intended rhythm: **wake with `attend`, work, `sleep` before
 you go.**
 
+## Governed mode — the motor system
+
+The gradient's third step: brain doesn't just observe the software, it
+can *change* it — through the same intent/receipt boundary native effects
+use, with explicit capability and full provenance:
+
+```bash
+brain change propose twin/app src/config.rs --from new-config.rs \
+  --reason "raise the connection pool limit"
+brain change apply  twin/app config.rs-3fa2b1c9 --cap fs   # Intent → write → Receipt
+brain change verify twin/app config.rs-3fa2b1c9            # run tests, grade it
+brain change revert twin/app config.rs-3fa2b1c9 --cap fs   # governed undo
+brain change list twin/app                                 # the ledger
+```
+
+- **Propose is pure**: reason, target, full before/after content and
+  hashes land in the graph; disk is untouched until apply.
+- **Apply is crash-safe**: the Intent is durably logged *before* the
+  write, the Receipt after. A crash in between leaves *indeterminate* —
+  `brain recover` marks it (never retries); reconciliation is deliberate.
+- **No ambient authority**: apply and revert refuse without `--cap fs`,
+  exactly as runtime effects refuse without their capability.
+- **Verification is evidence**: `verify` runs the repo's stored test
+  command, imports the protocol, and links it `verified_by` — a change's
+  status timeline reads proposed → applied → verified (or broken).
+
+Observation and governance compose: the next refresh sees an applied
+change as ordinary drift, and the change entity's `changes` relation ties
+the drift to its reason. See
+docs/adr/adr-010-governed-mode.md.
+
 ## Relation to the founding architecture
 
 The twin is the "describe → observe" half of the adoption gradient in

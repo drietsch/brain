@@ -27,6 +27,7 @@ pub mod assoc;
 pub mod attention;
 pub mod docs;
 pub mod features;
+pub mod govern;
 pub mod sleep;
 pub mod symbols;
 pub mod templates;
