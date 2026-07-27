@@ -149,6 +149,56 @@ pub fn replay(store: &Store, index: &mut dyn Index) -> Result<usize, StoreError>
 }
 
 // ---------------------------------------------------------------------------
+// Edge currency: relation tombstones
+// ---------------------------------------------------------------------------
+
+/// The stable id an edge's currency observations hang on. Relations are
+/// immutable objects; whether an edge still holds *now* is a timeline of
+/// `active` observations on this derived sid. The `"edge"` namespace is
+/// disjoint from every entity-kind derive namespace.
+pub fn edge_sid(from: &StableId, predicate: &str, to: &StableId) -> StableId {
+    StableId::derive(&["edge", &from.to_string(), predicate, &to.to_string()])
+}
+
+/// Is the edge live right now? Retraction is an `active=false` observation
+/// on the edge sid; re-observation writes `active=true`. Absence of any
+/// `active` observation means live — stores that predate tombstones need
+/// no migration.
+pub fn edge_active(
+    index: &dyn Index,
+    store: &Store,
+    from: &StableId,
+    predicate: &str,
+    to: &StableId,
+) -> Result<bool, StoreError> {
+    edge_active_at(index, store, from, predicate, to, u64::MAX)
+}
+
+/// Bi-temporal edge currency: was the edge live as of `t`?
+pub fn edge_active_at(
+    index: &dyn Index,
+    store: &Store,
+    from: &StableId,
+    predicate: &str,
+    to: &StableId,
+    t: u64,
+) -> Result<bool, StoreError> {
+    let sid = edge_sid(from, predicate, to);
+    let mut best: Option<(u64, bool)> = None;
+    for id in index.observations_of(&sid) {
+        if let Object::Observation { property, value, observed_at_ms, .. } = store.get(&id)? {
+            if property == "active"
+                && observed_at_ms <= t
+                && best.as_ref().is_none_or(|(b, _)| observed_at_ms >= *b)
+            {
+                best = Some((observed_at_ms, value == "true"));
+            }
+        }
+    }
+    Ok(best.map(|(_, live)| live).unwrap_or(true))
+}
+
+// ---------------------------------------------------------------------------
 // MemIndex: the naive reference backend
 // ---------------------------------------------------------------------------
 
@@ -422,6 +472,52 @@ mod tests {
         replay(&store, &mut index).unwrap();
         assert_eq!(index.observations_of(&sid), vec![obs]);
         assert_eq!(index.referrers(&code).len(), 2);
+    }
+
+    #[test]
+    fn edge_currency_defaults_live_and_follows_tombstones() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let file = StableId::derive(&["file", "a.rs"]);
+        let dep = StableId::derive(&["module", "serde"]);
+        store
+            .put(&Object::Relation {
+                from: file.clone(),
+                predicate: "imports".to_string(),
+                to: dep.clone(),
+                source: "twin".to_string(),
+                observed_at_ms: 1,
+            })
+            .unwrap();
+
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+        // No `active` observation: live by default (pre-tombstone stores).
+        assert!(edge_active(&index, &store, &file, "imports", &dep).unwrap());
+
+        let esid = edge_sid(&file, "imports", &dep);
+        let retract = |value: &str, at: u64| Object::Observation {
+            subject: esid.clone(),
+            property: "active".to_string(),
+            value: value.to_string(),
+            source: "twin".to_string(),
+            observed_at_ms: at,
+        };
+        store.put(&retract("false", 5)).unwrap();
+        replay(&store, &mut index).unwrap();
+        assert!(!edge_active(&index, &store, &file, "imports", &dep).unwrap());
+        // Bi-temporal: before the retraction the edge was live.
+        assert!(edge_active_at(&index, &store, &file, "imports", &dep, 4).unwrap());
+        assert!(!edge_active_at(&index, &store, &file, "imports", &dep, 5).unwrap());
+
+        // Re-observation restores currency.
+        store.put(&retract("true", 9)).unwrap();
+        replay(&store, &mut index).unwrap();
+        assert!(edge_active(&index, &store, &file, "imports", &dep).unwrap());
+
+        // Edge sids are distinct per (from, predicate, to).
+        assert_ne!(edge_sid(&file, "imports", &dep), edge_sid(&file, "covers", &dep));
+        assert_ne!(edge_sid(&file, "imports", &dep), edge_sid(&dep, "imports", &file));
     }
 
     #[test]

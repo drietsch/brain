@@ -18,7 +18,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const MARKER: &str = "# brain-hook";
-const EVENTS: [&str; 2] = ["post-commit", "pre-push"];
+const EVENTS: [&str; 4] = ["post-commit", "pre-push", "post-checkout", "post-merge"];
+/// Installed only with `--gate` — the one sanctioned exception to
+/// fail-open, and it blocks solely on deliberate refusals (exit 3).
+const GATE_EVENT: &str = "pre-commit";
 
 #[derive(Debug, Default)]
 struct Opts {
@@ -27,6 +30,7 @@ struct Opts {
     docs: bool,
     force: bool,
     tests: bool,
+    gate: bool,
     test_cmd: Option<String>,
 }
 
@@ -35,7 +39,7 @@ pub fn cmd_hook(
     open_store: impl Fn() -> Result<Store, String>,
 ) -> Result<(), String> {
     let usage = "usage: brain hook install [dir] [--prefix <p>] [--docs] [--tests] \
-                 [--test-cmd <cmd>] [--force] | uninstall [dir] | status [dir] | \
+                 [--test-cmd <cmd>] [--gate] [--force] | uninstall [dir] | status [dir] | \
                  run <event> [--prefix <p>] [--docs] [--tests]";
     match args.first().map(String::as_str) {
         Some("install") => {
@@ -59,11 +63,17 @@ pub fn cmd_hook(
         Some("run") => {
             let event = args.get(1).ok_or(usage)?.clone();
             let opts = parse(&args[2..])?;
-            // Fail-open: report problems, never propagate them into git.
-            if let Err(e) = run_event(&event, &opts, &open_store) {
-                eprintln!("brain hook: {e} (ignored — hooks never block git)");
+            match run_event(&event, &opts, &open_store) {
+                // The gate's deliberate refusal is the ONE error that may
+                // reach git — the script maps exit 3 to a blocked commit.
+                Err(e) if event == GATE_EVENT && e.starts_with("refused:") => Err(e),
+                // Everything else fails open: report, never block.
+                Err(e) => {
+                    eprintln!("brain hook: {e} (ignored — hooks never block git)");
+                    Ok(())
+                }
+                Ok(()) => Ok(()),
             }
-            Ok(())
         }
         _ => Err(usage.to_string()),
     }
@@ -83,6 +93,7 @@ fn parse(args: &[String]) -> Result<Opts, String> {
             "--docs" => opts.docs = true,
             "--force" => opts.force = true,
             "--tests" => opts.tests = true,
+            "--gate" => opts.gate = true,
             "--test-cmd" => {
                 opts.test_cmd = Some(it.next().cloned().ok_or("--test-cmd needs a value")?);
                 opts.tests = true;
@@ -156,6 +167,18 @@ fn hook_body(event: &str, opts: &Opts) -> String {
     let exe = std::env::current_exe()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "brain".to_string());
+    if event == GATE_EVENT {
+        // The gate: internal errors still fail open (run_event maps them
+        // to exit 0); only a deliberate refusal (exit 3) blocks.
+        return format!(
+            "#!/bin/sh\n{MARKER} v1 — gate installed by `brain hook install --gate`: refuses commits\n\
+             {MARKER} that hand-edit read-only projections or violate enforced contracts.\n\
+             {MARKER} Errors fail open; only a deliberate refusal (exit 3) blocks.\n\
+             \"{exe}\" hook run {event} --prefix \"{prefix}\"; s=$?\n\
+             [ $s -eq 3 ] && exit 1 || exit 0\n",
+            prefix = opts.prefix
+        );
+    }
     let docs_flag = if opts.docs && event == "pre-push" { " --docs" } else { "" };
     // Tests run post-commit (the moment code changed), not again on push.
     let tests_flag = if opts.tests && event == "post-commit" { " --tests" } else { "" };
@@ -167,10 +190,18 @@ fn hook_body(event: &str, opts: &Opts) -> String {
     )
 }
 
+fn all_events(gate: bool) -> Vec<&'static str> {
+    let mut v: Vec<&'static str> = EVENTS.to_vec();
+    if gate {
+        v.push(GATE_EVENT);
+    }
+    v
+}
+
 fn install(opts: &Opts) -> Result<(), String> {
     let hooks = hooks_dir(&opts.dir)?;
     fs::create_dir_all(&hooks).map_err(|e| e.to_string())?;
-    for event in EVENTS {
+    for event in all_events(opts.gate) {
         let path = hooks.join(event);
         if path.exists() {
             let existing = fs::read_to_string(&path).unwrap_or_default();
@@ -190,14 +221,19 @@ fn install(opts: &Opts) -> Result<(), String> {
         }
         println!("installed {}", path.display());
     }
-    let extra = if opts.tests { " + tests" } else { "" };
+    let extra = match (opts.tests, opts.gate) {
+        (true, true) => " + tests + gate",
+        (true, false) => " + tests",
+        (false, true) => " + gate",
+        (false, false) => "",
+    };
     println!("every commit and push now refreshes the twin ({}{extra})", opts.prefix);
     Ok(())
 }
 
 fn uninstall(dir: &str) -> Result<(), String> {
     let hooks = hooks_dir(dir)?;
-    for event in EVENTS {
+    for event in all_events(true) {
         let path = hooks.join(event);
         if !path.exists() {
             continue;
@@ -215,7 +251,7 @@ fn uninstall(dir: &str) -> Result<(), String> {
 
 fn status(dir: &str) -> Result<(), String> {
     let hooks = hooks_dir(dir)?;
-    for event in EVENTS {
+    for event in all_events(true) {
         let path = hooks.join(event);
         let state = if !path.exists() {
             "absent"
@@ -238,7 +274,37 @@ fn run_event(
     open_store: &impl Fn() -> Result<Store, String>,
 ) -> Result<(), String> {
     let (dir, prefix, docs) = (opts.dir.as_str(), opts.prefix.as_str(), opts.docs);
+
+    // The gate: read-only, fast, and the only path that may block.
+    if event == GATE_EVENT {
+        return gate_check(dir, prefix, open_store);
+    }
+
     let store = open_store()?;
+
+    // Checkout/merge lose the read-only bit on projections: re-arm it,
+    // refresh, report drift in one line each. Nothing else.
+    if event == "post-checkout" || event == "post-merge" {
+        twin::refresh(&store, Path::new(dir), prefix).map_err(|e| e.to_string())?;
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).map_err(|e| e.to_string())?;
+        let armed =
+            brain_observe::projection::reapply_readonly(&store, &index, Path::new(dir), prefix)
+                .map_err(|e| e.to_string())?;
+        if armed > 0 {
+            println!("brain[{event}]: re-armed read-only on {armed} projection(s)");
+        }
+        let drifts = brain_observe::projection::drift(&store, &index, Path::new(dir), prefix)
+            .map_err(|e| e.to_string())?;
+        if !drifts.is_empty() {
+            println!(
+                "brain[{event}]: {} projection(s) drifted — `brain artifact render {dir} --prefix {prefix} --check`",
+                drifts.len()
+            );
+        }
+        return Ok(());
+    }
+
     let report =
         twin::refresh(&store, Path::new(dir), prefix).map_err(|e| e.to_string())?;
     println!(
@@ -268,10 +334,16 @@ fn run_event(
     }
 
     let ins = twin::insights(&store, prefix).map_err(|e| e.to_string())?;
-    if !ins.stale_docs.is_empty() {
+    // Only warn-severity staleness nags; info is a record aging quietly.
+    let warns = ins
+        .stale_docs
+        .iter()
+        .filter(|d| d.severity == brain_observe::twin::Severity::Warn)
+        .count();
+    if warns > 0 {
         println!(
-            "brain[{event}]: {} possibly stale doc(s) — `brain twin stale {prefix}`",
-            ins.stale_docs.len()
+            "brain[{event}]: {warns} warn, {} info stale doc(s) — `brain twin stale {prefix}`",
+            ins.stale_docs.len() - warns
         );
     }
     if !ins.nonconforming.is_empty() {
@@ -286,10 +358,23 @@ fn run_event(
             ins.failing.len()
         );
     }
-    // The reflex points the eye: one line of top salience.
+    // The reflex points the eye: one line of top salience, plus the
+    // projection contract (re-arm bits, report drift with the fix named).
     {
         let mut index = MemIndex::new();
         replay(&store, &mut index).map_err(|e| e.to_string())?;
+        brain_observe::projection::reapply_readonly(&store, &index, Path::new(dir), prefix)
+            .map_err(|e| e.to_string())?;
+        for d in brain_observe::projection::drift(&store, &index, Path::new(dir), prefix)
+            .map_err(|e| e.to_string())?
+            .iter()
+            .take(3)
+        {
+            println!(
+                "brain[{event}]: projection {:?} {} — the graph is the source of truth: {}",
+                d.kind, d.path, d.fix
+            );
+        }
         if let Some(top) = brain_observe::attention::attend(&store, &index, prefix)
             .map_err(|e| e.to_string())?
             .first()
@@ -314,6 +399,92 @@ fn run_event(
         }
     }
     Ok(())
+}
+
+/// The pre-commit gate: refuse (exit 3, via a `refused:` error) when the
+/// staged changes hand-edit a read-only projection or stage a
+/// nonconforming artifact of an *enforced* kind. Everything else — and
+/// every internal error — passes; advisory kinds only ever warn.
+fn gate_check(
+    dir: &str,
+    prefix: &str,
+    open_store: &impl Fn() -> Result<Store, String>,
+) -> Result<(), String> {
+    let store = open_store()?;
+    let mut index = MemIndex::new();
+    replay(&store, &mut index).map_err(|e| e.to_string())?;
+
+    let out = Command::new("git")
+        .args(["-C", dir, "diff", "--cached", "--name-only"])
+        .output()
+        .map_err(|e| e.to_string())?;
+    let staged: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect();
+    if staged.is_empty() {
+        return Ok(());
+    }
+
+    let mut violations: Vec<String> = Vec::new();
+
+    // Layer 1: staged hand-edits of read-only projections.
+    for d in brain_observe::projection::drift(&store, &index, Path::new(dir), prefix)
+        .map_err(|e| e.to_string())?
+    {
+        if d.kind == brain_observe::projection::DriftKind::HandEdited
+            && staged.contains(&d.path)
+        {
+            violations.push(format!("{} — hand-edited projection; fix: {}", d.path, d.fix));
+        }
+    }
+
+    // Layer 2: staged artifacts of enforced kinds that fail their contract.
+    let registry = brain_observe::kinds::registry(&store, &index).map_err(|e| e.to_string())?;
+    let rules = brain_observe::kinds::capture_rules(&registry);
+    for path in &staged {
+        let kind = brain_observe::docs::parse_doc(path, "")
+            .map(|m| m.kind.as_str().to_string())
+            .or_else(|| {
+                brain_observe::kinds::match_rule(&rules, path).map(|r| r.kind.clone())
+            });
+        let Some(kind) = kind else { continue };
+        let Some(def) = registry.get(&kind) else { continue };
+        if def.enforce != "enforced" {
+            continue;
+        }
+        // Judge the STAGED bytes, not the working tree.
+        let staged_content = Command::new("git")
+            .args(["-C", dir, "show", &format!(":{path}")])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !staged_content.status.success() {
+            continue; // deleted or unreadable: not this gate's business
+        }
+        let text = String::from_utf8_lossy(&staged_content.stdout);
+        let missing = brain_observe::templates::check(&text, &def.requires);
+        if !missing.is_empty() {
+            violations.push(format!(
+                "{path} ({kind}, enforced) — missing: {}; scaffold: brain deliverable new {}",
+                missing.join(", "),
+                def.slug
+            ));
+        }
+    }
+
+    if violations.is_empty() {
+        return Ok(());
+    }
+    let mut msg = format!("refused: {} staged violation(s):\n", violations.len());
+    for v in &violations {
+        msg.push_str("  ");
+        msg.push_str(v);
+        msg.push('\n');
+    }
+    msg.push_str("(bypass once with `git commit --no-verify` if the brain is wrong)");
+    Err(msg)
 }
 
 /// Run the test command stored on the repo entity and import its protocol.

@@ -151,6 +151,9 @@ impl Cortex {
             };
             for id in edges {
                 if let Object::Relation { from: f, to: t, .. } = store.get(&id)? {
+                    if !brain_index::edge_active(&self.index, store, &f, predicate, &t)? {
+                        continue;
+                    }
                     let next = if reverse { f } else { t };
                     if seen.insert(next.clone()) {
                         out.push((next.clone(), depth + 1));
@@ -330,5 +333,43 @@ mod tests {
         // Depth cap respected.
         let capped = graf.reach(&store, &sids[0], "imports", false, 1).unwrap();
         assert_eq!(capped.len(), 1);
+    }
+
+    #[test]
+    fn reach_skips_retracted_edges() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let (sids, _) = populate(&store, 4); // chain f0 -> f1 -> f2 -> f3
+
+        // Retract the middle edge f1 -> f2: f0 now reaches only f1.
+        store
+            .put(&Object::Observation {
+                subject: brain_index::edge_sid(&sids[1], "imports", &sids[2]),
+                property: "active".to_string(),
+                value: "false".to_string(),
+                source: "twin".to_string(),
+                observed_at_ms: 50,
+            })
+            .unwrap();
+        let graf = Cortex::open(&store).unwrap();
+        let fwd = graf.reach(&store, &sids[0], "imports", false, 10).unwrap();
+        assert_eq!(fwd, vec![(sids[1].clone(), 1)], "traversal stops at the dead edge");
+
+        // Reverse blast radius of f3 likewise stops before the dead edge.
+        let back = graf.reach(&store, &sids[3], "imports", true, 10).unwrap();
+        assert_eq!(back, vec![(sids[2].clone(), 1)]);
+
+        // Restoring the edge restores the traversal.
+        store
+            .put(&Object::Observation {
+                subject: brain_index::edge_sid(&sids[1], "imports", &sids[2]),
+                property: "active".to_string(),
+                value: "true".to_string(),
+                source: "twin".to_string(),
+                observed_at_ms: 60,
+            })
+            .unwrap();
+        let graf = Cortex::open(&store).unwrap();
+        assert_eq!(graf.reach(&store, &sids[0], "imports", false, 10).unwrap().len(), 3);
     }
 }

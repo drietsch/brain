@@ -74,6 +74,15 @@ read an entity's notes, in true order
 .TP
 .B brain observations \fI<name>\fR
 an entity's full observation timeline
+.TP
+.B brain twin config \fI<prefix> [\-\-add\-extensions csv]\fR
+teach extra file extensions to ingest (additive, size\-capped); no flag shows current
+.TP
+.B brain relation retract \fI<from> <predicate> <to> [\-\-prefix <p>]\fR
+mark an edge as no longer holding; history stays, readers stop seeing it
+.TP
+.B brain relation list \fI<name> [\-\-all] [\-\-prefix <p>]\fR
+an entity's live relations, both directions; \-\-all includes retracted
 .SH DOCUMENTS
 The why and the contract: decisions (ADRs), plans, skills, agent configuration, templates with conformance, and artifacts of graph\-taught kinds.
 .TP
@@ -84,7 +93,22 @@ record a decision from any markdown file
 decisions with status; show prints text, status timeline, mentions
 .TP
 .B brain plan add|list|show \fI...\fR
-the same for plans (e.g. Claude Code plan files)
+the same for plans (e.g. Claude Code plan files); list hides non\-active without \-\-all
+.TP
+.B brain plan done|abandon|reopen \fI<prefix> <slug> [\-\-why R]\fR
+conclude or revive a plan; finished plans stop rotting and leave the lists
+.TP
+.B brain artifact set\-lifecycle \fI<prefix> <kind> <slug> <state> [\-\-why R]\fR
+explicitly set any artifact's lifecycle (active|done|abandoned|retired|superseded)
+.TP
+.B brain adr ack \fI<prefix> <slug> [\-\-note T]\fR
+reviewed against current code, still accurate \(em resets the staleness clock, file untouched
+.TP
+.B brain plan ack \fI<prefix> <slug> [\-\-note T]\fR
+the same acknowledgement for plans
+.TP
+.B brain artifact ack \fI<prefix> <kind> <slug> [\-\-note T]\fR
+the same acknowledgement for any artifact kind
 .TP
 .B brain skill add|list|show \fI...\fR
 agent skills (SKILL.md), auto\-captured or added explicitly
@@ -95,11 +119,29 @@ agent configuration: CLAUDE.md, AGENTS.md, .cursorrules, settings, MCP
 .B brain template seed|list|show \fI[slug]\fR
 the deliverable contract as graph data
 .TP
-.B brain template set \fI<slug> \-\-applies\-to k \-\-capture <globs> [\-\-fields spec] [\-\-requires a,b]\fR
-teach the store a new artifact kind \(em capture rules as data, no code
+.B brain template set \fI<slug> \-\-applies\-to k \-\-capture <globs> [\-\-fields spec] [\-\-requires a,b] [\-\-rot none|info|warn] [\-\-placement P] [\-\-enforce E] [\-\-home g] [\-\-project\-to p] [\-\-extensions e]\fR
+teach the store a new artifact kind \(em capture, placement, enforcement, and rot policy as data, no code
+.TP
+.B brain template fitness \fI[slug] [\-\-prefix <p>]\fR
+how each contract version performs: first\-capture conformance, missed fields, artifact outcomes \(em the learning loop's read side
+.TP
+.B brain template evolve \fI<slug> [\-\-prefix <p>] [\-\-apply]\fR
+propose the next contract version from fitness evidence; \-\-apply accepts it (never automatic)
+.TP
+.B brain artifact new|edit \fI<prefix> <kind> <slug> [\-\-title T] [\-\-file f|\-]\fR
+graph\-first authoring: validated at write time (enforced kinds refuse with exit 3), graph_first kinds render a read\-only projection
+.TP
+.B brain artifact render \fI[dir] [\-\-prefix <p>] [\-\-kind k] [\-\-check]\fR
+(re)render projections under docs/brain/; \-\-check reports drift, exit 3 on hand\-edits
 .TP
 .B brain artifact list|show \fI<prefix> <kind> [slug]\fR
 browse artifacts of any kind, built\-in or taught
+.TP
+.B brain asset add \fI<file> \-\-prefix <p> \-\-for <kind>/<slug> [\-\-depicts <t>]... [\-\-subtype s]\fR
+type a binary artifact: owner + declared depicts links give screenshots a staleness story
+.TP
+.B brain asset list \fI<prefix> [\-\-all]\fR
+assets with subtype, path, owner, lifecycle
 .TP
 .B brain deliverable new \fI<template> [\-\-title T]\fR
 instantiate a scaffold from the graph to stdout
@@ -127,6 +169,12 @@ the registry; matrix renders the definition of done as a query
 evaluate a feature against the DoD and record the outcome
 .SH BRAIN FUNCTIONS
 The functional organs: attention (what matters now), consolidation (distill history into memory), association (what is related, and why).
+.TP
+.B brain wake \fI<prefix> [\-\-full]\fR
+orientation: last sleep, the delta since, attention, warn\-stale, in\-flight work, coherence \(em one command
+.TP
+.B brain tidy \fI[dir] [\-\-prefix <p>] [\-\-fix \-\-cap fs] [\-\-rm <path>]\fR
+clean up: drifted/orphaned projections, retired artifacts, legacy assets, concluded prototypes \(em fixes are governed changes (auditable, revertible); deletion only via explicit \-\-rm
 .TP
 .B brain attend \fI<prefix> [\-\-top N]\fR
 attention: what deserves attention now, ranked with reasons
@@ -156,14 +204,17 @@ mark pending intents indeterminate and reconcile changes \(em never retries
 .SH AUTOMATION
 Git triggers the brain: fail\-open hooks on commit and push, an in\-binary watch loop, and regenerated documentation projections.
 .TP
-.B brain hook install \fI[dir] [\-\-prefix p] [\-\-docs] [\-\-tests] [\-\-test\-cmd c]\fR
-every git commit/push refreshes the twin; \-\-tests runs and imports the suite
+.B brain hook install \fI[dir] [\-\-prefix p] [\-\-docs] [\-\-tests] [\-\-test\-cmd c] [\-\-gate]\fR
+every git commit/push/checkout/merge triggers the brain; \-\-tests runs the suite, \-\-gate adds the opt\-in pre\-commit refusal (exit 3 blocks; errors fail open)
 .TP
 .B brain hook status|uninstall \fI[dir]\fR
 inspect or remove the hooks (foreign hooks respected)
 .TP
 .B brain watch \fI[dir] [\-\-prefix p] [\-\-interval s] [\-\-docs]\fR
 continuous refresh + insights loop, built into the binary
+.TP
+.B brain instructions generate \fI[dir] [\-\-prefix p] [\-\-check]\fR
+render one guardrail block from the kind registry into CLAUDE.md and AGENTS.md \(em every agent family reads identical rules
 .TP
 .B brain docs generate \fI[dir] [\-\-prefix p] [\-\-out d]\fR
 regenerate docs/generated/: tour, screenshots, narrated screencast, man page

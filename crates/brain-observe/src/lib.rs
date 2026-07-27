@@ -23,17 +23,26 @@
 //! refreshes observations and surfaces drift as new nodes, never overwrites.
 
 pub mod agents;
+pub mod assets;
 pub mod assoc;
 pub mod attention;
 pub mod backfill;
+pub mod coherence;
 pub mod docs;
 pub mod features;
+pub mod fitness;
 pub mod govern;
+pub mod instructions;
+pub mod kinds;
+pub mod lifecycle;
+pub mod projection;
 pub mod sleep;
 pub mod symbols;
 pub mod templates;
 pub mod testing;
+pub mod tidy;
 pub mod twin;
+pub mod wake;
 
 use std::fs;
 use std::path::Path;
@@ -42,17 +51,54 @@ use brain_store::StoreError;
 
 /// File extensions worth twinning in a source tree. Media formats are
 /// included so generated documentation artifacts (screenshots, screencasts,
-/// narration) carry freshness observations like any other file.
+/// narration) carry freshness observations like any other file; `txt` and
+/// `1` so the docs pipeline's own outputs (narration.txt, brain.1) are
+/// projections the graph can verify.
 pub(crate) const INGEST_EXTENSIONS: &[&str] = &[
     "rs", "toml", "md", "json", "php", "py", "js", "jsx", "ts", "tsx", "mdc", "sh", "mjs",
-    "png", "svg", "gif", "webm", "mp4", "wav",
+    "png", "svg", "gif", "webm", "mp4", "wav", "txt", "1",
 ];
 /// Extensionless files worth twinning by exact name (agent configuration).
 pub(crate) const INGEST_FILENAMES: &[&str] = &[".cursorrules"];
 /// Directories that are build products or substrate internals, not software.
 pub(crate) const SKIP_DIRS: &[&str] = &[".git", "target", ".brain", "node_modules", "vendor"];
 
-pub(crate) fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), StoreError> {
+/// Extra-extension files larger than this stay invisible — rule-driven
+/// ingestion is for artifacts, not archives.
+pub(crate) const MAX_EXTRA_FILE: u64 = 1024 * 1024;
+
+/// Runtime-taught ingestion beyond the compiled extension list. Two
+/// layers, both additive, both size-capped: repo-level extensions (an
+/// explicit `ingest_extensions` observation) apply everywhere; a kind's
+/// `extensions` apply only where its capture/home globs reach — teaching
+/// `extensions=jsonl` on a kind capturing `runs/*.jsonl` ingests exactly
+/// those files, and a stray archive elsewhere stays invisible.
+#[derive(Debug, Default)]
+pub(crate) struct ExtraIngest {
+    pub repo_exts: std::collections::BTreeSet<String>,
+    /// (extensions, globs) per registry kind that teaches extensions.
+    pub kind_rules: Vec<(std::collections::BTreeSet<String>, Vec<String>)>,
+}
+
+impl ExtraIngest {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.repo_exts.is_empty() && self.kind_rules.is_empty()
+    }
+
+    fn keep(&self, rel: &str, ext: &str) -> bool {
+        self.repo_exts.contains(ext)
+            || self.kind_rules.iter().any(|(exts, globs)| {
+                exts.contains(ext) && globs.iter().any(|g| templates::glob_match(g, rel))
+            })
+    }
+}
+
+pub(crate) fn collect_files_with(
+    root: &Path,
+    dir: &Path,
+    extra: &ExtraIngest,
+    out: &mut Vec<String>,
+) -> Result<(), StoreError> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -61,15 +107,21 @@ pub(crate) fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> R
             if SKIP_DIRS.contains(&name.as_str()) {
                 continue;
             }
-            collect_files(root, &path, out)?;
+            collect_files_with(root, &path, extra, out)?;
         } else {
             let ext = path.extension().and_then(|e| e.to_str());
-            let keep = ext.is_some_and(|e| INGEST_EXTENSIONS.contains(&e))
+            let rel = match path.strip_prefix(root) {
+                Ok(r) => r.to_string_lossy().replace('\\', "/"),
+                Err(_) => continue,
+            };
+            let builtin = ext.is_some_and(|e| INGEST_EXTENSIONS.contains(&e))
                 || INGEST_FILENAMES.contains(&name.as_str());
-            if keep {
-                if let Ok(rel) = path.strip_prefix(root) {
-                    out.push(rel.to_string_lossy().replace('\\', "/"));
-                }
+            let taught = !builtin
+                && !extra.is_empty()
+                && ext.is_some_and(|e| extra.keep(&rel, e))
+                && entry.metadata().map(|m| m.len() <= MAX_EXTRA_FILE).unwrap_or(false);
+            if builtin || taught {
+                out.push(rel);
             }
         }
     }

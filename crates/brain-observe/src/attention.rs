@@ -22,9 +22,21 @@ pub struct Attention {
 }
 
 /// Rank everything under a prefix by salience, highest first.
+///
+/// Churn is recency-weighted: edits since the last sleep dominate, while
+/// lifetime edit counts are capped — a file that was busy a year ago must
+/// not outrank the file being worked on today. The window needs no clock
+/// parameter: `consolidated_until` (written by `brain sleep`) is the
+/// natural boundary of "now", and a store that never slept scores every
+/// edit as recent, which matches its reality.
 pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Attention>, StoreError> {
     let ins = twin::insights_with(store, index, prefix)?;
     let mut out: Vec<Attention> = Vec::new();
+
+    let repo_sid = StableId::derive(&["repo", prefix]);
+    let since: u64 = latest(index, store, &repo_sid, "consolidated_until")?
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
 
     // Failing test cases, attributed to files where defined_in links exist.
     let mut failing_by_file: BTreeMap<StableId, u32> = BTreeMap::new();
@@ -36,10 +48,8 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
         if latest(index, store, &id, "result")?.as_deref() != Some("fail") {
             continue;
         }
-        for rid in index.relations_from(&id, "defined_in") {
-            if let Object::Relation { to, .. } = store.get(&rid)? {
-                *failing_by_file.entry(to).or_default() += 1;
-            }
+        for (_, to) in twin::live_from(index, store, &id, "defined_in")? {
+            *failing_by_file.entry(to).or_default() += 1;
         }
     }
 
@@ -57,19 +67,22 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
         }
         let mut score = 0u32;
         let mut reasons = Vec::new();
-        let versions = index
-            .observations_of(&sid)
-            .iter()
-            .filter_map(|id| store.get(id).ok())
-            .filter(
-                |o| matches!(o, Object::Observation { property, .. } if property == "content_b3"),
-            )
-            .count() as u32;
-        if versions > 1 {
-            score += versions * 3;
-            reasons.push(format!("churn {versions}"));
+        let (mut lifetime, mut recent) = (0u32, 0u32);
+        for id in index.observations_of(&sid) {
+            if let Ok(Object::Observation { property, observed_at_ms, .. }) = store.get(&id) {
+                if property == "content_b3" {
+                    lifetime += 1;
+                    if observed_at_ms > since {
+                        recent += 1;
+                    }
+                }
+            }
         }
-        let importers = index.relations_to(&sid, "imports").len() as u32;
+        if recent > 0 || lifetime > 1 {
+            score += recent * 4 + lifetime.min(10);
+            reasons.push(format!("churn {lifetime} ({recent} recent)"));
+        }
+        let importers = twin::live_to(index, store, &sid, "imports")?.len() as u32;
         if importers > 0 {
             score += importers * 2;
             reasons.push(format!("hub {importers}"));
@@ -77,7 +90,10 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
         let declared: u32 = latest(index, store, &sid, "tests_declared")?
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
-        if importers > 0 && declared == 0 && index.relations_to(&sid, "covers").is_empty() {
+        if importers > 0
+            && declared == 0
+            && twin::live_to(index, store, &sid, "covers")?.is_empty()
+        {
             score += importers * 3;
             reasons.push("untested hub".to_string());
         }
@@ -90,12 +106,21 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
         }
     }
 
-    // Doc signals: stale beats nonconforming; a doc can be both.
+    // Doc signals: stale beats nonconforming; a doc can be both. Severity
+    // follows the kind's rot policy — records murmur, living docs shout.
     let mut docs: BTreeMap<(String, String), (u32, Vec<String>)> = BTreeMap::new();
-    for (slug, kind, files) in &ins.stale_docs {
-        let e = docs.entry((slug.clone(), kind.clone())).or_default();
-        e.0 += 4 + files.len() as u32;
-        e.1.push(format!("stale: {} changed since", files.join(", ")));
+    for stale in &ins.stale_docs {
+        let e = docs.entry((stale.slug.clone(), stale.kind.clone())).or_default();
+        match stale.severity {
+            twin::Severity::Warn => {
+                e.0 += 4 + stale.changed.len() as u32;
+                e.1.push(format!("stale: {} changed since", stale.changed.join(", ")));
+            }
+            twin::Severity::Info => {
+                e.0 += 1;
+                e.1.push(format!("stale (info): {} changed since", stale.changed.join(", ")));
+            }
+        }
     }
     for (slug, kind, missing) in &ins.nonconforming {
         let e = docs.entry((slug.clone(), kind.clone())).or_default();
@@ -164,10 +189,11 @@ mod tests {
         replay(&store, &mut index).unwrap();
         let ranked = attend(&store, &index, "twin/app").unwrap();
         assert!(!ranked.is_empty());
-        // util.js: churn 3 (×3=9) + hub 2 (×2=4) + untested hub (2×3=6) = 19.
+        // Never slept: every edit is recent. util.js: churn 3 recent
+        // (3×4 + 3 = 15) + hub 2 (×2=4) + untested hub (2×3=6) = 25.
         assert_eq!(ranked[0].label, "web/util.js", "ranked: {ranked:?}");
-        assert_eq!(ranked[0].score, 19);
-        assert!(ranked[0].reasons.iter().any(|r| r == "churn 3"));
+        assert_eq!(ranked[0].score, 25);
+        assert!(ranked[0].reasons.iter().any(|r| r == "churn 3 (3 recent)"));
         assert!(ranked[0].reasons.iter().any(|r| r == "untested hub"));
         // The stale ADR appears with its reason.
         let doc = ranked.iter().find(|a| a.kind == "decision").expect("stale doc ranked");
@@ -187,5 +213,46 @@ mod tests {
             !ranked.iter().any(|a| a.label == "web/util.js"),
             "generated files drop out: {ranked:?}"
         );
+    }
+
+    #[test]
+    fn sleep_windows_churn_so_history_stops_outranking_the_present() {
+        let src = tempfile::tempdir().unwrap();
+        fs::create_dir_all(src.path().join("src")).unwrap();
+        fs::write(src.path().join("src/busy.rs"), "pub fn b() {}\n").unwrap();
+        fs::write(src.path().join("src/quiet.rs"), "pub fn q() {}\n").unwrap();
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = brain_store::Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        // busy.rs churns hard before the sleep.
+        for i in 0..6 {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            fs::write(src.path().join("src/busy.rs"), format!("pub fn b() {{ /* {i} */ }}\n"))
+                .unwrap();
+            refresh(&store, src.path(), "twin/app").unwrap();
+        }
+        crate::sleep::sleep(&store, "twin/app").unwrap();
+
+        // After the sleep, one small edit to quiet.rs outranks all of
+        // busy.rs's history: 1 recent (4) + lifetime 2 = 6 beats
+        // busy.rs's 0 recent + lifetime capped 7 = 7... so make it two.
+        for i in 0..2 {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            fs::write(src.path().join("src/quiet.rs"), format!("pub fn q() {{ /* {i} */ }}\n"))
+                .unwrap();
+            refresh(&store, src.path(), "twin/app").unwrap();
+        }
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+        let ranked = attend(&store, &index, "twin/app").unwrap();
+        let busy = ranked.iter().find(|a| a.label == "src/busy.rs").expect("busy ranked");
+        let quiet = ranked.iter().find(|a| a.label == "src/quiet.rs").expect("quiet ranked");
+        assert!(
+            quiet.score > busy.score,
+            "recent work outranks history: quiet {} vs busy {}",
+            quiet.score,
+            busy.score
+        );
+        assert!(busy.reasons.iter().any(|r| r.contains("(0 recent)")), "{:?}", busy.reasons);
     }
 }

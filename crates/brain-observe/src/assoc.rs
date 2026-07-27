@@ -55,23 +55,13 @@ impl AssocIndex {
                     }
                 }
             }
-            for rid in index.relations_from(&sid, "imports") {
-                if let Object::Relation { to, .. } = store.get(&rid)? {
-                    a.neighbors.entry(sid.clone()).or_default().insert(to.clone());
-                    a.neighbors.entry(to).or_default().insert(sid.clone());
-                }
+            for (_, to) in crate::twin::live_from(index, store, &sid, "imports")? {
+                a.neighbors.entry(sid.clone()).or_default().insert(to.clone());
+                a.neighbors.entry(to).or_default().insert(sid.clone());
             }
         }
         // Documents of every kind that carries mentions.
-        let mut doc_kinds: Vec<String> = ["decision", "plan", "skill", "agent_config"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        for kind in crate::templates::by_kind(store, index)?.keys() {
-            if !doc_kinds.contains(kind) && kind != "feature" {
-                doc_kinds.push(kind.clone());
-            }
-        }
+        let doc_kinds = crate::kinds::doc_kinds(store, index)?;
         for kind in &doc_kinds {
             let mut seen = BTreeSet::new();
             for node in index.entities_by_kind(kind) {
@@ -84,10 +74,8 @@ impl AssocIndex {
                 let slug = labels.get("slug").cloned().unwrap_or_default();
                 a.labels.insert(id.clone(), slug);
                 let mut targets = Vec::new();
-                for rid in index.relations_from(&id, "mentions") {
-                    if let Object::Relation { to, .. } = store.get(&rid)? {
-                        targets.push(to);
-                    }
+                for (_, to) in crate::twin::live_from(index, store, &id, "mentions")? {
+                    targets.push(to);
                 }
                 if !targets.is_empty() {
                     a.doc_mentions.insert(id.clone(), targets);

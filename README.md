@@ -64,9 +64,18 @@ cargo run -p brain -- twin tests twin/self     # frameworks, covers-relations, f
 cargo run -p brain -- twin stale twin/self     # docs invalidated by later file changes
 brain docs generate            # regenerate docs: md + screenshots + narrated screencast
 cargo run -p brain -- twin insights twin/self   # churn, hubs, growth, notes, decisions
+cargo run -p brain -- wake twin/self            # orientation: last sleep, the delta since, attention, stale, in-flight
 cargo run -p brain -- attend twin/self          # attention: what matters now, ranked with reasons
 cargo run -p brain -- related twin/self/crates/brain-observe/src/twin.rs  # association, with why
 cargo run -p brain -- sleep twin/self           # consolidation: distill the session into memory
+cargo run -p brain -- plan done twin/self <slug>   # lifecycle: finished plans stop rotting and leave the lists
+cargo run -p brain -- adr ack twin/self <slug>     # reviewed, still accurate — staleness clock reset, file untouched
+cargo run -p brain -- artifact new twin/self plan sprint --title "Sprint"  # graph-first: renders a READ-ONLY projection
+cargo run -p brain -- asset add docs/assets/flow.svg --prefix twin/self --for plan/sprint --depicts src/ui.rs
+cargo run -p brain -- instructions generate     # one guardrail block into CLAUDE.md + AGENTS.md, from the registry
+cargo run -p brain -- tidy . --prefix twin/self # drifted projections, retired files, legacy assets — fixes are governed
+cargo run -p brain -- template fitness          # which contract versions work: conformance, outcomes, verdicts
+cargo run -p brain -- hook install --tests --gate  # opt-in pre-commit: refuse hand-edited projections + contract violations
 cargo run -p brain -- change propose twin/self <path> --from <file> --reason "why"  # governed mode
 cargo run -p brain -- change apply twin/self <slug> --cap fs   # Intent -> write -> Receipt -> verify
 cargo run -p brain -- watch . --prefix twin/self --interval 60   # continuous loop, built in

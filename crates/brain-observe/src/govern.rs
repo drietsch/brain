@@ -94,6 +94,65 @@ pub fn propose(
     Ok(Proposal { slug, sid, before_b3, after_b3, wrote: !existed })
 }
 
+/// Propose a governed move (tidy's archive path): rename `from_rel` to
+/// `to_rel`. Works for files and whole directories (prototypes). The
+/// before-hash is recorded for files so the trail stays verifiable;
+/// reverting renames back.
+pub fn propose_move(
+    store: &Store,
+    root: &Path,
+    prefix: &str,
+    from_rel: &str,
+    to_rel: &str,
+    reason: &str,
+) -> Result<Proposal, StoreError> {
+    let mut index = MemIndex::new();
+    replay(store, &mut index)?;
+    let now = now_ms();
+    let key = blake3::hash(format!("{from_rel}->{to_rel}").as_bytes()).to_hex().to_string();
+    let stem = from_rel.rsplit('/').next().unwrap_or(from_rel);
+    let slug = format!("{}-mv-{}", stem.to_lowercase(), &key[..8]);
+    let sid = change_sid(prefix, &slug);
+    let existed = latest(&index, store, &sid, "status")?.is_some();
+
+    let before_b3 = fs::read(root.join(from_rel))
+        .ok()
+        .map(|b| blake3::hash(&b).to_hex().to_string());
+
+    let mut labels = BTreeMap::new();
+    labels.insert("prefix".to_string(), prefix.to_string());
+    labels.insert("slug".to_string(), slug.clone());
+    labels.insert("target".to_string(), from_rel.to_string());
+    labels.insert("title".to_string(), reason.to_string());
+    store.put(&Object::Entity { id: sid.clone(), entity_kind: "change".to_string(), labels })?;
+
+    let mut props: Vec<(&str, &str)> =
+        vec![("target", from_rel), ("move_to", to_rel), ("reason", reason)];
+    let before_hash = before_b3.clone().unwrap_or_else(|| "dir".to_string());
+    props.push(("before_b3", &before_hash));
+    for (prop, value) in props {
+        if latest(&index, store, &sid, prop)?.as_deref() != Some(value) {
+            observe_src(store, &sid, prop, value, "govern", now)?;
+        }
+    }
+    if !existed {
+        observe_src(store, &sid, "status", "proposed", "govern", now)?;
+    }
+    let mut written = BTreeSet::new();
+    let file_sid = StableId::derive(&["file", from_rel]);
+    relate(store, &index, &mut written, &sid, "changes", &file_sid, now)?;
+    let repo_sid = StableId::derive(&["repo", prefix]);
+    relate(store, &index, &mut written, &sid, "concerns", &repo_sid, now)?;
+
+    Ok(Proposal {
+        slug,
+        sid,
+        before_b3,
+        after_b3: "moved".to_string(),
+        wrote: !existed,
+    })
+}
+
 #[derive(Debug)]
 pub struct Applied {
     pub intent: NodeId,
@@ -152,7 +211,16 @@ fn perform(
     }
     let target = latest(&index, store, &sid, "target")?
         .ok_or_else(|| StoreError::Io(std::io::Error::other("change has no target")))?;
-    let (action, payload) = if reverting {
+    let move_to = latest(&index, store, &sid, "move_to")?;
+    let (action, payload) = if let Some(dest) = &move_to {
+        // A governed move: apply renames target -> dest, revert renames back.
+        let route = if reverting {
+            format!("{dest}\u{0}{target}")
+        } else {
+            format!("{target}\u{0}{dest}")
+        };
+        ("fs/rename", Some(route))
+    } else if reverting {
         match latest(&index, store, &sid, "before_content")? {
             Some(before) => ("fs/write", Some(before)),
             None => ("fs/remove", None), // the change created the file
@@ -179,6 +247,17 @@ fn perform(
     // 2. The effect.
     let path = root.join(&target);
     let result: Result<(), std::io::Error> = (|| {
+        if action == "fs/rename" {
+            let route = payload.as_deref().unwrap_or_default();
+            let (from, to) = route
+                .split_once('\u{0}')
+                .ok_or_else(|| std::io::Error::other("malformed move route"))?;
+            let to_path = root.join(to);
+            if let Some(parent) = to_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            return fs::rename(root.join(from), &to_path);
+        }
         match &payload {
             Some(content) => {
                 if let Some(parent) = path.parent() {

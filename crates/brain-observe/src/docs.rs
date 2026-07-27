@@ -25,7 +25,8 @@ pub struct DocMeta {
     pub kind: DocKind,
     pub slug: String,
     pub title: String,
-    /// Decisions only; `None` for plans.
+    /// Decisions default to "recorded"; plans carry a status only when the
+    /// document declares one (`Status: done` marks a plan finished).
     pub status: Option<String>,
     /// Slug of a decision this one supersedes, when declared.
     pub supersedes: Option<String>,
@@ -53,10 +54,15 @@ pub fn path_kind(rel_path: &str) -> Option<(DocKind, String)> {
     Some((kind, slug_of(rel_path)))
 }
 
-/// Filename stem, lowercased: the document's stable identity within a prefix.
+/// Filename stem (any extension stripped), lowercased: the document's
+/// stable identity within a prefix.
 pub fn slug_of(path: &str) -> String {
     let file = path.rsplit('/').next().unwrap_or(path);
-    file.strip_suffix(".md").unwrap_or(file).to_lowercase()
+    let stem = match file.rsplit_once('.') {
+        Some((s, _)) if !s.is_empty() => s,
+        _ => file,
+    };
+    stem.to_lowercase()
 }
 
 /// Parse a document whose kind was detected from its path.
@@ -126,7 +132,7 @@ pub fn parse_content(
                     .or(status)
                     .unwrap_or_else(|| "recorded".to_string()),
             ),
-            DocKind::Plan => None,
+            DocKind::Plan => status_override.map(|s| s.to_lowercase()).or(status),
         },
         supersedes,
     }
@@ -178,10 +184,12 @@ mod tests {
         assert_eq!(meta.title, "adr-004-untitled");
         assert_eq!(meta.status.as_deref(), Some("recorded"));
 
-        // Plans never carry status.
+        // Plans carry a status only when the document declares one.
         let meta = parse_doc("docs/plans/p1.md", "# The Plan\nStatus: draft\n").unwrap();
-        assert_eq!(meta.status, None);
+        assert_eq!(meta.status.as_deref(), Some("draft"));
         assert_eq!(meta.title, "The Plan");
+        let meta = parse_doc("docs/plans/p2.md", "# Quiet Plan\n").unwrap();
+        assert_eq!(meta.status, None, "no default status for plans");
     }
 
     #[test]

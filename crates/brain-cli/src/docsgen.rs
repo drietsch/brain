@@ -44,6 +44,9 @@ pub fn cmd_docs(args: &[String], open_store: impl Fn() -> Result<Store, String>)
 fn generate(store: &Store, dir: &Path, prefix: &str, out: &Path) -> Result<(), String> {
     twin::refresh(store, dir, prefix).map_err(|e| e.to_string())?;
     fs::create_dir_all(out.join("img")).map_err(|e| e.to_string())?;
+    // The previous generation armed the read-only bit; the regenerator is
+    // the one writer allowed to lower it.
+    set_tree_writable(out);
 
     // ---- section outputs: the binary re-invokes itself, so every section
     // is exactly what a user would see, renderers included.
@@ -148,22 +151,51 @@ fn generate(store: &Store, dir: &Path, prefix: &str, out: &Path) -> Result<(), S
     // The man page is a projection of the same registry as usage().
     fs::write(out.join("brain.1"), crate::manual::man_page()).map_err(|e| e.to_string())?;
 
-    // The artifacts become part of the twin — marked as generated, so
-    // attention and churn know their edits are projections, not work.
+    // The artifacts become part of the twin under the full projection
+    // contract: generated + expected_b3 + read-only bit, and screenshots
+    // keep their provenance (which command produced them) in the graph
+    // instead of a temp file that used to be deleted.
     twin::refresh(store, dir, prefix).map_err(|e| e.to_string())?;
-    mark_generated(store, dir, out).map_err(|e| e.to_string())?;
+    let provenance: Vec<(String, String)> = captured
+        .iter()
+        .map(|(id, cmd, _)| (format!("img/{id}.png"), cmd.clone()))
+        .collect();
+    record_projection(store, dir, out, &provenance).map_err(|e| e.to_string())?;
     println!(
-        "docs regenerated under {} (projection of {prefix}; do not edit)",
+        "docs regenerated under {} (read-only projection of {prefix}; edit the graph, not these files)",
         out.display()
     );
     Ok(())
 }
 
-/// Guarded `generated=true` observations on every artifact under `out`.
-fn mark_generated(
+/// Drop the read-only bit across a tree so regeneration can write.
+fn set_tree_writable(out: &Path) {
+    let mut stack = vec![out.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&d) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if let Ok(meta) = fs::metadata(&path) {
+                let mut perms = meta.permissions();
+                if perms.readonly() {
+                    perms.set_readonly(false);
+                    let _ = fs::set_permissions(&path, perms);
+                }
+            }
+        }
+    }
+}
+
+/// The projection contract for every artifact under `out`: guarded
+/// `generated=true` + `expected_b3` observations, the read-only bit, and
+/// `rendered_from` provenance for captured screenshots.
+fn record_projection(
     store: &Store,
     dir: &Path,
     out: &Path,
+    provenance: &[(String, String)],
 ) -> Result<(), brain_store::StoreError> {
     use brain_index::{replay, Index as _, MemIndex};
     let mut index = MemIndex::new();
@@ -185,14 +217,39 @@ fn mark_generated(
             if index.entity_nodes(&sid).is_empty() {
                 continue; // not a twinned extension; nothing to mark
             }
-            if twin::latest(&index, store, &sid, "generated")?.as_deref() != Some("true") {
+            let observe = |prop: &str, value: &str| -> Result<(), brain_store::StoreError> {
                 store.put(&brain_core::object::Object::Observation {
-                    subject: sid,
-                    property: "generated".to_string(),
-                    value: "true".to_string(),
+                    subject: sid.clone(),
+                    property: prop.to_string(),
+                    value: value.to_string(),
                     source: "docsgen".to_string(),
                     observed_at_ms: now,
                 })?;
+                Ok(())
+            };
+            if twin::latest(&index, store, &sid, "generated")?.as_deref() != Some("true") {
+                observe("generated", "true")?;
+            }
+            let hash = blake3::hash(&std::fs::read(&path)?).to_hex().to_string();
+            if twin::latest(&index, store, &sid, "expected_b3")?.as_deref()
+                != Some(hash.as_str())
+            {
+                observe("expected_b3", &hash)?;
+            }
+            let out_rel = path.strip_prefix(out).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+            if let Some((_, cmd)) = provenance.iter().find(|(p, _)| *p == out_rel) {
+                if twin::latest(&index, store, &sid, "rendered_from")?.as_deref()
+                    != Some(cmd.as_str())
+                {
+                    observe("rendered_from", cmd)?;
+                }
+            }
+            if let Ok(meta) = fs::metadata(&path) {
+                let mut perms = meta.permissions();
+                if !perms.readonly() {
+                    perms.set_readonly(true);
+                    let _ = fs::set_permissions(&path, perms);
+                }
             }
         }
     }
@@ -238,17 +295,24 @@ pub fn narrate(store: &Store, prefix: &str) -> Result<String, String> {
     }
     if !ins.decisions.is_empty() {
         lines.push(format!(
-            "{} architecture decisions are recorded, each linked to the files it concerns.",
+            "{} architecture decisions are active, each linked to the files it concerns.",
             ins.decisions.len()
         ));
     }
+    let stale_warns = ins
+        .stale_docs
+        .iter()
+        .filter(|d| d.severity == brain_observe::twin::Severity::Warn)
+        .count();
     if ins.stale_docs.is_empty() {
         lines.push(
             "No documentation is stale: every doc is newer than the files it mentions.".to_string(),
         );
+    } else if stale_warns > 0 {
+        lines.push(format!("{stale_warns} document(s) have gone stale and need attention."));
     } else {
         lines.push(format!(
-            "{} document(s) have gone stale and need attention.",
+            "{} record(s) quietly aged behind the code they describe.",
             ins.stale_docs.len()
         ));
     }

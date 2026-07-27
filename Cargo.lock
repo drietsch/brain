@@ -38,6 +38,7 @@ dependencies = [
 name = "brain"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "brain-core",
  "brain-index",
  "brain-observe",

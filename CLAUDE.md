@@ -18,6 +18,7 @@ only below the semantic line. Read `README.md` first, then
 
 ```bash
 target/debug/brain twin refresh . --prefix twin/self
+target/debug/brain wake twin/self              # the whole present: last sleep, delta, attention, stale, in-flight
 target/debug/brain attend twin/self            # what matters now, ranked
 target/debug/brain twin insights twin/self     # churn, hubs, decisions, plans, last sleep
 target/debug/brain notes twin/self             # what previous sessions learned
@@ -43,8 +44,39 @@ target/debug/brain notes twin/self             # what previous sessions learned
   refresh captures it.
 - After a test run: `cargo test 2>&1 | brain testrun import - --prefix
   twin/self` — protocols belong in the graph.
-- Before finishing: `brain twin stale twin/self` (fix rotted docs) and
+- Before finishing: `brain twin stale twin/self` (fix `[warn]` rot; a doc
+  that is still accurate gets `brain adr|plan|artifact ack` instead of a
+  touch), `brain plan done <prefix> <slug>` for finished plans, and
   `brain docs generate` (docs/generated/ is a
   projection — regenerate, never edit).
 - Leave `brain note` breadcrumbs, then `brain sleep twin/self` — the next
   session wakes to the consolidated summary instead of raw history.
+
+<!-- brain:begin instructions — generated from the kind registry by `brain instructions generate`; edit rules with `brain template set`, never here -->
+
+## Brain guardrails
+
+Orient with `brain wake twin/self` before working; consolidate with `brain sleep twin/self` before finishing.
+
+Artifact kinds (where truth lives, how to author):
+
+| kind | placement | lives at | author via | requires | enforcement |
+|---|---|---|---|---|---|
+| asset | file_first | docs/assets/** | write the file; the twin captures it |  | advisory |
+| capability_matrix | projection | docs/brain/capability-matrix/{slug}.md | rendered query — never authored |  | advisory |
+| decision | file_first | docs/adr/*.md | write the file; the twin captures it | title, status | advisory |
+| doc | file_first | README.md, docs/*.md | write the file; the twin captures it | title | advisory |
+| plan | graph_first | docs/brain/plans/{slug}.md | `brain artifact new twin/self plan <slug>` | title | advisory |
+| prototype | file_first | prototypes/** | write the file; the twin captures it | title | advisory |
+| runbook | file_first | docs/runbooks/** | write the file; the twin captures it | title | advisory |
+| task_list | graph_first | docs/brain/task-lists/{slug}.md | `brain artifact new twin/self task_list <slug>` | title | advisory |
+
+Rules:
+
+- Files under `docs/brain/` are **read-only projections** of the graph. Edit through `brain artifact edit twin/self <kind> <slug>`, never the file.
+- Finished plans: `brain plan done twin/self <slug>`. A doc reviewed and still accurate: `brain adr|plan|artifact ack` (resets its staleness clock).
+- A wrong or outdated link: `brain relation retract <from> <predicate> <to>`.
+- Binary assets (screenshots, HTML templates): `brain asset add <file> --prefix twin/self --for <kind>/<slug> --depicts <path>` — declared links are their staleness story.
+- Enforced kinds refuse nonconforming writes (exit 3) and, with the pre-commit gate, block commits; the error names the fix.
+
+<!-- brain:end instructions -->

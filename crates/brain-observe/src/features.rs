@@ -59,24 +59,40 @@ pub fn add(
 }
 
 /// Resolve a link target name to an existing entity: a twinned file path,
-/// or a decision/plan/skill/agent_config/feature slug. Returns the entity's
-/// stable id and its kind.
+/// the slug of any registered artifact kind (built-in or taught), or a
+/// change/test entity. Returns the entity's stable id and its kind.
+/// Built-in kinds are tried first so historical resolution order holds.
 pub fn resolve_target(
+    store: &Store,
     index: &MemIndex,
     prefix: &str,
     name: &str,
-) -> Option<(StableId, &'static str)> {
-    let candidates: [(StableId, &'static str); 6] = [
-        (StableId::derive(&["file", name]), "file"),
-        (StableId::derive(&["decision", prefix, name]), "decision"),
-        (StableId::derive(&["plan", prefix, name]), "plan"),
-        (StableId::derive(&["skill", prefix, name]), "skill"),
-        (StableId::derive(&["agent_config", prefix, name]), "agent_config"),
-        (StableId::derive(&["feature", prefix, name]), "feature"),
-    ];
-    candidates
-        .into_iter()
-        .find(|(sid, _)| !index.entity_nodes(sid).is_empty())
+) -> Result<Option<(StableId, String)>, StoreError> {
+    let mut kinds: Vec<String> =
+        ["decision", "plan", "skill", "agent_config", "feature"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+    for kind in crate::kinds::registry(store, index)?.keys() {
+        if !kinds.contains(kind) {
+            kinds.push(kind.clone());
+        }
+    }
+    kinds.extend(["change", "test_run", "test_case"].iter().map(|s| s.to_string()));
+
+    let file = StableId::derive(&["file", name]);
+    if !index.entity_nodes(&file).is_empty() {
+        return Ok(Some((file, "file".to_string())));
+    }
+    for kind in kinds {
+        // test_case entities derive under "test", not their entity kind.
+        let derive_kind = if kind == "test_case" { "test" } else { &kind };
+        let sid = StableId::derive(&[derive_kind, prefix, name]);
+        if !index.entity_nodes(&sid).is_empty() {
+            return Ok(Some((sid, kind)));
+        }
+    }
+    Ok(None)
 }
 
 /// Link a feature to a target entity by predicate. Guarded: an existing
@@ -135,10 +151,8 @@ pub fn evaluate(
     let mut checks = Vec::new();
     for predicate in dod(store, index)? {
         let mut targets: BTreeSet<StableId> = BTreeSet::new();
-        for id in index.relations_from(&sid, &predicate) {
-            if let Object::Relation { to, .. } = store.get(&id)? {
-                targets.insert(to);
-            }
+        for (_, to) in crate::twin::live_from(index, store, &sid, &predicate)? {
+            targets.insert(to);
         }
         checks.push(DoneCheck { predicate, count: targets.len() });
     }

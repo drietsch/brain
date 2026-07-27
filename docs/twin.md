@@ -406,27 +406,41 @@ exact memory it thinks against):
 | Organ | Mechanism |
 |---|---|
 | Senses | the observers: files, symbols, tests, protocols, git |
-| Reflexes | git hooks — stimulus → response, fail-open |
+| Reflexes | git hooks — stimulus → response, fail-open (plus the opt-in pre-commit gate, ADR-020) |
 | Long-term memory | the immutable graph and its timelines |
-| Learning | graph-defined capture rules |
-| **Attention** | `brain attend <prefix>` — one ranked list of what matters now |
+| Learning | the kind registry + capture rules (ADR-017), measured by template fitness (ADR-022) |
+| **Orientation** | `brain wake <prefix>` — last sleep, the delta since, attention, warn-stale, in-flight work, coherence |
+| **Attention** | `brain attend <prefix>` — one ranked list of what matters now, recency-weighted by the sleep window |
 | **Consolidation** | `brain sleep <prefix>` — distill history into durable memory |
 | **Association** | `brain related <name>` — what is related, and why |
+| **Hygiene** | `brain tidy <prefix>` — drifted projections, retired artifacts, legacy assets; fixes are governed changes (ADR-021) |
 
 ```bash
-brain attend twin/app          # churn × blast-radius × untested × failing × stale
+brain wake twin/app            # one command, the whole present (~40 lines)
+brain attend twin/app          # recent churn × blast-radius × untested × failing × warn-stale
 brain related twin/app/src/checkout.rs   # "changed together 6×", "both mentioned by adr-007"
+brain tidy twin-app-dir --prefix twin/app   # what has outlived its purpose, and the fix for each
 brain sleep twin/app           # writes session_summary + per-file memory digests
 ```
 
 Attention is computed at query time and never stored (salience is a
-judgment about now). Sleep only ever *adds* — per-file `memory` digests
-and a repo `session_summary` that insights shows as "last sleep", so a
-long-lived twin orients from consolidated experience instead of replaying
-raw history. Association lives at the Index seam: derived, disposable,
-rebuildable — fuzzy recall that can never become a second source of
-truth. The intended rhythm: **wake with `attend`, work, `sleep` before
-you go.**
+judgment about now), and its churn signal is windowed by the last sleep
+(`consolidated_until`, ADR-016): the present dominates, history is
+capped. Sleep only ever *adds* — per-file `memory` digests and a repo
+`session_summary` that wake reads back — so a long-lived twin orients
+from consolidated experience instead of replaying raw history.
+Association lives at the Index seam: derived, disposable, rebuildable —
+fuzzy recall that can never become a second source of truth.
+
+Currency is first-class (ADR-013/014/015): structure the refresh no
+longer observes is retracted (edge tombstones — hubs and blast radius
+track reality, not history), superseded and finished artifacts leave
+every list (`brain plan done`, lifecycle derivation), staleness carries
+per-kind severity and can be acknowledged (`brain adr ack` — reviewed,
+still accurate, file untouched). Graph-first kinds render **read-only
+projections** under docs/brain/ (ADR-019): marker, chmod, and
+`expected_b3` detection keep files views of the graph, never rivals of
+it. The intended rhythm: **`wake`, work, `tidy`, `sleep`.**
 
 ## Governed mode — the motor system
 

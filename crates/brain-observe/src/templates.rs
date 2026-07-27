@@ -29,11 +29,20 @@ pub struct TemplateDef {
     pub requires: &'static str,
     /// Markdown scaffold; `{{title}}` is filled at instantiation.
     pub content: &'static str,
+    /// Additional seeded observations — the rest of the kind record:
+    /// `capture` (globs), `fields` (extraction DSL), `placement`
+    /// (graph_first|file_first|projection), `home` (where files of this
+    /// kind belong), `project_to` (render path, `{slug}` filled), `parser`
+    /// (doc.decision|doc.plan|agent|fields), `enforce`
+    /// (advisory|enforced), `rot` (none|info|warn), `links`, `extensions`.
+    /// Only the non-defaults a kind needs.
+    pub extra: &'static [(&'static str, &'static str)],
 }
 
-/// The constitutional defaults, seeded at init and overridable per store
-/// (a re-seed after local edits writes nothing that would regress them —
-/// every observation is guarded, and newer local values win via `latest`).
+/// The constitutional defaults, seeded at init and overridable per store.
+/// Seeding follows the upgrade rule: a property is written when absent, or
+/// when its latest value was itself seeded and the shipped default changed
+/// — a store-local (non-seed) edit is never superseded.
 pub const DEFAULTS: &[TemplateDef] = &[
     TemplateDef {
         slug: "adr",
@@ -41,6 +50,12 @@ pub const DEFAULTS: &[TemplateDef] = &[
         applies_to: "decision",
         requires: "title,status",
         content: "# {{title}}\n\nStatus: proposed\n\n## Context\n\nWhat forces are at play?\n\n## Decision\n\nWhat was decided, stated actively.\n\n## Consequences\n\nWhat becomes easier, what becomes harder.\n",
+        extra: &[
+            ("placement", "file_first"),
+            ("home", "docs/adr/*.md"),
+            ("parser", "doc.decision"),
+            ("rot", "info"),
+        ],
     },
     TemplateDef {
         slug: "plan",
@@ -48,6 +63,12 @@ pub const DEFAULTS: &[TemplateDef] = &[
         applies_to: "plan",
         requires: "title",
         content: "# {{title}}\n\n## Context\n\nWhy this work exists.\n\n## Design\n\nWhat will be built, and how.\n\n## Verification\n\nHow we will know it worked.\n",
+        extra: &[
+            ("placement", "graph_first"),
+            ("project_to", "docs/brain/plans/{slug}.md"),
+            ("parser", "doc.plan"),
+            ("rot", "info"),
+        ],
     },
     TemplateDef {
         slug: "skill",
@@ -55,6 +76,7 @@ pub const DEFAULTS: &[TemplateDef] = &[
         applies_to: "skill",
         requires: "name,description",
         content: "---\nname: {{title}}\ndescription: When and why an agent should reach for this skill.\n---\n\n# {{title}}\n\nSteps, commands, and the judgment calls that matter.\n",
+        extra: &[("placement", "file_first"), ("parser", "agent"), ("rot", "warn")],
     },
     TemplateDef {
         slug: "dod",
@@ -62,6 +84,83 @@ pub const DEFAULTS: &[TemplateDef] = &[
         applies_to: "feature",
         requires: "implemented_by,tested_by,decided_by,documented_in",
         content: "# Definition of done\n\nA feature counts as done when the graph shows, for its entity:\n\n- `implemented_by` -> at least one source file\n- `tested_by` -> at least one test file\n- `decided_by` -> a decision record (ADR)\n- `documented_in` -> documentation\n\nEvaluated by `brain done <prefix> <slug>`; the matrix is a rendered query,\nnot a spreadsheet.\n",
+        extra: &[("placement", "graph_first")],
+    },
+    TemplateDef {
+        slug: "doc",
+        title: "Narrative document",
+        applies_to: "doc",
+        requires: "title",
+        content: "# {{title}}\n\nWhat a reader needs to know, and where the code disagrees with it.\n",
+        extra: &[
+            ("capture", "README.md,docs/*.md"),
+            ("fields", "title=heading"),
+            ("placement", "file_first"),
+            ("home", "README.md,docs/*.md"),
+            ("rot", "warn"),
+        ],
+    },
+    TemplateDef {
+        slug: "runbook",
+        title: "Runbook",
+        applies_to: "runbook",
+        requires: "title",
+        content: "# {{title}}\n\nService: \n\n## Steps\n\nNumbered, executable, honest about the judgment calls.\n",
+        extra: &[
+            ("capture", "docs/runbooks/**/*.md"),
+            ("fields", "title=heading, service=line"),
+            ("placement", "file_first"),
+            ("home", "docs/runbooks/**"),
+            ("rot", "warn"),
+        ],
+    },
+    TemplateDef {
+        slug: "task-list",
+        title: "Task list",
+        applies_to: "task_list",
+        requires: "title",
+        content: "# {{title}}\n\n- [ ] first task\n",
+        extra: &[
+            ("capture", "docs/brain/task-lists/*.md"),
+            ("fields", "title=heading"),
+            ("placement", "graph_first"),
+            ("project_to", "docs/brain/task-lists/{slug}.md"),
+            ("rot", "info"),
+        ],
+    },
+    TemplateDef {
+        slug: "capability-matrix",
+        title: "Capability matrix",
+        applies_to: "capability_matrix",
+        requires: "",
+        content: "",
+        extra: &[
+            ("placement", "projection"),
+            ("project_to", "docs/brain/capability-matrix/{slug}.md"),
+            ("rot", "none"),
+        ],
+    },
+    TemplateDef {
+        slug: "asset",
+        title: "Asset",
+        applies_to: "asset",
+        requires: "",
+        content: "",
+        extra: &[("placement", "file_first"), ("home", "docs/assets/**"), ("rot", "warn")],
+    },
+    TemplateDef {
+        slug: "prototype",
+        title: "Prototype",
+        applies_to: "prototype",
+        requires: "title",
+        content: "# {{title}}\n\nWhat this spike explores, and what would make it a keeper.\n",
+        extra: &[
+            ("capture", "prototypes/**/README.md"),
+            ("fields", "title=heading"),
+            ("placement", "file_first"),
+            ("home", "prototypes/**"),
+            ("rot", "info"),
+        ],
     },
 ];
 
@@ -69,9 +168,17 @@ pub fn template_sid(slug: &str) -> StableId {
     StableId::derive(&["template", slug])
 }
 
-/// Write the default templates into the graph (guarded: idempotent, and a
-/// locally-edited template is not overwritten unless the default text
-/// itself is what changed). Binds each under `brain/templates/<slug>`.
+/// The template version id: content-addressed over the contract (what is
+/// required plus the scaffold). Every captured artifact records the
+/// `contract_b3` that judged it, so template fitness can compare versions.
+pub fn contract_b3(requires: &str, content: &str) -> String {
+    blake3::hash(format!("{requires}\n---\n{content}").as_bytes()).to_hex().to_string()
+}
+
+/// Write the default templates into the graph. Upgrade rule per property:
+/// write when absent, or when the latest value was itself seeded and the
+/// shipped default changed — a store-local (non-seed) edit is never
+/// superseded. Binds each under `brain/templates/<slug>`.
 pub fn seed(store: &Store) -> Result<usize, StoreError> {
     let mut index = MemIndex::new();
     replay(store, &mut index)?;
@@ -89,17 +196,36 @@ pub fn seed(store: &Store) -> Result<usize, StoreError> {
             entity_kind: "template".to_string(),
             labels,
         })?;
-        for (prop, value) in [
+        let base = [
             ("content", def.content),
             ("requires", def.requires),
             ("applies_to", def.applies_to),
             ("title", def.title),
-        ] {
-            if latest(&index, store, &sid, prop)?.is_none() {
+        ];
+        let mut effective: BTreeMap<&str, String> = BTreeMap::new();
+        for (prop, value) in base.iter().chain(def.extra.iter()) {
+            let current = crate::twin::latest_with_source(&index, store, &sid, prop)?;
+            let upgrade = match &current {
+                None => !value.is_empty(),
+                Some((_, cur, source)) => source == "seed" && cur != *value,
+            };
+            if upgrade {
                 observe_src(store, &sid, prop, value, "seed", now)?;
+                effective.insert(prop, value.to_string());
                 written += 1;
+            } else {
+                effective.insert(prop, current.map(|(_, v, _)| v).unwrap_or_default());
             }
         }
+        written += stamp_contract(
+            store,
+            &index,
+            &sid,
+            effective.get("requires").map(String::as_str).unwrap_or(""),
+            effective.get("content").map(String::as_str).unwrap_or(""),
+            "seed",
+            now,
+        )?;
         let name = format!("brain/templates/{}", def.slug);
         if !ns.contains_key(&name) {
             bindings.push((name, node));
@@ -109,6 +235,26 @@ pub fn seed(store: &Store) -> Result<usize, StoreError> {
         store.bind_many(bindings)?;
     }
     Ok(written)
+}
+
+/// Guarded write of the template's `contract_b3`, computed from the
+/// definitive `requires` + `content` the caller just settled (the index
+/// may predate this run's writes, so the values are parameters, not reads).
+pub fn stamp_contract(
+    store: &Store,
+    index: &MemIndex,
+    sid: &StableId,
+    requires: &str,
+    content: &str,
+    source: &str,
+    now: u64,
+) -> Result<usize, StoreError> {
+    let hash = contract_b3(requires, content);
+    if latest(index, store, sid, "contract_b3")?.as_deref() != Some(hash.as_str()) {
+        observe_src(store, sid, "contract_b3", &hash, source, now)?;
+        return Ok(1);
+    }
+    Ok(0)
 }
 
 /// Map of `applies_to` kind -> (template sid, required fields), read from
@@ -335,6 +481,40 @@ mod tests {
     }
 
     #[test]
+    fn seed_upgrades_its_own_values_but_never_local_edits() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        seed(&store).unwrap();
+
+        // Simulate an older binary's seeded value: source "seed", stale text.
+        let sid = template_sid("plan");
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        observe_src(&store, &sid, "content", "# {{title}}\n\nOld scaffold.\n", "seed", now_ms())
+            .unwrap();
+        seed(&store).unwrap();
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+        let content = latest(&index, &store, &sid, "content").unwrap().unwrap();
+        assert!(content.contains("## Verification"), "seeded value upgraded: {content}");
+        // The contract hash tracks the upgrade.
+        let stamped = latest(&index, &store, &sid, "contract_b3").unwrap().unwrap();
+        assert_eq!(stamped, contract_b3("title", &content));
+
+        // A local (agent) edit is never superseded by re-seeding.
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        observe_src(&store, &sid, "content", "# {{title}}\n\nOurs.\n", "agent", now_ms())
+            .unwrap();
+        seed(&store).unwrap();
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+        assert_eq!(
+            latest(&index, &store, &sid, "content").unwrap().as_deref(),
+            Some("# {{title}}\n\nOurs.\n"),
+            "local edits survive"
+        );
+    }
+
+    #[test]
     fn glob_matches_segments_and_double_star() {
         assert!(glob_match("docs/runbooks/*.md", "docs/runbooks/deploy.md"));
         assert!(!glob_match("docs/runbooks/*.md", "docs/runbooks/sub/deploy.md"));
@@ -392,9 +572,18 @@ mod tests {
         let mut index = MemIndex::new();
         replay(&store, &mut index).unwrap();
         let rules = capture_rules(&store, &index).unwrap();
-        assert_eq!(rules.len(), 1, "only the runbook template captures: {rules:?}");
-        assert_eq!(rules[0].kind, "runbook");
-        assert!(rules[0].matches("docs/runbooks/deploy.md"));
+        // Defaults now ship capture rules (doc, runbook, task_list,
+        // prototype); the local override narrowed runbook's pattern and
+        // wins over the seeded default.
+        assert!(rules.len() >= 4, "{rules:?}");
+        let runbook = rules.iter().find(|r| r.kind == "runbook").unwrap();
+        assert_eq!(runbook.patterns, vec!["docs/runbooks/*.md".to_string()], "local edit wins");
+        assert!(runbook.matches("docs/runbooks/deploy.md"));
+        let doc = rules.iter().find(|r| r.kind == "doc").unwrap();
+        assert!(doc.matches("README.md"));
+        assert!(doc.matches("docs/architecture.md"));
+        assert!(!doc.matches("docs/adr/adr-001-x.md"), "* stays in one segment");
+        assert!(!doc.matches("docs/generated/tour.md"));
     }
 
     #[test]

@@ -101,7 +101,8 @@ pub fn backfill(
                     report.deletions += 1;
                 }
                 'R' => {
-                    // A rename is a deletion plus an appearance.
+                    // A rename is a deletion plus an appearance, joined by
+                    // a renamed_to edge so the identity trail survives.
                     if ingestible(&ev.path) {
                         ensure_entity(
                             store, prefix, &ev.path, &ns, &mut known_entities, &mut bindings,
@@ -112,6 +113,15 @@ pub fn backfill(
                         report.deletions += 1;
                     }
                     if let Some(new_path) = &ev.renamed_to {
+                        if ingestible(&ev.path) && ingestible(new_path) {
+                            store.put(&Object::Relation {
+                                from: StableId::derive(&["file", &ev.path]),
+                                predicate: "renamed_to".to_string(),
+                                to: StableId::derive(&["file", new_path]),
+                                source: "backfill".to_string(),
+                                observed_at_ms: commit.at_ms,
+                            })?;
+                        }
                         record_version(
                             store, root, prefix, &commit.hash, new_path, commit.at_ms, &ns,
                             &mut known_entities, &mut bindings, &mut deleted, &mut report,

@@ -22,24 +22,40 @@ pub struct SleepReport {
     pub wrote: bool,
 }
 
-pub fn sleep(store: &Store, prefix: &str) -> Result<SleepReport, StoreError> {
-    let mut index = MemIndex::new();
-    replay(store, &mut index)?;
-    let now = now_ms();
+/// What happened under a prefix since `since` — the shared delta both
+/// consolidation (`sleep`) and orientation (`wake`) are built from.
+#[derive(Debug, Default)]
+pub struct Delta {
+    pub added: Vec<String>,
+    pub changed: Vec<String>,
+    pub notes: usize,
+    pub doc_updates: usize,
+    pub new_runs: usize,
+    /// Rendered latest-run verdict ("; last run 88/88 ok"), or empty.
+    pub verdict: String,
+    /// Every present file with its content-version count (memory input).
+    pub file_versions: Vec<(StableId, u32)>,
+}
+
+impl Delta {
+    pub fn activity(&self) -> usize {
+        self.added.len() + self.changed.len() + self.doc_updates + self.new_runs + self.notes
+    }
+}
+
+/// Compute the delta since a watermark (normally `consolidated_until`).
+pub fn delta_since(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    since: u64,
+) -> Result<Delta, StoreError> {
+    let mut delta = Delta::default();
     let repo_sid = StableId::derive(&["repo", prefix]);
-    let since: u64 = latest(&index, store, &repo_sid, "consolidated_until")?
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
 
-    // ---- delta since the last sleep -------------------------------------
     let ns = store.namespace()?;
-    let mut added = 0usize;
-    let mut changed = 0usize;
-    let mut notes = 0usize;
-    let mut memories = 0usize;
-
     for (name, node) in &ns {
-        let Some(_) = name.strip_prefix(&format!("{prefix}/")) else { continue };
+        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
         let Ok(Object::Entity { id: sid, entity_kind, .. }) = store.get(node) else { continue };
         if entity_kind != "source_file" {
             continue;
@@ -55,50 +71,31 @@ pub fn sleep(store: &Store, prefix: &str) -> Result<SleepReport, StoreError> {
                         first_at = first_at.min(observed_at_ms);
                         newest_change = newest_change.max(observed_at_ms);
                     }
-                    "note" if observed_at_ms > since => notes += 1,
+                    "note" if observed_at_ms > since => delta.notes += 1,
                     _ => {}
                 }
             }
         }
         if newest_change > since {
             if first_at > since {
-                added += 1;
+                delta.added.push(rel.to_string());
             } else {
-                changed += 1;
+                delta.changed.push(rel.to_string());
             }
         }
-        // Memory digest for files with real history (≥3 versions).
-        if versions >= 3 {
-            let symbols = index.relations_from(&sid, "contains").len();
-            let declared: u32 = latest(&index, store, &sid, "tests_declared")?
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(0);
-            let tests = if declared > 0 { format!("; tests {declared}") } else { String::new() };
-            let digest = format!("v{versions}; {symbols} symbol(s){tests}");
-            if latest(&index, store, &sid, "memory")?.as_deref() != Some(digest.as_str()) {
-                observe_src(store, &sid, "memory", &digest, "sleep", now)?;
-                memories += 1;
-            }
-        }
+        delta.file_versions.push((sid, versions));
     }
     // Repo-level notes count toward the delta too.
     for oid in index.observations_of(&repo_sid) {
         if let Object::Observation { property, observed_at_ms, .. } = store.get(&oid)? {
             if property == "note" && observed_at_ms > since {
-                notes += 1;
+                delta.notes += 1;
             }
         }
     }
 
     // Documents (built-in and graph-taught kinds) updated since.
-    let mut doc_updates = 0usize;
-    let mut doc_kinds: Vec<String> =
-        ["decision", "plan", "skill", "agent_config"].iter().map(|s| s.to_string()).collect();
-    for kind in crate::templates::by_kind(store, &index)?.keys() {
-        if !doc_kinds.contains(kind) && kind != "feature" {
-            doc_kinds.push(kind.clone());
-        }
-    }
+    let doc_kinds = crate::kinds::doc_kinds(store, index)?;
     for kind in &doc_kinds {
         let mut seen = std::collections::BTreeSet::new();
         for node in index.entities_by_kind(kind) {
@@ -107,16 +104,16 @@ pub fn sleep(store: &Store, prefix: &str) -> Result<SleepReport, StoreError> {
             {
                 continue;
             }
-            if latest_at(&index, store, &id, "content")?.is_some_and(|(at, _)| at > since) {
-                doc_updates += 1;
+            if latest_at(index, store, &id, "content")?.is_some_and(|(at, _)| at > since) {
+                delta.doc_updates += 1;
             }
         }
     }
 
     // Test protocols imported since, and the latest verdict.
-    let runs = crate::testing::runs(store, &index, prefix)?;
-    let new_runs = runs.iter().filter(|(at, ..)| *at > since).count();
-    let verdict = runs
+    let runs = crate::testing::runs(store, index, prefix)?;
+    delta.new_runs = runs.iter().filter(|(at, ..)| *at > since).count();
+    delta.verdict = runs
         .first()
         .map(|(_, total, passed, failed, _)| {
             if *failed == 0 {
@@ -126,7 +123,39 @@ pub fn sleep(store: &Store, prefix: &str) -> Result<SleepReport, StoreError> {
             }
         })
         .unwrap_or_default();
+    Ok(delta)
+}
 
+pub fn sleep(store: &Store, prefix: &str) -> Result<SleepReport, StoreError> {
+    let mut index = MemIndex::new();
+    replay(store, &mut index)?;
+    let now = now_ms();
+    let repo_sid = StableId::derive(&["repo", prefix]);
+    let since: u64 = latest(&index, store, &repo_sid, "consolidated_until")?
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+
+    let delta = delta_since(store, &index, prefix, since)?;
+
+    // Memory digest for files with real history (≥3 versions).
+    let mut memories = 0usize;
+    for (sid, versions) in &delta.file_versions {
+        if *versions >= 3 {
+            let symbols = crate::twin::live_from(&index, store, sid, "contains")?.len();
+            let declared: u32 = latest(&index, store, sid, "tests_declared")?
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+            let tests = if declared > 0 { format!("; tests {declared}") } else { String::new() };
+            let digest = format!("v{versions}; {symbols} symbol(s){tests}");
+            if latest(&index, store, sid, "memory")?.as_deref() != Some(digest.as_str()) {
+                observe_src(store, sid, "memory", &digest, "sleep", now)?;
+                memories += 1;
+            }
+        }
+    }
+
+    let (added, changed) = (delta.added.len(), delta.changed.len());
+    let Delta { notes, doc_updates, new_runs, verdict, .. } = delta;
     let activity = added + changed + doc_updates + new_runs + notes + memories;
     if activity == 0 {
         return Ok(SleepReport {

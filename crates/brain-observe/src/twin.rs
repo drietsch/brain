@@ -11,7 +11,6 @@
 //! observation timeline, and "deleted" is itself just an observation.
 
 use crate::agents::{self, AgentDoc};
-use crate::collect_files;
 use crate::docs::{self, DocMeta};
 use crate::symbols;
 use crate::testing;
@@ -34,6 +33,8 @@ pub struct TwinReport {
     pub symbols: usize,
     /// Relations written this run (refresh only).
     pub relations: usize,
+    /// Edges retracted this run: structure the pass no longer observed.
+    pub retracted: usize,
     /// Decision/plan documents captured this run (refresh only): rel paths.
     pub docs: Vec<String>,
 }
@@ -69,8 +70,36 @@ fn run(
     let now = now_ms();
     let mut report = TwinReport::default();
 
+    // The merged kind registry (compiled defaults ⊔ graph observations):
+    // its capture rules route paths to kinds — the store teaching itself
+    // new artifact types with no code change, and the shipped kinds
+    // working before any seed.
+    let registry = crate::kinds::registry(store, &index)?;
+    let rules = crate::kinds::capture_rules(&registry);
+
+    // Runtime-taught ingestion: repo-level extensions apply everywhere;
+    // kind-level extensions only where that kind's globs reach.
+    let mut extra = crate::ExtraIngest::default();
+    let repo_sid_early = StableId::derive(&["repo", prefix]);
+    if let Some(v) = latest(&index, store, &repo_sid_early, "ingest_extensions")? {
+        extra
+            .repo_exts
+            .extend(v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string));
+    }
+    for def in registry.values() {
+        if !def.extensions.is_empty() {
+            let mut globs = def.capture.clone();
+            globs.extend(def.home.iter().cloned());
+            if !globs.is_empty() {
+                extra
+                    .kind_rules
+                    .push((def.extensions.iter().cloned().collect(), globs));
+            }
+        }
+    }
+
     let mut files = Vec::new();
-    collect_files(root, root, &mut files)?;
+    crate::collect_files_with(root, root, &extra, &mut files)?;
     files.sort();
     let file_set: BTreeSet<String> = files.iter().cloned().collect();
 
@@ -83,15 +112,14 @@ fn run(
 
     let mut bindings: Vec<(String, NodeId)> = Vec::new();
     let mut written_relations: BTreeSet<(StableId, String, StableId)> = BTreeSet::new();
+    // Content hashes of files first seen this run: the rename detector's
+    // matching side (same-run delete + add of identical bytes).
+    let mut added_by_hash: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
     // Entity kinds governed by a seeded template: captured documents of
     // these kinds need a conformance pass even when otherwise unchanged.
     let tmpl_kinds: BTreeSet<String> =
         crate::templates::by_kind(store, &index)?.keys().cloned().collect();
-    // Graph-defined capture rules: templates that declare, as data, which
-    // paths are artifacts of their kind — the store teaching itself new
-    // artifact types with no code change.
-    let rules = crate::templates::capture_rules(store, &index)?;
 
     for rel in &files {
         let content = fs::read(root.join(rel))?;
@@ -102,6 +130,7 @@ fn run(
         let changed = match &prior {
             None => {
                 report.added.push(rel.clone());
+                added_by_hash.entry(hash.clone()).or_default().push(rel.clone());
                 true
             }
             Some(v) if *v != hash => {
@@ -130,26 +159,34 @@ fn run(
         // existed (no `language` observation yet) still gets its structure.
         let structure_missing = !structure.language.is_empty()
             && latest(&index, store, &sid, "language")?.is_none();
+        // A projection whose bytes match its render contract is a view of
+        // an artifact that already owns the semantics — never re-capture
+        // it as a second document.
+        let is_projection =
+            latest(&index, store, &sid, "expected_b3")?.as_deref() == Some(hash.as_str());
         // Same backfill rule for decision/plan documents twinned before doc
         // capture existed (no `content` observation on the doc entity yet).
-        let doc_meta = docs::parse_doc(rel, &text);
+        let doc_meta = if is_projection { None } else { docs::parse_doc(rel, &text) };
         let doc_missing = match &doc_meta {
             Some(m) => {
                 let dsid = doc_sid(prefix, m);
                 latest(&index, store, &dsid, "content")?.is_none()
                     || (tmpl_kinds.contains(m.kind.as_str())
-                        && latest(&index, store, &dsid, "conforms")?.is_none())
+                        && (latest(&index, store, &dsid, "conforms")?.is_none()
+                            || latest(&index, store, &dsid, "template_b3")?.is_none()))
             }
             None => false,
         };
         // And for skills / agent configuration.
-        let agent_meta = agents::parse_agent_doc(rel, &text);
+        let agent_meta =
+            if is_projection { None } else { agents::parse_agent_doc(rel, &text) };
         let agent_missing = match &agent_meta {
             Some(a) => {
                 let asid = agent_doc_sid(prefix, a);
                 latest(&index, store, &asid, "content")?.is_none()
                     || (tmpl_kinds.contains(a.kind.as_str())
-                        && latest(&index, store, &asid, "conforms")?.is_none())
+                        && (latest(&index, store, &asid, "conforms")?.is_none()
+                            || latest(&index, store, &asid, "template_b3")?.is_none()))
             }
             None => false,
         };
@@ -157,10 +194,10 @@ fn run(
         let test_info = testing::classify(rel, structure.language, &text);
         let test_missing = test_info.is_some()
             && latest(&index, store, &sid, "test_framework")?.is_none();
-        // Graph-defined rules capture paths the built-in detectors didn't
-        // claim; built-ins keep precedence.
-        let rule = if doc_meta.is_none() && agent_meta.is_none() {
-            rules.iter().find(|r| r.matches(rel))
+        // Registry rules capture paths the built-in detectors didn't
+        // claim; built-ins keep precedence, most-specific pattern wins.
+        let rule = if doc_meta.is_none() && agent_meta.is_none() && !is_projection {
+            crate::kinds::match_rule(&rules, rel)
         } else {
             None
         };
@@ -168,6 +205,9 @@ fn run(
             Some(r) => {
                 let rsid = StableId::derive(&[r.kind.as_str(), prefix, &docs::slug_of(rel)]);
                 latest(&index, store, &rsid, "content")?.is_none()
+                    || (tmpl_kinds.contains(r.kind.as_str())
+                        && (latest(&index, store, &rsid, "conforms")?.is_none()
+                            || latest(&index, store, &rsid, "template_b3")?.is_none()))
             }
             None => false,
         };
@@ -286,6 +326,7 @@ fn run(
                 now,
             )?;
             report.relations += out.relations;
+            report.retracted += out.retracted;
             if out.wrote {
                 report.docs.push(rel.clone());
             }
@@ -307,6 +348,7 @@ fn run(
                 now,
             )?;
             report.relations += out.relations;
+            report.retracted += out.retracted;
             if out.wrote {
                 report.docs.push(rel.clone());
             }
@@ -345,24 +387,69 @@ fn run(
                 now,
             )?;
             report.relations += out.relations;
+            report.retracted += out.retracted;
             if out.wrote {
                 report.docs.push(rel.clone());
             }
         }
+
+        // Currency sweep: structure this pass did not re-observe has
+        // vanished from the file — retract those edges so hubs, blast
+        // radius, and totals track reality instead of history.
+        report.retracted += sweep_edges(
+            store,
+            &index,
+            &written_relations,
+            &sid,
+            &["contains", "imports", "covers"],
+            now,
+        )?;
     }
 
     // Files the twin still claims are present but which are gone from disk.
+    let no_edges: BTreeSet<(StableId, String, StableId)> = BTreeSet::new();
     for rel in known.iter() {
         if file_set.contains(rel) {
             continue;
         }
         let sid = StableId::derive(&["file", rel]);
-        if latest(&index, store, &sid, "present")?.as_deref() == Some("false") {
-            continue; // already recorded; no drift
+        let already = latest(&index, store, &sid, "present")?.as_deref() == Some("false");
+        if !already {
+            report.deleted.push(rel.clone());
         }
-        report.deleted.push(rel.clone());
         if write {
-            observe(store, &sid, "present", "false", now)?;
+            if !already {
+                observe(store, &sid, "present", "false", now)?;
+                // The vanished content reappeared verbatim at exactly one
+                // new path this run: a move, not a death — leave the trail.
+                if let Some(h) = latest(&index, store, &sid, "content_b3")? {
+                    if let Some([new_rel]) = added_by_hash.get(&h).map(Vec::as_slice) {
+                        let new_sid = StableId::derive(&["file", new_rel]);
+                        if relate(
+                            store,
+                            &index,
+                            &mut written_relations,
+                            &sid,
+                            "renamed_to",
+                            &new_sid,
+                            now,
+                        )? {
+                            report.relations += 1;
+                        }
+                    }
+                }
+            }
+            // A deleted file has no structure: retract every outgoing edge.
+            // Runs for already-deleted files too — the self-healing path for
+            // stores whose deletions predate edge tombstones.
+            report.retracted += sweep_edges(
+                store,
+                &index,
+                &no_edges,
+                &sid,
+                &["contains", "imports", "covers"],
+                now,
+            )?;
         }
     }
 
@@ -465,15 +552,66 @@ pub struct Insights {
     pub failing: Vec<String>,
     /// Most-imported files with no declared tests and no covering test file.
     pub untested_hubs: Vec<(String, usize)>,
-    /// Docs whose mentioned files changed after the doc was last updated:
-    /// (slug, kind, changed files). Derived at query time, never written —
-    /// stale is a judgment about now, not a fact about then.
-    pub stale_docs: Vec<(String, String, Vec<String>)>,
+    /// Docs whose mentioned files changed after the doc was last updated
+    /// or acknowledged. Derived at query time, never written — stale is a
+    /// judgment about now, not a fact about then. Only active documents
+    /// rot, only live mentions count, and severity follows the kind's rot
+    /// policy.
+    pub stale_docs: Vec<StaleDoc>,
     /// Artifacts of graph-defined kinds (capture rules): (kind, count).
     pub custom_artifacts: Vec<(String, usize)>,
 }
 
-const TOP: usize = 5;
+/// How loudly a stale document should speak. Warn = the doc describes
+/// the present and is now wrong somewhere; info = a record whose context
+/// moved on — visible, never nagging.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Severity {
+    Warn,
+    Info,
+}
+
+impl Severity {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Severity::Warn => "warn",
+            Severity::Info => "info",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StaleDoc {
+    pub slug: String,
+    pub kind: String,
+    pub severity: Severity,
+    /// Live-mentioned files that changed after the doc's effective time.
+    pub changed: Vec<String>,
+}
+
+/// The rot policy for a kind: `None` = exempt, else the severity stale
+/// docs of this kind carry. The registry's `rot` value (graph over
+/// compiled defaults: none|info|warn) with code fallbacks — decisions and
+/// plans are records once written (info); skills, agent config, and
+/// taught kinds describe the present (warn).
+pub(crate) fn rot_severity(rot: &str, kind: &str) -> Option<Severity> {
+    match rot {
+        "none" => None,
+        "info" => Some(Severity::Info),
+        "warn" => Some(Severity::Warn),
+        _ => match kind {
+            "decision" | "plan" => Some(Severity::Info),
+            _ => Some(Severity::Warn),
+        },
+    }
+}
+
+/// Record that an agent reviewed an artifact against the present. The
+/// observation's timestamp resets the staleness clock without touching
+/// any file. Deliberately unguarded — re-acknowledging is the point.
+pub fn ack(store: &Store, sid: &StableId, note: &str) -> Result<NodeId, StoreError> {
+    observe_src(store, sid, "reviewed", note, "agent", now_ms())
+}
 
 pub fn insights(store: &Store, prefix: &str) -> Result<Insights, StoreError> {
     let mut index = MemIndex::new();
@@ -511,6 +649,9 @@ pub fn insights_with(
             {
                 continue;
             }
+            if !crate::lifecycle::of(index, store, &id)?.0.is_active() {
+                continue; // superseded/done/retired documents are history
+            }
             let slug = labels.get("slug").cloned().unwrap_or_default();
             let title = latest(index, store, &id, "title")?
                 .or_else(|| labels.get("title").cloned())
@@ -527,10 +668,8 @@ pub fn insights_with(
         }
     }
     decisions.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-    decisions.truncate(TOP);
     ins.decisions = decisions.into_iter().map(|(_, s, t, st)| (s, t, st)).collect();
     plans.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-    plans.truncate(TOP);
     ins.plans = plans.into_iter().map(|(_, s, t)| (s, t)).collect();
 
     // Skills and agent configuration under this prefix.
@@ -541,6 +680,9 @@ pub fn insights_with(
             let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
             if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone())
             {
+                continue;
+            }
+            if !crate::lifecycle::of(index, store, &id)?.0.is_active() {
                 continue;
             }
             let slug = labels.get("slug").cloned().unwrap_or_default();
@@ -557,7 +699,6 @@ pub fn insights_with(
             rows.push((slug, agent, third));
         }
         rows.sort();
-        rows.truncate(TOP);
         if kind == "skill" {
             ins.skills = rows;
         } else {
@@ -569,14 +710,14 @@ pub fn insights_with(
     // and documents gone stale: a mentioned file changed after the doc did.
     // Kinds = the built-in families plus every graph-defined capture kind.
     let builtin_kinds = ["decision", "plan", "skill", "agent_config"];
-    let mut doc_kinds: Vec<String> = builtin_kinds.iter().map(|s| s.to_string()).collect();
-    for kind in crate::templates::by_kind(store, index)?.keys() {
-        if !builtin_kinds.contains(&kind.as_str()) && kind != "feature" {
-            doc_kinds.push(kind.clone());
-        }
-    }
+    let kind_registry = crate::kinds::registry(store, index)?;
+    let doc_kinds = crate::kinds::doc_kinds(store, index)?;
     for kind in &doc_kinds {
         let kind = kind.as_str();
+        let rot = rot_severity(
+            kind_registry.get(kind).map(|d| d.rot.as_str()).unwrap_or(""),
+            kind,
+        );
         let mut count = 0usize;
         let mut seen: BTreeSet<StableId> = BTreeSet::new();
         for node in index.entities_by_kind(kind) {
@@ -585,26 +726,37 @@ pub fn insights_with(
             {
                 continue;
             }
+            if !crate::lifecycle::of(index, store, &id)?.0.is_active() {
+                continue; // history neither rots nor violates contracts
+            }
             let slug = labels.get("slug").cloned().unwrap_or_default();
             count += 1;
             if latest(index, store, &id, "conforms")?.as_deref() == Some("false") {
                 let missing = latest(index, store, &id, "missing")?.unwrap_or_default();
                 ins.nonconforming.push((slug.clone(), kind.to_string(), missing));
             }
+            let Some(severity) = rot else { continue };
             if let Some((doc_at, _)) = latest_at(index, store, &id, "content")? {
+                // Acknowledgement resets the clock: "reviewed against the
+                // present" counts as freshly written, file untouched.
+                let effective = latest_at(index, store, &id, "reviewed")?
+                    .map_or(doc_at, |(ack_at, _)| doc_at.max(ack_at));
                 let mut changed = Vec::new();
-                for rid in index.relations_from(&id, "mentions") {
-                    if let Object::Relation { to, .. } = store.get(&rid)? {
-                        if let Some((f_at, _)) = latest_at(index, store, &to, "content_b3")? {
-                            if f_at > doc_at {
-                                changed.push(sid_label(index, store, &to));
-                            }
+                for (_, to) in live_from(index, store, &id, "mentions")? {
+                    if let Some((f_at, _)) = latest_at(index, store, &to, "content_b3")? {
+                        if f_at > effective {
+                            changed.push(sid_label(index, store, &to));
                         }
                     }
                 }
                 if !changed.is_empty() {
                     changed.sort();
-                    ins.stale_docs.push((slug, kind.to_string(), changed));
+                    ins.stale_docs.push(StaleDoc {
+                        slug,
+                        kind: kind.to_string(),
+                        severity,
+                        changed,
+                    });
                 }
             }
         }
@@ -613,7 +765,19 @@ pub fn insights_with(
         }
     }
     ins.nonconforming.sort();
-    ins.stale_docs.sort();
+    // Assets rot too: a declared `depicts` target that changed after the
+    // asset's bytes were captured. Same shape, same surfaces.
+    let asset_rot = rot_severity(
+        kind_registry.get("asset").map(|d| d.rot.as_str()).unwrap_or(""),
+        "asset",
+    );
+    if let Some(severity) = asset_rot {
+        for (slug, changed) in crate::assets::stale(store, index, prefix)? {
+            ins.stale_docs.push(StaleDoc { slug, kind: "asset".to_string(), severity, changed });
+        }
+    }
+    ins.stale_docs
+        .sort_by(|a, b| a.severity.cmp(&b.severity).then_with(|| a.slug.cmp(&b.slug)));
 
     // Features: done-ness evaluated live against the definition of done.
     for row in crate::features::list(store, index, prefix)? {
@@ -647,7 +811,7 @@ pub fn insights_with(
             churn.push((rel.clone(), versions));
         }
 
-        let contains = index.relations_from(sid, "contains").len();
+        let contains = live_from(index, store, sid, "contains")?.len();
         ins.relations += contains;
         if contains > 0 {
             largest.push((rel.clone(), contains));
@@ -662,52 +826,49 @@ pub fn insights_with(
             ins.test_files += 1;
         }
 
-        let importers = index.relations_to(sid, "imports").len();
+        let importers = live_to(index, store, sid, "imports")?.len();
         if importers > 0 {
             hubs.push((rel.clone(), importers));
             // A hub nobody tests is concentrated risk: no declared tests
             // in the file, no test file covering it.
-            if declared == 0 && index.relations_to(sid, "covers").is_empty() {
+            if declared == 0 && live_to(index, store, sid, "covers")?.is_empty() {
                 untested.push((rel.clone(), importers));
             }
         }
 
         // Is this file covered by a decision? (Any `mentions` from an ADR.)
-        for id in index.relations_to(sid, "mentions") {
-            if let Object::Relation { from, .. } = store.get(&id)? {
-                if decision_sids.contains(&from) {
-                    ins.decided.insert(rel.clone());
-                    break;
-                }
+        for (_, from) in live_to(index, store, sid, "mentions")? {
+            if decision_sids.contains(&from) {
+                ins.decided.insert(rel.clone());
+                break;
             }
         }
 
-        for id in index.relations_from(sid, "imports") {
+        for (_, to) in live_from(index, store, sid, "imports")? {
             ins.relations += 1;
-            if let Object::Relation { to, .. } = store.get(&id)? {
-                for node in index.entity_nodes(&to) {
-                    if let Ok(Object::Entity { entity_kind, labels, .. }) = store.get(&node) {
-                        if entity_kind == "module" {
-                            let name = labels.get("name").cloned().unwrap_or_default();
-                            *modules.entry(name).or_default() += 1;
-                        }
-                        break;
+            for node in index.entity_nodes(&to) {
+                if let Ok(Object::Entity { entity_kind, labels, .. }) = store.get(&node) {
+                    if entity_kind == "module" {
+                        let name = labels.get("name").cloned().unwrap_or_default();
+                        *modules.entry(name).or_default() += 1;
                     }
+                    break;
                 }
             }
         }
     }
 
-    let top = |mut v: Vec<(String, usize)>| {
+    // Full lists, sorted strongest-first; rendering truncates honestly
+    // ("showing 5 of 12") — a truncated list must never pose as a total.
+    let ranked = |mut v: Vec<(String, usize)>| {
         v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-        v.truncate(TOP);
         v
     };
-    ins.churn = top(churn);
-    ins.hubs = top(hubs);
-    ins.largest = top(largest);
-    ins.untested_hubs = top(untested);
-    ins.external_modules = top(modules.into_iter().collect());
+    ins.churn = ranked(churn);
+    ins.hubs = ranked(hubs);
+    ins.largest = ranked(largest);
+    ins.untested_hubs = ranked(untested);
+    ins.external_modules = ranked(modules.into_iter().collect());
 
     // Test protocols: the latest imported run and currently-failing cases.
     if let Some((at, total, passed, failed, _)) =
@@ -716,7 +877,6 @@ pub fn insights_with(
         ins.last_run = Some((at, total, passed, failed));
     }
     ins.failing = testing::failing_cases(store, index, prefix)?;
-    ins.failing.truncate(TOP);
 
     // Notes across all twinned files plus the repo entity, newest first.
     let repo_sid = StableId::derive(&["repo", prefix]);
@@ -729,7 +889,6 @@ pub fn insights_with(
         }
     }
     all_notes.sort_by(|a, b| b.0.cmp(&a.0));
-    all_notes.truncate(TOP);
     ins.notes = all_notes;
 
     ins.git_commit = latest(index, store, &repo_sid, "git_commit")?;
@@ -785,7 +944,9 @@ pub(crate) fn observe_src(
     })
 }
 
-/// Write a relation unless the graph (or this run) already has it.
+/// Write a relation unless the graph (or this run) already has it live.
+/// A relation whose edge was retracted is restored with an `active=true`
+/// observation instead of a duplicate relation object.
 pub(crate) fn relate(
     store: &Store,
     index: &MemIndex,
@@ -803,6 +964,10 @@ pub(crate) fn relate(
         if let Object::Relation { to: t, .. } = store.get(&id)? {
             if &t == to {
                 written.insert(key);
+                if !brain_index::edge_active(index, store, from, kind, to)? {
+                    observe(store, &brain_index::edge_sid(from, kind, to), "active", "true", at)?;
+                    return Ok(true);
+                }
                 return Ok(false);
             }
         }
@@ -816,6 +981,142 @@ pub(crate) fn relate(
     })?;
     written.insert(key);
     Ok(true)
+}
+
+/// Retract an edge: write `active=false` on its edge sid, guarded — a
+/// no-op when the edge is already retracted or the relation never existed.
+pub(crate) fn retract_edge(
+    store: &Store,
+    index: &MemIndex,
+    from: &StableId,
+    kind: &str,
+    to: &StableId,
+    source: &str,
+    at: u64,
+) -> Result<bool, StoreError> {
+    let mut exists = false;
+    for id in index.relations_from(from, kind) {
+        if let Object::Relation { to: t, .. } = store.get(&id)? {
+            if &t == to {
+                exists = true;
+                break;
+            }
+        }
+    }
+    if !exists || !brain_index::edge_active(index, store, from, kind, to)? {
+        return Ok(false);
+    }
+    observe_src(store, &brain_index::edge_sid(from, kind, to), "active", "false", source, at)?;
+    Ok(true)
+}
+
+/// Merge extensions into the repo's runtime ingestion allowlist
+/// (`ingest_extensions` on the repo entity). Additive only — the compiled
+/// list never shrinks. Returns the resulting csv when anything changed.
+pub fn add_ingest_extensions(
+    store: &Store,
+    prefix: &str,
+    exts: &[String],
+) -> Result<Option<String>, StoreError> {
+    let mut index = MemIndex::new();
+    replay(store, &mut index)?;
+    let repo_sid = StableId::derive(&["repo", prefix]);
+    let current = latest(&index, store, &repo_sid, "ingest_extensions")?.unwrap_or_default();
+    let mut set: BTreeSet<String> = current
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+    let before = set.len();
+    set.extend(
+        exts.iter()
+            .flat_map(|e| e.split(','))
+            .map(|e| e.trim().trim_start_matches('.').to_lowercase())
+            .filter(|e| !e.is_empty()),
+    );
+    if set.len() == before && !current.is_empty() {
+        return Ok(None);
+    }
+    let csv = set.into_iter().collect::<Vec<_>>().join(",");
+    observe_src(store, &repo_sid, "ingest_extensions", &csv, "agent", now_ms())?;
+    Ok(Some(csv))
+}
+
+/// Agent-facing retraction: mark an edge as no longer holding (a wrong
+/// `feature link`, a superseded association). The relation object stays —
+/// history is never destroyed — but every reader stops seeing the edge.
+pub fn retract(
+    store: &Store,
+    from: &StableId,
+    kind: &str,
+    to: &StableId,
+) -> Result<bool, StoreError> {
+    let mut index = MemIndex::new();
+    replay(store, &mut index)?;
+    retract_edge(store, &index, from, kind, to, "agent", now_ms())
+}
+
+/// Live outgoing edges of one predicate: (relation node, target sid).
+/// Retracted edges are skipped — this is how every reader sees only the
+/// relations that still hold.
+pub fn live_from(
+    index: &MemIndex,
+    store: &Store,
+    from: &StableId,
+    kind: &str,
+) -> Result<Vec<(NodeId, StableId)>, StoreError> {
+    let mut out = Vec::new();
+    for id in index.relations_from(from, kind) {
+        if let Object::Relation { to, .. } = store.get(&id)? {
+            if brain_index::edge_active(index, store, from, kind, &to)? {
+                out.push((id, to));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Live incoming edges of one predicate: (relation node, source sid).
+pub fn live_to(
+    index: &MemIndex,
+    store: &Store,
+    to: &StableId,
+    kind: &str,
+) -> Result<Vec<(NodeId, StableId)>, StoreError> {
+    let mut out = Vec::new();
+    for id in index.relations_to(to, kind) {
+        if let Object::Relation { from, .. } = store.get(&id)? {
+            if brain_index::edge_active(index, store, &from, kind, to)? {
+                out.push((id, from));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Retract live edges of `kinds` from `from` that this pass did not
+/// re-observe (their key is absent from `written`). Guarded: an edge
+/// already retracted writes nothing.
+fn sweep_edges(
+    store: &Store,
+    index: &MemIndex,
+    written: &BTreeSet<(StableId, String, StableId)>,
+    from: &StableId,
+    kinds: &[&str],
+    at: u64,
+) -> Result<usize, StoreError> {
+    let mut retracted = 0;
+    for kind in kinds {
+        for (_, to) in live_from(index, store, from, kind)? {
+            if !written.contains(&(from.clone(), kind.to_string(), to.clone()))
+                && retract_edge(store, index, from, kind, &to, "twin", at)?
+            {
+                retracted += 1;
+            }
+        }
+    }
+    Ok(retracted)
 }
 
 /// A human-readable label for an entity: path, name, or slug — else the id.
@@ -850,6 +1151,27 @@ pub fn latest_at(
     property: &str,
 ) -> Result<Option<(u64, String)>, StoreError> {
     latest_at_before(index, store, subject, property, u64::MAX)
+}
+
+/// Like [`latest_at`], but also returns who wrote the value — the seed
+/// upgrade rule needs to distinguish shipped defaults from local edits.
+pub fn latest_with_source(
+    index: &MemIndex,
+    store: &Store,
+    subject: &StableId,
+    property: &str,
+) -> Result<Option<(u64, String, String)>, StoreError> {
+    let mut best: Option<(u64, String, String)> = None;
+    for id in index.observations_of(subject) {
+        if let Object::Observation { property: p, value, source, observed_at_ms, .. } =
+            store.get(&id)?
+        {
+            if p == property && best.as_ref().is_none_or(|(b, _, _)| observed_at_ms >= *b) {
+                best = Some((observed_at_ms, value, source));
+            }
+        }
+    }
+    Ok(best)
 }
 
 /// Bi-temporal read: the newest observation at or before `t`. Every
@@ -1086,6 +1408,9 @@ pub struct DocOutcome {
     pub wrote: bool,
     /// Relations written by this call.
     pub relations: usize,
+    /// Edges retracted by this call (mentions dropped from the text,
+    /// recorded_in of a former location).
+    pub retracted: usize,
     /// Twinned file paths this document mentions.
     pub mentions: Vec<String>,
 }
@@ -1139,7 +1464,8 @@ fn record_entity_doc(
         }
     }
 
-    let mut outcome = DocOutcome { sid: sid.clone(), wrote, relations: 0, mentions: Vec::new() };
+    let mut outcome =
+        DocOutcome { sid: sid.clone(), wrote, relations: 0, retracted: 0, mentions: Vec::new() };
 
     let repo_sid = StableId::derive(&["repo", prefix]);
     if relate(store, index, written_relations, &sid, "concerns", &repo_sid, now)? {
@@ -1185,8 +1511,39 @@ fn record_entity_doc(
         if relate(store, index, written_relations, &sid, "conforms_to", tmpl_sid, now)? {
             outcome.relations += 1;
         }
+        // Version-precise conformance: record WHICH contract judged this
+        // artifact, so template fitness can compare versions later.
+        if let Some(contract) = latest(index, store, tmpl_sid, "contract_b3")? {
+            if latest(index, store, &sid, "template_b3")?.as_deref() != Some(contract.as_str()) {
+                observe_src(store, &sid, "template_b3", &contract, source, now)?;
+                outcome.wrote = true;
+            }
+        }
     }
-    if outcome.relations > 0 {
+
+    // Currency sweep: a mention whose path the text no longer names is
+    // retracted; a mention of a deleted file the text still names stays
+    // live (that mismatch is a coherence finding, not stale structure).
+    for (_, to) in live_from(index, store, &sid, "mentions")? {
+        let path = sid_label(index, store, &to);
+        if !content.contains(&path)
+            && retract_edge(store, index, &sid, "mentions", &to, source, now)?
+        {
+            outcome.retracted += 1;
+        }
+    }
+    // A moved document re-attaches to its new location; the old one is
+    // retracted (doc identity is kind+prefix+slug, not the path).
+    if let Some(rel) = rel_path {
+        let here = StableId::derive(&["file", rel]);
+        for (_, to) in live_from(index, store, &sid, "recorded_in")? {
+            if to != here && retract_edge(store, index, &sid, "recorded_in", &to, source, now)? {
+                outcome.retracted += 1;
+            }
+        }
+    }
+
+    if outcome.relations > 0 || outcome.retracted > 0 {
         outcome.wrote = true;
     }
     Ok(outcome)
@@ -1273,6 +1630,55 @@ pub fn record_agent_doc(
         candidates,
         written_relations,
         now,
+    )
+}
+
+/// Graph-first authoring: record an artifact of any kind directly into
+/// the graph, no source file. The kind's `fields` DSL extracts extra
+/// properties; conformance is judged exactly as for captured files.
+/// Rendering a projection from the recorded content is the caller's next
+/// step for graph-first kinds.
+pub fn author_artifact(
+    store: &Store,
+    prefix: &str,
+    kind: &str,
+    slug: &str,
+    title: &str,
+    content: &str,
+    source: &str,
+) -> Result<DocOutcome, StoreError> {
+    let mut index = MemIndex::new();
+    replay(store, &mut index)?;
+    let candidates = twinned_paths(store, prefix)?;
+    let mut written = BTreeSet::new();
+    let registry = crate::kinds::registry(store, &index)?;
+    let mut props: Vec<(String, String)> =
+        vec![("content".to_string(), content.to_string()), ("title".to_string(), title.to_string())];
+    if let Some(def) = registry.get(kind) {
+        if let Some(rule) = def.rule() {
+            for (p, v) in rule.extract(content, slug) {
+                if p != "content" && p != "title" {
+                    props.push((p, v));
+                }
+            }
+        }
+    }
+    let prop_refs: Vec<(&str, &str)> =
+        props.iter().map(|(p, v)| (p.as_str(), v.as_str())).collect();
+    record_entity_doc(
+        store,
+        &index,
+        prefix,
+        kind,
+        slug,
+        &[("title", title)],
+        &prop_refs,
+        content,
+        source,
+        None,
+        &candidates,
+        &mut written,
+        now_ms(),
     )
 }
 
@@ -1582,15 +1988,24 @@ mod tests {
             other => panic!("expected relation, got {other:?}"),
         }
 
-        // Insights surface both, and tag mentioned files as decided.
+        // Insights surface only the living decision set: the superseded ADR
+        // is history, and files it alone mentioned lose their decided tag.
         let ins = insights(&store, "twin/app").unwrap();
+        assert!(
+            !ins.decisions.iter().any(|(s, _, _)| s == "adr-001-storage"),
+            "superseded decisions leave the list: {:?}",
+            ins.decisions
+        );
         assert!(ins
             .decisions
             .iter()
-            .any(|(s, t, st)| s == "adr-001-storage" && t.contains("content") && st == "accepted"));
+            .any(|(s, _, st)| s == "adr-002-sync" && st == "proposed"));
         assert!(ins.plans.iter().any(|(s, _)| s == "plan-v1"));
-        assert!(ins.decided.contains("src/main.rs"));
+        assert!(!ins.decided.contains("src/main.rs"), "its rationale was superseded");
         assert!(!ins.decided.contains("run.py"));
+        let (lc, why) = crate::lifecycle::of(&index, &store, &adr).unwrap();
+        assert_eq!(lc, crate::lifecycle::Lifecycle::Superseded);
+        assert!(why.contains("adr-002-sync"), "{why}");
     }
 
     #[test]
@@ -1750,12 +2165,14 @@ mod tests {
             crate::features::add(&store, "twin/app", "render", "Rendering", "building").unwrap();
         assert!(wrote);
         let index = fresh_index(&store);
-        let (main_sid, kind) =
-            crate::features::resolve_target(&index, "twin/app", "src/main.rs").unwrap();
+        let (main_sid, kind) = crate::features::resolve_target(&store, &index, "twin/app", "src/main.rs")
+            .unwrap()
+            .unwrap();
         assert_eq!(kind, "file");
         crate::features::link(&store, "twin/app", "render", "implemented_by", &main_sid).unwrap();
-        let (adr_sid, kind) =
-            crate::features::resolve_target(&index, "twin/app", "adr-001-good").unwrap();
+        let (adr_sid, kind) = crate::features::resolve_target(&store, &index, "twin/app", "adr-001-good")
+            .unwrap()
+            .unwrap();
         assert_eq!(kind, "decision");
         crate::features::link(&store, "twin/app", "render", "decided_by", &adr_sid).unwrap();
 
@@ -1907,12 +2324,28 @@ mod tests {
         refresh(&store, src.path(), "twin/app").unwrap();
         let ins = insights(&store, "twin/app").unwrap();
         assert_eq!(ins.stale_docs.len(), 1);
-        let (slug, kind, changed) = &ins.stale_docs[0];
-        assert_eq!(slug, "adr-001-main");
-        assert_eq!(kind, "decision");
-        assert_eq!(changed, &vec!["src/main.rs".to_string()]);
+        let d = &ins.stale_docs[0];
+        assert_eq!(d.slug, "adr-001-main");
+        assert_eq!(d.kind, "decision");
+        assert_eq!(d.severity, Severity::Info, "decisions are records: info by default");
+        assert_eq!(d.changed, vec!["src/main.rs".to_string()]);
 
-        // Updating the doc clears the staleness.
+        // Acknowledging resets the clock without touching the file.
+        let adr = StableId::derive(&["decision", "twin/app", "adr-001-main"]);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        ack(&store, &adr, "checked against current code").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.stale_docs.is_empty(), "acknowledged doc is fresh, file untouched");
+
+        // A later change makes it stale again; updating the doc clears it.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        fs::write(
+            src.path().join("src/main.rs"),
+            "use crate::util;\npub fn main() { util::helper() }\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(insights(&store, "twin/app").unwrap().stale_docs.len(), 1);
         std::thread::sleep(std::time::Duration::from_millis(5));
         fs::write(
             src.path().join("docs/adr/adr-001-main.md"),
@@ -1922,6 +2355,48 @@ mod tests {
         refresh(&store, src.path(), "twin/app").unwrap();
         let ins = insights(&store, "twin/app").unwrap();
         assert!(ins.stale_docs.is_empty(), "re-touched doc is fresh again");
+
+        // A done plan never rots: give it a mention, finish it, churn away.
+        fs::create_dir_all(src.path().join("docs/plans")).unwrap();
+        fs::write(
+            src.path().join("docs/plans/refactor.md"),
+            "# Refactor\n\nRework src/main.rs.\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let plan = StableId::derive(&["plan", "twin/app", "refactor"]);
+        {
+            let index = fresh_index(&store);
+            crate::lifecycle::set(
+                &store,
+                &index,
+                &plan,
+                crate::lifecycle::Lifecycle::Done,
+                None,
+            )
+            .unwrap();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        fs::write(src.path().join("src/main.rs"), "pub fn main() { /* rewritten */ }\n").unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(
+            !ins.stale_docs.iter().any(|d| d.slug == "refactor"),
+            "a finished plan is history, not rot: {:?}",
+            ins.stale_docs
+        );
+
+        // rot=none on the kind's template exempts it entirely.
+        crate::templates::seed(&store).unwrap();
+        let tmpl = crate::templates::template_sid("adr");
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        observe_src(&store, &tmpl, "rot", "none", "agent", now_ms()).unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(
+            !ins.stale_docs.iter().any(|d| d.kind == "decision"),
+            "rot=none exempts the kind: {:?}",
+            ins.stale_docs
+        );
     }
 
     #[test]
@@ -2012,8 +2487,11 @@ mod tests {
         .unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         let ins = insights(&store, "twin/app").unwrap();
-        assert!(ins.stale_docs.iter().any(|(s, k, files)| {
-            s == "deploy" && k == "runbook" && files.contains(&"src/main.rs".to_string())
+        assert!(ins.stale_docs.iter().any(|d| {
+            d.slug == "deploy"
+                && d.kind == "runbook"
+                && d.severity == Severity::Warn
+                && d.changed.contains(&"src/main.rs".to_string())
         }));
     }
 
@@ -2101,5 +2579,344 @@ mod tests {
         assert_eq!(found.len(), 2);
         assert!(found[0].1.contains("entry point"));
         assert!(found[1].1.contains("stub"));
+    }
+
+    #[test]
+    fn vanished_structure_is_retracted_and_restored_edges_reuse_relations() {
+        let src = tempfile::tempdir().unwrap();
+        fs::create_dir_all(src.path().join("src")).unwrap();
+        fs::write(
+            src.path().join("src/main.rs"),
+            "use crate::util;\npub fn main() {}\npub fn extra() {}\n",
+        )
+        .unwrap();
+        fs::write(src.path().join("src/util.rs"), "pub fn helper() {}\n").unwrap();
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        let main = StableId::derive(&["file", "src/main.rs"]);
+        let util = StableId::derive(&["file", "src/util.rs"]);
+        {
+            let index = fresh_index(&store);
+            assert_eq!(live_from(&index, &store, &main, "contains").unwrap().len(), 2);
+            assert_eq!(live_to(&index, &store, &util, "imports").unwrap().len(), 1);
+        }
+
+        // Drop one symbol and the import: the vanished structure is retracted.
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        fs::write(src.path().join("src/main.rs"), "pub fn main() {}\n").unwrap();
+        let r = refresh(&store, src.path(), "twin/app").unwrap();
+        assert!(r.retracted >= 2, "symbol + import retracted: {}", r.retracted);
+        let index = fresh_index(&store);
+        assert_eq!(live_from(&index, &store, &main, "contains").unwrap().len(), 1);
+        assert!(live_to(&index, &store, &util, "imports").unwrap().is_empty());
+        // The relation objects themselves remain — history is never destroyed.
+        assert_eq!(index.relations_from(&main, "contains").len(), 2);
+        // Insights count live structure only.
+        let ins = insights_with(&store, &index, "twin/app").unwrap();
+        assert_eq!(ins.symbols, 2, "main() + helper(), extra() gone");
+        assert!(ins.hubs.is_empty(), "util.rs stopped being a hub: {:?}", ins.hubs);
+
+        // Idempotence: retraction is a transition, not a repeated write.
+        let before = store.count_objects().unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(store.count_objects().unwrap(), before, "no growth on re-refresh");
+
+        // Re-adding the import restores the edge via the existing relation
+        // object: one active=true observation, no duplicate relation.
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        fs::write(src.path().join("src/main.rs"), "use crate::util;\npub fn main() {}\n")
+            .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let index = fresh_index(&store);
+        assert_eq!(live_to(&index, &store, &util, "imports").unwrap().len(), 1);
+        assert_eq!(index.relations_to(&util, "imports").len(), 1, "no duplicate relation");
+        let before = store.count_objects().unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(store.count_objects().unwrap(), before);
+    }
+
+    #[test]
+    fn deleted_files_lose_their_edges_including_pre_tombstone_deletions() {
+        let src = tempfile::tempdir().unwrap();
+        fs::create_dir_all(src.path().join("src")).unwrap();
+        fs::write(src.path().join("src/gone.rs"), "use crate::keep;\npub fn g() {}\n").unwrap();
+        fs::write(src.path().join("src/keep.rs"), "pub fn k() {}\n").unwrap();
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        fs::remove_file(src.path().join("src/gone.rs")).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        let r = refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(r.deleted, vec!["src/gone.rs".to_string()]);
+        assert!(r.retracted >= 2, "contains + imports retracted: {}", r.retracted);
+        let gone = StableId::derive(&["file", "src/gone.rs"]);
+        let keep = StableId::derive(&["file", "src/keep.rs"]);
+        let index = fresh_index(&store);
+        assert!(live_from(&index, &store, &gone, "contains").unwrap().is_empty());
+        assert!(live_to(&index, &store, &keep, "imports").unwrap().is_empty());
+
+        // Healing: a live edge from an already-deleted file (as a store from
+        // before tombstones would have) is retracted by the next refresh.
+        let ghost = StableId::derive(&["symbol", "src/gone.rs", "fn", "ghost"]);
+        store
+            .put(&Object::Relation {
+                from: gone.clone(),
+                predicate: "contains".to_string(),
+                to: ghost.clone(),
+                source: "twin".to_string(),
+                observed_at_ms: 1,
+            })
+            .unwrap();
+        let r = refresh(&store, src.path(), "twin/app").unwrap();
+        assert!(r.deleted.is_empty(), "already recorded as deleted");
+        assert_eq!(r.retracted, 1, "the ghost edge is healed away");
+        let index = fresh_index(&store);
+        assert!(live_from(&index, &store, &gone, "contains").unwrap().is_empty());
+        let before = store.count_objects().unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(store.count_objects().unwrap(), before);
+    }
+
+    #[test]
+    fn taught_extensions_ingest_only_where_their_globs_reach() {
+        let src = tempfile::tempdir().unwrap();
+        fs::create_dir_all(src.path().join("runs")).unwrap();
+        fs::create_dir_all(src.path().join("stray")).unwrap();
+        fs::write(src.path().join("runs/ledger.jsonl"), "{\"task\":\"t01\"}\n").unwrap();
+        fs::write(src.path().join("stray/dump.jsonl"), "{}\n").unwrap();
+        fs::write(src.path().join("notes.cfg"), "k=v\n").unwrap();
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = Store::open(store_dir.path()).unwrap();
+
+        // Teach a run-log kind whose extension only reaches runs/**.
+        let tmpl = crate::templates::template_sid("run-log");
+        store
+            .put(&Object::Entity {
+                id: tmpl.clone(),
+                entity_kind: "template".to_string(),
+                labels: BTreeMap::new(),
+            })
+            .unwrap();
+        let now = now_ms();
+        observe_src(&store, &tmpl, "applies_to", "run_log", "agent", now).unwrap();
+        observe_src(&store, &tmpl, "capture", "runs/*.jsonl", "agent", now).unwrap();
+        observe_src(&store, &tmpl, "extensions", "jsonl", "agent", now).unwrap();
+
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ns = store.namespace().unwrap();
+        assert!(ns.contains_key("twin/app/runs/ledger.jsonl"), "in-glob jsonl ingested");
+        assert!(!ns.contains_key("twin/app/stray/dump.jsonl"), "stray jsonl invisible");
+        assert!(!ns.contains_key("twin/app/notes.cfg"), "untaught extension invisible");
+        // And it is captured as an artifact of the taught kind.
+        let index = fresh_index(&store);
+        let entity = StableId::derive(&["run_log", "twin/app", "ledger"]);
+        assert!(latest(&index, &store, &entity, "content").unwrap().is_some());
+
+        // Repo-level extensions apply everywhere (explicit opt-in).
+        add_ingest_extensions(&store, "twin/app", &["cfg".to_string()]).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ns = store.namespace().unwrap();
+        assert!(ns.contains_key("twin/app/notes.cfg"));
+    }
+
+    #[test]
+    fn compiled_kind_registry_captures_narrative_docs_and_stamps_contracts() {
+        let src = tempfile::tempdir().unwrap();
+        fs::create_dir_all(src.path().join("docs/adr")).unwrap();
+        fs::create_dir_all(src.path().join("docs/runbooks")).unwrap();
+        fs::write(src.path().join("README.md"), "# The Project\n\nStart at src/main.rs.\n")
+            .unwrap();
+        fs::write(src.path().join("docs/architecture.md"), "# Architecture\n\nLayers.\n")
+            .unwrap();
+        fs::write(
+            src.path().join("docs/adr/adr-001-x.md"),
+            "# X\n\nStatus: accepted\n",
+        )
+        .unwrap();
+        fs::write(
+            src.path().join("docs/runbooks/release.md"),
+            "# Cutting a release\n\nService: brain\n",
+        )
+        .unwrap();
+        fs::create_dir_all(src.path().join("src")).unwrap();
+        fs::write(src.path().join("src/main.rs"), "pub fn main() {}\n").unwrap();
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = Store::open(store_dir.path()).unwrap();
+        // NO seed: compiled defaults alone must already capture.
+        let r = refresh(&store, src.path(), "twin/app").unwrap();
+        assert!(r.docs.len() >= 4, "README, architecture, adr, runbook: {:?}", r.docs);
+
+        let index = fresh_index(&store);
+        // README/docs/*.md become `doc` entities; the ADR path convention
+        // keeps precedence (decision, not doc); runbook fields extract.
+        let readme = StableId::derive(&["doc", "twin/app", "readme"]);
+        assert_eq!(
+            latest(&index, &store, &readme, "title").unwrap().as_deref(),
+            Some("The Project")
+        );
+        assert_eq!(live_from(&index, &store, &readme, "mentions").unwrap().len(), 1);
+        let arch = StableId::derive(&["doc", "twin/app", "architecture"]);
+        assert!(latest(&index, &store, &arch, "content").unwrap().is_some());
+        let adr_as_doc = StableId::derive(&["doc", "twin/app", "adr-001-x"]);
+        assert!(index.entity_nodes(&adr_as_doc).is_empty(), "builtin keeps the ADR");
+        let runbook = StableId::derive(&["runbook", "twin/app", "release"]);
+        assert_eq!(
+            latest(&index, &store, &runbook, "service").unwrap().as_deref(),
+            Some("brain")
+        );
+
+        // README churn makes it stale at warn severity (narrative docs
+        // describe the present).
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        fs::write(src.path().join("src/main.rs"), "pub fn main() { /* v2 */ }\n").unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(
+            ins.stale_docs
+                .iter()
+                .any(|d| d.slug == "readme" && d.severity == Severity::Warn),
+            "{:?}",
+            ins.stale_docs
+        );
+
+        // After seeding, conformance runs and the judging contract version
+        // is stamped on the artifact.
+        crate::templates::seed(&store).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let index = fresh_index(&store);
+        let stamped = latest(&index, &store, &readme, "template_b3").unwrap().unwrap();
+        let tmpl = crate::templates::template_sid("doc");
+        assert_eq!(
+            Some(stamped),
+            latest(&index, &store, &tmpl, "contract_b3").unwrap(),
+            "artifact records the contract that judged it"
+        );
+
+        // Idempotence across the whole pipeline.
+        let before = store.count_objects().unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(store.count_objects().unwrap(), before);
+    }
+
+    #[test]
+    fn same_run_moves_leave_a_renamed_to_trail() {
+        let src = tempfile::tempdir().unwrap();
+        fs::create_dir_all(src.path().join("src")).unwrap();
+        fs::write(src.path().join("src/old.rs"), "pub fn stable_content() {}\n").unwrap();
+        fs::write(src.path().join("src/twin_a.rs"), "pub fn dup() {}\n").unwrap();
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        // Move: same bytes vanish here, appear there, in one refresh.
+        fs::rename(src.path().join("src/old.rs"), src.path().join("src/new.rs")).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let index = fresh_index(&store);
+        let old = StableId::derive(&["file", "src/old.rs"]);
+        let new = StableId::derive(&["file", "src/new.rs"]);
+        assert_eq!(latest(&index, &store, &old, "present").unwrap().as_deref(), Some("false"));
+        let trail = live_from(&index, &store, &old, "renamed_to").unwrap();
+        assert_eq!(trail.len(), 1);
+        assert_eq!(trail[0].1, new);
+
+        // Ambiguous matches (two identical new files) leave no trail.
+        fs::write(src.path().join("src/twin_b.rs"), "pub fn dup() {}\n").unwrap();
+        fs::rename(src.path().join("src/twin_a.rs"), src.path().join("src/twin_c.rs")).unwrap();
+        // twin_a's bytes now exist at BOTH twin_b and twin_c (new paths).
+        fs::write(src.path().join("src/twin_c.rs"), "pub fn dup() {}\n").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let index = fresh_index(&store);
+        let a = StableId::derive(&["file", "src/twin_a.rs"]);
+        assert!(
+            live_from(&index, &store, &a, "renamed_to").unwrap().is_empty(),
+            "two candidates: no unique match, no trail"
+        );
+
+        // Idempotence still holds.
+        let before = store.count_objects().unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        assert_eq!(store.count_objects().unwrap(), before);
+    }
+
+    #[test]
+    fn dropped_mentions_retract_but_mentions_of_deleted_files_stay() {
+        let src = tempfile::tempdir().unwrap();
+        fs::create_dir_all(src.path().join("src")).unwrap();
+        fs::create_dir_all(src.path().join("docs/adr")).unwrap();
+        fs::write(src.path().join("src/a.rs"), "pub fn a() {}\n").unwrap();
+        fs::write(src.path().join("src/b.rs"), "pub fn b() {}\n").unwrap();
+        fs::write(
+            src.path().join("docs/adr/adr-001-x.md"),
+            "# X\n\nStatus: accepted\n\nAbout src/a.rs and src/b.rs.\n",
+        )
+        .unwrap();
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        let doc = StableId::derive(&["decision", "twin/app", "adr-001-x"]);
+        let a = StableId::derive(&["file", "src/a.rs"]);
+        let b = StableId::derive(&["file", "src/b.rs"]);
+        {
+            let index = fresh_index(&store);
+            assert_eq!(live_from(&index, &store, &doc, "mentions").unwrap().len(), 2);
+        }
+
+        // The doc drops b.rs from its text: that mention is retracted, and
+        // later churn in b.rs no longer makes the doc stale.
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        fs::write(
+            src.path().join("docs/adr/adr-001-x.md"),
+            "# X\n\nStatus: accepted\n\nAbout src/a.rs only now.\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        {
+            let index = fresh_index(&store);
+            let live: Vec<StableId> = live_from(&index, &store, &doc, "mentions")
+                .unwrap()
+                .into_iter()
+                .map(|(_, to)| to)
+                .collect();
+            assert_eq!(live, vec![a.clone()]);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        fs::write(src.path().join("src/b.rs"), "pub fn b() { /* churn */ }\n").unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        {
+            let index = fresh_index(&store);
+            let ins = insights_with(&store, &index, "twin/app").unwrap();
+            assert!(
+                ins.stale_docs.is_empty(),
+                "b.rs churn is not the doc's problem: {:?}",
+                ins.stale_docs
+            );
+        }
+
+        // Deleting a.rs while the text still names it keeps the mention
+        // live — that mismatch belongs to coherence, not retraction.
+        fs::remove_file(src.path().join("src/a.rs")).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        refresh(&store, src.path(), "twin/app").unwrap();
+        // Touch the doc so it is re-recorded (the sweep re-runs).
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        fs::write(
+            src.path().join("docs/adr/adr-001-x.md"),
+            "# X\n\nStatus: accepted\n\nAbout src/a.rs only now. Still.\n",
+        )
+        .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let index = fresh_index(&store);
+        let live: Vec<StableId> = live_from(&index, &store, &doc, "mentions")
+            .unwrap()
+            .into_iter()
+            .map(|(_, to)| to)
+            .collect();
+        assert_eq!(live, vec![a], "mention of the deleted-but-still-named file stays");
     }
 }

@@ -74,12 +74,17 @@ fn main() -> ExitCode {
         Some("agentcfg") => cmd_agent_doc(&args[1..], brain_observe::agents::AgentDocKind::Config),
         Some("template") => cmd_template(&args[1..]),
         Some("artifact") => cmd_artifact(&args[1..]),
+        Some("asset") => cmd_asset(&args[1..]),
+        Some("instructions") => cmd_instructions(&args[1..]),
+        Some("tidy") => cmd_tidy(&args[1..]),
         Some("deliverable") => cmd_deliverable(&args[1..]),
         Some("feature") => cmd_feature(&args[1..]),
         Some("done") => cmd_done(&args[1..]),
         Some("testrun") => cmd_testrun(&args[1..]),
         Some("change") => cmd_change(&args[1..]),
         Some("bench") => cmd_bench(&args[1..]),
+        Some("relation") => cmd_relation(&args[1..]),
+        Some("wake") => cmd_wake(&args[1..]),
         Some("attend") => cmd_attend(&args[1..]),
         Some("sleep") => cmd_sleep(&args[1..]),
         Some("related") => cmd_related(&args[1..]),
@@ -106,6 +111,12 @@ fn main() -> ExitCode {
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
+        // Deliberate gate refusals exit 3 so hooks can distinguish "brain
+        // refused" (block the commit) from "brain broke" (fail open).
+        Err(e) if e.starts_with("refused:") => {
+            eprintln!("{e}");
+            ExitCode::from(3)
+        }
         Err(e) => {
             eprintln!("error: {e}");
             ExitCode::FAILURE
@@ -321,8 +332,13 @@ fn print_twin_report(report: &brain_observe::twin::TwinReport, wrote: bool) {
         println!("doc      {f}");
     }
     let verb = if wrote { "recorded" } else { "would record" };
+    let retracted = if report.retracted > 0 {
+        format!(", {} edge(s) retracted", report.retracted)
+    } else {
+        String::new()
+    };
     println!(
-        "{} unchanged; {verb} {} added, {} changed, {} deleted ({} symbols, {} relations, {} docs)",
+        "{} unchanged; {verb} {} added, {} changed, {} deleted ({} symbols, {} relations, {} docs{retracted})",
         report.unchanged,
         report.added.len(),
         report.changed.len(),
@@ -363,7 +379,7 @@ fn entity_sid(store: &Store, name: &str) -> Result<brain_core::ids::StableId, St
     }
 }
 
-/// Distinct target entities of relations of `kind` leaving `sid`.
+/// Distinct target entities of live relations of `kind` leaving `sid`.
 fn relation_targets(
     store: &Store,
     index: &MemIndex,
@@ -371,14 +387,101 @@ fn relation_targets(
     kind: &str,
 ) -> Result<Vec<brain_core::ids::StableId>, String> {
     let mut out = Vec::new();
-    for id in index.relations_from(sid, kind) {
-        if let Object::Relation { to, .. } = store.get(&id).map_err(|e| e.to_string())? {
-            if !out.contains(&to) {
-                out.push(to);
-            }
+    for (_, to) in
+        brain_observe::twin::live_from(index, store, sid, kind).map_err(|e| e.to_string())?
+    {
+        if !out.contains(&to) {
+            out.push(to);
         }
     }
     Ok(out)
+}
+
+/// Resolve a name to an entity sid: a bound name first (files, repo),
+/// then the slug of any doc-ish kind under the prefix.
+fn resolve_entity(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    name: &str,
+) -> Result<brain_core::ids::StableId, String> {
+    if let Ok(sid) = entity_sid(store, name) {
+        return Ok(sid);
+    }
+    brain_observe::features::resolve_target(store, index, prefix, name)
+        .map_err(|e| e.to_string())?
+        .map(|(sid, _)| sid)
+        .ok_or_else(|| format!("no entity named '{name}' (tried bound names and {prefix} slugs)"))
+}
+
+fn cmd_relation(args: &[String]) -> Result<(), String> {
+    let usage = "usage: brain relation retract <from> <predicate> <to> [--prefix <p>]\n       brain relation list <name> [--all] [--prefix <p>]";
+    match args.first().map(String::as_str) {
+        Some("retract") => {
+            let pos: Vec<&String> =
+                args[1..].iter().filter(|a| !a.starts_with("--")).collect();
+            let [from, predicate, to] = pos.as_slice() else { return Err(usage.into()) };
+            let prefix = parse_prefix(&args[1..]);
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let from_sid = resolve_entity(&store, &index, &prefix, from)?;
+            let to_sid = resolve_entity(&store, &index, &prefix, to)?;
+            if brain_observe::twin::retract(&store, &from_sid, predicate, &to_sid)
+                .map_err(|e| e.to_string())?
+            {
+                println!("retracted {from} -{predicate}-> {to}");
+            } else {
+                println!("nothing to retract: no live {predicate} edge {from} -> {to}");
+            }
+            Ok(())
+        }
+        Some("list") => {
+            let name = args.get(1).filter(|a| !a.starts_with("--")).ok_or(usage)?;
+            let all = args.iter().any(|a| a == "--all");
+            let prefix = parse_prefix(&args[1..]);
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = resolve_entity(&store, &index, &prefix, name)?;
+            let mut seen: std::collections::BTreeSet<(String, String, String)> =
+                std::collections::BTreeSet::new();
+            let mut shown = 0usize;
+            for id in store.put_history().map_err(|e| e.to_string())? {
+                let Ok(Object::Relation { from, predicate, to, .. }) = store.get(&id) else {
+                    continue;
+                };
+                let (out, other) = if from == sid {
+                    (true, to.clone())
+                } else if to == sid {
+                    (false, from.clone())
+                } else {
+                    continue;
+                };
+                let live = brain_index::edge_active(
+                    &*index,
+                    &store,
+                    &from,
+                    &predicate,
+                    &to,
+                )
+                .map_err(|e| e.to_string())?;
+                if !live && !all {
+                    continue;
+                }
+                let label = entity_label(&store, &index, &other);
+                let dir = if out { "->" } else { "<-" };
+                let flag = if live { "" } else { "  [retracted]" };
+                if seen.insert((dir.to_string(), predicate.clone(), label.clone())) {
+                    println!("{dir} {predicate:<14} {label}{flag}");
+                    shown += 1;
+                }
+            }
+            if shown == 0 {
+                println!("no {}relations for {name}", if all { "" } else { "live " });
+            }
+            Ok(())
+        }
+        _ => Err(usage.into()),
+    }
 }
 
 /// A human-readable label for an entity: its path, name, or raw stable id.
@@ -413,11 +516,24 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     .map_err(|e| e.to_string())?
                     .map(|(at, _)| format!("{}s", now.saturating_sub(at) / 1000))
                     .unwrap_or_else(|| "?".to_string());
-                let symbols = index.relations_from(&sid, "contains").len();
+                let symbols = brain_observe::twin::live_from(&index, &store, &sid, "contains")
+                    .map_err(|e| e.to_string())?
+                    .len();
                 let lang = brain_observe::twin::latest(&index, &store, &sid, "language")
                     .map_err(|e| e.to_string())?
                     .unwrap_or_default();
-                let flag = if present == "false" { "  [deleted]" } else { "" };
+                let flag = if present == "false" {
+                    let moved = brain_observe::twin::live_from(&index, &store, &sid, "renamed_to")
+                        .map_err(|e| e.to_string())?;
+                    match moved.first() {
+                        Some((_, to)) => {
+                            format!("  [moved to {}]", entity_label(&store, &index, to))
+                        }
+                        None => "  [deleted]".to_string(),
+                    }
+                } else {
+                    String::new()
+                };
                 println!("{rel}  {lang}  {symbols} symbol(s)  observed {age} ago{flag}");
             }
             Ok(())
@@ -465,19 +581,15 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                 return Ok(());
             }
             let mut targets = Vec::new();
-            let ids = if reverse {
-                index.relations_to(&sid, "imports")
+            let live = if reverse {
+                brain_observe::twin::live_to(&index, &store, &sid, "imports")
             } else {
-                index.relations_from(&sid, "imports")
-            };
-            for id in ids {
-                if let Object::Relation { from, to, .. } =
-                    store.get(&id).map_err(|e| e.to_string())?
-                {
-                    let t = if reverse { from } else { to };
-                    if !targets.contains(&t) {
-                        targets.push(t);
-                    }
+                brain_observe::twin::live_from(&index, &store, &sid, "imports")
+            }
+            .map_err(|e| e.to_string())?;
+            for (_, t) in live {
+                if !targets.contains(&t) {
+                    targets.push(t);
                 }
             }
             if targets.is_empty() {
@@ -574,54 +686,71 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     ins.test_files, ins.tests_declared
                 );
             }
+            // Rendering truncates; the data never does. Every shortened
+            // list says so — a truncated count must never pose as a total.
+            const SHOW: usize = 5;
+            let showing = |total: usize, what: &str| {
+                if total > SHOW {
+                    println!("  … showing {SHOW} of {total} {what}");
+                }
+            };
             if !ins.failing.is_empty() {
-                println!("failing tests:");
-                for name in &ins.failing {
+                println!("failing tests ({}):", ins.failing.len());
+                for name in ins.failing.iter().take(SHOW) {
                     println!("  ✗ {name}");
                 }
+                showing(ins.failing.len(), "failing");
             }
             let list = |title: &str, items: &[(String, usize)], unit: &str| {
                 if !items.is_empty() {
                     println!("{title}:");
-                    for (name, n) in items {
+                    for (name, n) in items.iter().take(SHOW) {
                         println!("  {n:>4} {unit}  {name}");
+                    }
+                    if items.len() > SHOW {
+                        println!("  … showing {SHOW} of {}", items.len());
                     }
                 }
             };
             if !ins.churn.is_empty() {
                 println!("churn (most edited):");
-                for (name, n) in &ins.churn {
+                for (name, n) in ins.churn.iter().take(SHOW) {
                     let tag = if ins.decided.contains(name) { "  [decided]" } else { "" };
                     println!("  {n:>4} versions  {name}{tag}");
                 }
+                showing(ins.churn.len(), "churned files");
             }
             list("hubs (most imported)", &ins.hubs, "importers");
             list("untested hubs (imported, no tests)", &ins.untested_hubs, "importers");
             list("largest (symbols declared)", &ins.largest, "symbols");
             list("external deps (unresolved imports)", &ins.external_modules, "uses");
             if !ins.decisions.is_empty() {
-                println!("decisions (ADRs):");
-                for (slug, title, status) in &ins.decisions {
+                println!("decisions (ADRs, {} active):", ins.decisions.len());
+                for (slug, title, status) in ins.decisions.iter().take(SHOW) {
                     println!("  [{status}] {slug}: {title}");
                 }
+                showing(ins.decisions.len(), "decisions");
             }
             if !ins.plans.is_empty() {
-                println!("plans:");
-                for (slug, title) in &ins.plans {
+                println!("plans ({} active):", ins.plans.len());
+                for (slug, title) in ins.plans.iter().take(SHOW) {
                     println!("  {slug}: {title}");
                 }
+                showing(ins.plans.len(), "plans");
             }
             if !ins.skills.is_empty() {
                 println!("agent skills:");
-                for (slug, agent, desc) in &ins.skills {
+                for (slug, agent, desc) in ins.skills.iter().take(SHOW) {
                     println!("  [{agent}] {slug}: {desc}");
                 }
+                showing(ins.skills.len(), "skills");
             }
             if !ins.agent_configs.is_empty() {
                 println!("agent config:");
-                for (slug, agent, role) in &ins.agent_configs {
+                for (slug, agent, role) in ins.agent_configs.iter().take(SHOW) {
                     println!("  [{agent}] {slug} ({role})");
                 }
+                showing(ins.agent_configs.len(), "configs");
             }
             if !ins.custom_artifacts.is_empty() {
                 let parts: Vec<String> = ins
@@ -645,15 +774,35 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             }
             if !ins.stale_docs.is_empty() {
                 println!("possibly stale docs (mentioned files changed since):");
-                for (slug, kind, changed) in ins.stale_docs.iter().take(5) {
-                    println!("  {slug} ({kind}): {}", changed.join(", "));
+                for d in ins.stale_docs.iter().take(SHOW) {
+                    println!(
+                        "  [{}] {} ({}): {}",
+                        d.severity.as_str(),
+                        d.slug,
+                        d.kind,
+                        d.changed.join(", ")
+                    );
                 }
+                showing(ins.stale_docs.len(), "stale docs");
             }
             if !ins.notes.is_empty() {
                 println!("recent notes:");
-                for (at, entity, text) in &ins.notes {
+                for (at, entity, text) in ins.notes.iter().take(SHOW) {
                     let age = now.saturating_sub(*at) / 1000;
                     println!("  [{age}s ago] {entity}: {text}");
+                }
+                showing(ins.notes.len(), "notes");
+            }
+            {
+                let index = build_index(&store)?;
+                let findings = brain_observe::coherence::check(&store, &index, prefix)
+                    .map_err(|e| e.to_string())?;
+                if !findings.is_empty() {
+                    println!("coherence findings:");
+                    for f in findings.iter().take(SHOW) {
+                        println!("  {f}");
+                    }
+                    showing(findings.len(), "findings");
                 }
             }
             if ins.series.len() > 1 {
@@ -716,11 +865,51 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             if ins.stale_docs.is_empty() {
                 println!("no stale docs under {prefix}");
             }
-            for (slug, kind, changed) in &ins.stale_docs {
-                println!("{slug} ({kind}) — changed since doc updated:");
-                for f in changed {
+            for d in &ins.stale_docs {
+                println!(
+                    "[{}] {} ({}) — changed since doc updated or acknowledged:",
+                    d.severity.as_str(),
+                    d.slug,
+                    d.kind
+                );
+                for f in &d.changed {
                     println!("  {f}");
                 }
+            }
+            let warns =
+                ins.stale_docs.iter().filter(|d| d.severity == brain_observe::twin::Severity::Warn).count();
+            if !ins.stale_docs.is_empty() {
+                println!(
+                    "({warns} warn, {} info; reviewed-and-still-accurate? `brain adr|plan|artifact ack`)",
+                    ins.stale_docs.len() - warns
+                );
+            }
+            Ok(())
+        }
+        Some("config") => {
+            let usage = "usage: brain twin config <prefix> [--add-extensions csv]";
+            let prefix = args.get(1).filter(|a| !a.starts_with("--")).ok_or(usage)?;
+            let add: Vec<String> = args
+                .iter()
+                .position(|a| a == "--add-extensions")
+                .and_then(|i| args.get(i + 1))
+                .map(|v| vec![v.clone()])
+                .unwrap_or_default();
+            let store = open_store()?;
+            if add.is_empty() {
+                let index = build_index(&store)?;
+                let repo = brain_core::ids::StableId::derive(&["repo", prefix.as_str()]);
+                let exts = brain_observe::twin::latest(&index, &store, &repo, "ingest_extensions")
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or_else(|| "(none beyond built-ins)".to_string());
+                println!("extra ingest extensions for {prefix}: {exts}");
+                return Ok(());
+            }
+            match brain_observe::twin::add_ingest_extensions(&store, prefix, &add)
+                .map_err(|e| e.to_string())?
+            {
+                Some(csv) => println!("extra ingest extensions for {prefix}: {csv} (next refresh ingests them)"),
+                None => println!("no change — already taught"),
             }
             Ok(())
         }
@@ -775,10 +964,59 @@ fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), St
     };
     let usage = format!(
         "usage: brain {cmd} add <md-file> --prefix <p> [--title T]{} | \
-         brain {cmd} list <prefix> | brain {cmd} show <prefix> <slug>",
-        if cmd == "adr" { " [--status S]" } else { "" }
+         brain {cmd} list <prefix> [--all] | brain {cmd} show <prefix> <slug>{}",
+        if cmd == "adr" { " [--status S]" } else { "" },
+        if cmd == "plan" { " | brain plan done|abandon|reopen <prefix> <slug> [--why R]" } else { "" }
     );
     match args.first().map(String::as_str) {
+        Some(op @ ("done" | "abandon" | "reopen")) if cmd == "plan" => {
+            let (prefix, slug) = match (args.get(1), args.get(2)) {
+                (Some(p), Some(s)) if !p.starts_with("--") && !s.starts_with("--") => (p, s),
+                _ => return Err(usage),
+            };
+            let why = args
+                .iter()
+                .position(|a| a == "--why")
+                .and_then(|i| args.get(i + 1))
+                .map(String::as_str);
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = brain_core::ids::StableId::derive(&[noun, prefix, slug]);
+            if index.entity_nodes(&sid).is_empty() {
+                return Err(format!("no {noun} '{slug}' under {prefix}"));
+            }
+            let state = match op {
+                "done" => brain_observe::lifecycle::Lifecycle::Done,
+                "abandon" => brain_observe::lifecycle::Lifecycle::Abandoned,
+                _ => brain_observe::lifecycle::Lifecycle::Active,
+            };
+            let wrote = brain_observe::lifecycle::set(&store, &index, &sid, state, why)
+                .map_err(|e| e.to_string())?;
+            let verb = if wrote { "now" } else { "already" };
+            println!("plan '{slug}' {verb} {}", state.as_str());
+            Ok(())
+        }
+        Some("ack") => {
+            let (prefix, slug) = match (args.get(1), args.get(2)) {
+                (Some(p), Some(s)) if !p.starts_with("--") && !s.starts_with("--") => (p, s),
+                _ => return Err(usage),
+            };
+            let note = args
+                .iter()
+                .position(|a| a == "--note")
+                .and_then(|i| args.get(i + 1))
+                .map(String::as_str)
+                .unwrap_or("reviewed, still accurate");
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = brain_core::ids::StableId::derive(&[noun, prefix, slug]);
+            if index.entity_nodes(&sid).is_empty() {
+                return Err(format!("no {noun} '{slug}' under {prefix}"));
+            }
+            brain_observe::twin::ack(&store, &sid, note).map_err(|e| e.to_string())?;
+            println!("{noun} '{slug}' acknowledged — staleness clock reset");
+            Ok(())
+        }
         Some("add") => {
             let mut file = None;
             let mut prefix = None;
@@ -823,15 +1061,23 @@ fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), St
             Ok(())
         }
         Some("list") => {
-            let prefix = args.get(1).ok_or_else(|| usage.clone())?;
+            let prefix = args.get(1).filter(|a| !a.starts_with("--")).ok_or_else(|| usage.clone())?;
+            let all = args.iter().any(|a| a == "--all");
             let store = open_store()?;
             let index = build_index(&store)?;
             let now = now_ms();
             let mut seen = BTreeSet::new();
             let mut any = false;
+            let mut hidden = 0usize;
             for node in index.entities_by_kind(noun) {
                 let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
                 if labels.get("prefix") != Some(prefix) || !seen.insert(id.clone()) {
+                    continue;
+                }
+                let (lc, _) = brain_observe::lifecycle::of(&index, &store, &id)
+                    .map_err(|e| e.to_string())?;
+                if !lc.is_active() && !all {
+                    hidden += 1;
                     continue;
                 }
                 let slug = labels.get("slug").cloned().unwrap_or_default();
@@ -848,11 +1094,16 @@ fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), St
                     .map(|(at, _)| format!("{}s ago", now.saturating_sub(at) / 1000))
                     .unwrap_or_else(|| "?".to_string());
                 let mentions = relation_targets(&store, &index, &id, "mentions")?.len();
-                println!("{status}{slug}: {title}  ({age}, {mentions} mention(s))");
+                let tag =
+                    if lc.is_active() { String::new() } else { format!("  [{}]", lc.as_str()) };
+                println!("{status}{slug}: {title}  ({age}, {mentions} mention(s)){tag}");
                 any = true;
             }
             if !any {
-                println!("no {noun}s under {prefix}");
+                println!("no {}{noun}s under {prefix}", if all { "" } else { "active " });
+            }
+            if hidden > 0 {
+                println!("({hidden} non-active hidden — --all shows history)");
             }
             Ok(())
         }
@@ -870,6 +1121,12 @@ fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), St
             print!("{content}");
             if !content.ends_with('\n') {
                 println!();
+            }
+            let (lc, why) = brain_observe::lifecycle::of(&index, &store, &sid)
+                .map_err(|e| e.to_string())?;
+            if !lc.is_active() {
+                let detail = if why.is_empty() { String::new() } else { format!(" ({why})") };
+                println!("--- lifecycle: {}{detail} ---", lc.as_str());
             }
             // Status timeline (decisions), oldest first.
             let mut statuses = Vec::new();
@@ -972,14 +1229,22 @@ fn cmd_agent_doc(args: &[String], kind: brain_observe::agents::AgentDocKind) -> 
             Ok(())
         }
         Some("list") => {
-            let prefix = args.get(1).ok_or_else(|| usage.clone())?;
+            let prefix = args.get(1).filter(|a| !a.starts_with("--")).ok_or_else(|| usage.clone())?;
+            let all = args.iter().any(|a| a == "--all");
             let store = open_store()?;
             let index = build_index(&store)?;
             let mut seen = BTreeSet::new();
             let mut any = false;
+            let mut hidden = 0usize;
             for node in index.entities_by_kind(noun) {
                 let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
                 if labels.get("prefix") != Some(prefix) || !seen.insert(id.clone()) {
+                    continue;
+                }
+                let (lc, _) = brain_observe::lifecycle::of(&index, &store, &id)
+                    .map_err(|e| e.to_string())?;
+                if !lc.is_active() && !all {
+                    hidden += 1;
                     continue;
                 }
                 let slug = labels.get("slug").cloned().unwrap_or_default();
@@ -993,11 +1258,16 @@ fn cmd_agent_doc(args: &[String], kind: brain_observe::agents::AgentDocKind) -> 
                     .map_err(|e| e.to_string())?
                     .map(|d| format!("  — {d}"))
                     .unwrap_or_default();
-                println!("[{agent}] {slug} ({role}){desc}");
+                let tag =
+                    if lc.is_active() { String::new() } else { format!("  [{}]", lc.as_str()) };
+                println!("[{agent}] {slug} ({role}){desc}{tag}");
                 any = true;
             }
             if !any {
-                println!("no {noun}s under {prefix}");
+                println!("no {}{noun}s under {prefix}", if all { "" } else { "active " });
+            }
+            if hidden > 0 {
+                println!("({hidden} non-active hidden — --all shows history)");
             }
             Ok(())
         }
@@ -1034,7 +1304,9 @@ fn cmd_template(args: &[String]) -> Result<(), String> {
     use brain_observe::{templates, twin};
     let usage = "usage: brain template seed | list | show <slug> | \
                  set <slug> [--applies-to k] [--capture \"globs\"] [--fields \"spec\"] \
-                 [--requires \"a,b\"] [--title T]";
+                 [--requires \"a,b\"] [--rot none|info|warn] [--placement P] [--enforce E] \
+                 [--home \"globs\"] [--project-to path] [--parser p] [--links \"a,b\"] \
+                 [--extensions \"txt,yaml\"] [--title T]";
     match args.first().map(String::as_str) {
         Some("set") => {
             let slug = args.get(1).filter(|s| !s.starts_with("--")).ok_or(usage)?;
@@ -1043,10 +1315,43 @@ fn cmd_template(args: &[String]) -> Result<(), String> {
             let mut it = args[2..].iter();
             while let Some(a) = it.next() {
                 match a.as_str() {
-                    "--applies-to" | "--capture" | "--fields" | "--requires" => {
+                    "--applies-to" | "--capture" | "--fields" | "--requires" | "--home"
+                    | "--project-to" | "--links" | "--extensions" => {
                         let key = a.trim_start_matches("--").replace('-', "_");
                         let v = it.next().cloned().ok_or(format!("{a} needs a value"))?;
                         props.push((key, v));
+                    }
+                    "--rot" => {
+                        let v = it.next().cloned().ok_or("--rot needs a value")?;
+                        if !["none", "info", "warn"].contains(&v.as_str()) {
+                            return Err(format!("--rot must be none|info|warn, got '{v}'"));
+                        }
+                        props.push(("rot".to_string(), v));
+                    }
+                    "--placement" => {
+                        let v = it.next().cloned().ok_or("--placement needs a value")?;
+                        if !["graph_first", "file_first", "projection"].contains(&v.as_str()) {
+                            return Err(format!(
+                                "--placement must be graph_first|file_first|projection, got '{v}'"
+                            ));
+                        }
+                        props.push(("placement".to_string(), v));
+                    }
+                    "--enforce" => {
+                        let v = it.next().cloned().ok_or("--enforce needs a value")?;
+                        if !["advisory", "enforced"].contains(&v.as_str()) {
+                            return Err(format!("--enforce must be advisory|enforced, got '{v}'"));
+                        }
+                        props.push(("enforce".to_string(), v));
+                    }
+                    "--parser" => {
+                        let v = it.next().cloned().ok_or("--parser needs a value")?;
+                        if !["doc.decision", "doc.plan", "agent", "fields"].contains(&v.as_str()) {
+                            return Err(format!(
+                                "--parser must be doc.decision|doc.plan|agent|fields, got '{v}'"
+                            ));
+                        }
+                        props.push(("parser".to_string(), v));
                     }
                     "--title" => title = it.next().cloned(),
                     other => return Err(format!("unexpected argument '{other}'\n{usage}")),
@@ -1091,6 +1396,23 @@ fn cmd_template(args: &[String]) -> Result<(), String> {
                     wrote += 1;
                 }
             }
+            // Version the contract: this-run values win over the index.
+            let this_run = |key: &str| {
+                props.iter().rev().find(|(p, _)| p == key).map(|(_, v)| v.clone())
+            };
+            let requires = match this_run("requires") {
+                Some(v) => v,
+                None => twin::latest(&index, &store, &sid, "requires")
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or_default(),
+            };
+            let content = twin::latest(&index, &store, &sid, "content")
+                .map_err(|e| e.to_string())?
+                .unwrap_or_default();
+            wrote += templates::stamp_contract(
+                &store, &index, &sid, &requires, &content, "agent", now,
+            )
+            .map_err(|e| e.to_string())?;
             println!("template '{slug}': {wrote} observation(s) written");
             if props.iter().any(|(p, _)| p == "capture") {
                 println!("the twin now auto-captures matching paths on every refresh");
@@ -1104,6 +1426,81 @@ fn cmd_template(args: &[String]) -> Result<(), String> {
                 "{} templates present; {n} observation(s) written",
                 templates::DEFAULTS.len()
             );
+            Ok(())
+        }
+        Some("fitness") => {
+            let slug = args.get(1).filter(|a| !a.starts_with("--")).map(String::as_str);
+            let prefix = parse_prefix(&args[1..]);
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let all = brain_observe::fitness::fitness(&store, &index, &prefix, slug)
+                .map_err(|e| e.to_string())?;
+            if all.is_empty() {
+                println!("no fitness data yet — artifacts record their judging contract as they are captured");
+                return Ok(());
+            }
+            for tf in &all {
+                println!(
+                    "template {} ({}, {}) — {} version(s) seen in use",
+                    tf.slug,
+                    tf.kind,
+                    tf.enforce,
+                    tf.versions.len()
+                );
+                for v in &tf.versions {
+                    let cur = if v.current { ", current" } else { "" };
+                    let (ok, total) = v.first_conform;
+                    let pct = if total > 0 { ok * 100 / total } else { 100 };
+                    println!(
+                        "  version {}{cur}: {} artifact(s); first-capture conformance {ok}/{total} ({pct}%)",
+                        &v.contract[..v.contract.len().min(12)],
+                        v.artifacts
+                    );
+                    for (field, n) in &v.missing {
+                        println!("    missing at first capture: {field} ×{n}");
+                    }
+                    let outcomes: Vec<String> =
+                        v.outcomes.iter().map(|(s, n)| format!("{s} {n}")).collect();
+                    println!(
+                        "    outcomes: {}; currently stale: {}",
+                        outcomes.join(", "),
+                        v.stale_now
+                    );
+                }
+                for verdict in &tf.verdicts {
+                    println!("  verdict: {verdict}");
+                }
+            }
+            Ok(())
+        }
+        Some("evolve") => {
+            let slug = args.get(1).filter(|a| !a.starts_with("--")).ok_or(usage)?;
+            let prefix = parse_prefix(&args[2..]);
+            let apply = args.iter().any(|a| a == "--apply");
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let Some(ev) = brain_observe::fitness::evolve(&store, &index, &prefix, slug)
+                .map_err(|e| e.to_string())?
+            else {
+                println!("no evolution suggested for '{slug}' — the evidence is thin or the contract fits");
+                return Ok(());
+            };
+            println!(
+                "proposal for '{slug}': demote [{}] from requires (missed in ≥ half of first captures)",
+                ev.demote.join(", ")
+            );
+            println!(
+                "  new: brain template set {slug} --requires \"{}\"  (+ recommended: {})",
+                ev.new_requires.join(","),
+                ev.new_recommended.join(",")
+            );
+            if apply {
+                brain_observe::fitness::apply_evolution(&store, &index, slug, &ev)
+                    .map_err(|e| e.to_string())?;
+                println!("applied — contract_b3 bumped; the next measurement window is open");
+            } else {
+                println!("(re-run with --apply to accept; old artifacts keep the version that judged them)");
+            }
             Ok(())
         }
         Some("list") => {
@@ -1138,23 +1535,321 @@ fn cmd_template(args: &[String]) -> Result<(), String> {
     }
 }
 
+/// Render every graph-first artifact's projection, plus pure-projection
+/// kinds (the capability matrix — a rendered query, never authored).
+fn render_projections(
+    store: &Store,
+    index: &MemIndex,
+    root: &std::path::Path,
+    prefix: &str,
+    only_kind: Option<&str>,
+) -> Result<usize, String> {
+    use brain_observe::{features, projection, twin};
+    let reg = brain_observe::kinds::registry(store, index).map_err(|e| e.to_string())?;
+    let mut rendered = 0usize;
+    for (kind, def) in &reg {
+        if only_kind.is_some_and(|k| k != kind) || def.project_to.is_empty() {
+            continue;
+        }
+        if def.placement == "graph_first" {
+            let mut seen = BTreeSet::new();
+            for node in index.entities_by_kind(kind) {
+                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+                if labels.get("prefix").map(String::as_str) != Some(prefix)
+                    || !seen.insert(id.clone())
+                {
+                    continue;
+                }
+                if !brain_observe::lifecycle::of(index, store, &id)
+                    .map_err(|e| e.to_string())?
+                    .0
+                    .is_active()
+                {
+                    continue;
+                }
+                let slug = labels.get("slug").cloned().unwrap_or_default();
+                let Some(content) =
+                    twin::latest(index, store, &id, "content").map_err(|e| e.to_string())?
+                else {
+                    continue;
+                };
+                let Some(rel) = projection::projection_rel(def, &slug) else { continue };
+                let body = projection::render_body(&rel, kind, prefix, &slug, &content);
+                projection::write_projection(store, index, root, &id, &rel, &body)
+                    .map_err(|e| e.to_string())?;
+                rendered += 1;
+            }
+        } else if def.placement == "projection" && kind == "capability_matrix" {
+            let rows = features::list(store, index, prefix).map_err(|e| e.to_string())?;
+            if rows.is_empty() {
+                continue;
+            }
+            let mut content = String::from(
+                "# Capability matrix\n\nA rendered query over the feature registry — regenerate, never edit.\n\n| feature | status | definition of done |\n|---|---|---|\n",
+            );
+            for row in &rows {
+                let report = features::evaluate(store, index, prefix, &row.slug)
+                    .map_err(|e| e.to_string())?;
+                let met = report.checks.iter().filter(|c| c.count > 0).count();
+                let mark = if report.done { " ✓" } else { "" };
+                content.push_str(&format!(
+                    "| {} | {} | {met}/{}{mark} |\n",
+                    row.slug,
+                    row.status,
+                    report.checks.len()
+                ));
+            }
+            let slug = "features";
+            let sid = brain_core::ids::StableId::derive(&["capability_matrix", prefix, slug]);
+            let mut labels = std::collections::BTreeMap::new();
+            labels.insert("prefix".to_string(), prefix.to_string());
+            labels.insert("slug".to_string(), slug.to_string());
+            labels.insert("title".to_string(), "Capability matrix".to_string());
+            store
+                .put(&Object::Entity {
+                    id: sid.clone(),
+                    entity_kind: "capability_matrix".to_string(),
+                    labels,
+                })
+                .map_err(|e| e.to_string())?;
+            if twin::latest(index, store, &sid, "content")
+                .map_err(|e| e.to_string())?
+                .as_deref()
+                != Some(content.as_str())
+            {
+                store
+                    .put(&Object::Observation {
+                        subject: sid.clone(),
+                        property: "content".to_string(),
+                        value: content.clone(),
+                        source: "projection".to_string(),
+                        observed_at_ms: now_ms(),
+                    })
+                    .map_err(|e| e.to_string())?;
+            }
+            let Some(rel) = projection::projection_rel(def, slug) else { continue };
+            let body = projection::render_body(&rel, kind, prefix, slug, &content);
+            projection::write_projection(store, index, root, &sid, &rel, &body)
+                .map_err(|e| e.to_string())?;
+            rendered += 1;
+        }
+    }
+    Ok(rendered)
+}
+
 /// `brain artifact ...` — generic browse for artifacts of any entity kind,
 /// including kinds taught to the store via graph-defined capture rules.
 fn cmd_artifact(args: &[String]) -> Result<(), String> {
-    let usage = "usage: brain artifact list <prefix> <kind> | brain artifact show <prefix> <kind> <slug>";
+    let usage = "usage: brain artifact new|edit <prefix> <kind> <slug> [--title T] [--file f|-] | \
+                 brain artifact render [dir] [--prefix <p>] [--kind k] [--check] | \
+                 brain artifact list <prefix> <kind> [--all] | \
+                 brain artifact show <prefix> <kind> <slug> | \
+                 brain artifact set-lifecycle <prefix> <kind> <slug> <state> [--why R] | \
+                 brain artifact ack <prefix> <kind> <slug> [--note T]";
     match args.first().map(String::as_str) {
+        Some(op @ ("new" | "edit")) => {
+            let (prefix, kind, slug) = match (args.get(1), args.get(2), args.get(3)) {
+                (Some(p), Some(k), Some(s))
+                    if !p.starts_with("--") && !k.starts_with("--") && !s.starts_with("--") =>
+                {
+                    (p, k, s)
+                }
+                _ => return Err(usage.to_string()),
+            };
+            let mut title = None;
+            let mut file = None;
+            let mut it = args[4..].iter();
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--title" => title = it.next().cloned(),
+                    "--file" => file = it.next().cloned(),
+                    other => return Err(format!("unexpected argument '{other}'\n{usage}")),
+                }
+            }
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let reg = brain_observe::kinds::registry(&store, &index)
+                .map_err(|e| e.to_string())?;
+            let def = reg
+                .get(kind.as_str())
+                .ok_or_else(|| format!("unknown kind '{kind}' — teach it: brain template set <slug> --applies-to {kind} ..."))?
+                .clone();
+            let sid = brain_core::ids::StableId::derive(&[kind, prefix, slug]);
+            let exists = !index.entity_nodes(&sid).is_empty();
+            if op == "edit" && !exists {
+                return Err(format!("no {kind} '{slug}' under {prefix} — use artifact new"));
+            }
+            let title = title.unwrap_or_else(|| slug.replace('-', " "));
+            let content = match file.as_deref() {
+                Some("-") => {
+                    use std::io::Read as _;
+                    let mut buf = String::new();
+                    std::io::stdin()
+                        .read_to_string(&mut buf)
+                        .map_err(|e| e.to_string())?;
+                    buf
+                }
+                Some(path) => std::fs::read_to_string(path)
+                    .map_err(|e| format!("cannot read '{path}': {e}"))?,
+                None if op == "new" && !def.content.is_empty() => {
+                    brain_observe::templates::instantiate(&def.content, &title)
+                }
+                None => return Err(format!("--file <path|-> is required\n{usage}")),
+            };
+
+            // The write-time gate: validate before anything lands.
+            let missing = brain_observe::templates::check(&content, &def.requires);
+            if !missing.is_empty() {
+                let fix = format!(
+                    "missing: {} — scaffold: brain deliverable new {} --title \"{title}\"",
+                    missing.join(", "),
+                    def.slug
+                );
+                if def.enforce == "enforced" {
+                    return Err(format!(
+                        "refused: {kind} '{slug}' does not meet its contract; nothing written\n  {fix}"
+                    ));
+                }
+                eprintln!("warning: {kind} '{slug}' does not meet its contract ({fix}) — recorded anyway");
+            }
+            let out = brain_observe::twin::author_artifact(
+                &store, prefix, kind, slug, &title, &content, "agent",
+            )
+            .map_err(|e| e.to_string())?;
+            let state = if out.wrote { "recorded" } else { "already recorded (unchanged)" };
+            println!("{kind} '{slug}' {state} under {prefix} ({} mention(s))", out.mentions.len());
+
+            // Graph-first kinds materialize as read-only projections.
+            if def.placement == "graph_first" {
+                if let Some(rel) =
+                    brain_observe::projection::projection_rel(&def, slug)
+                {
+                    let index = build_index(&store)?;
+                    let body = brain_observe::projection::render_body(
+                        &rel, kind, prefix, slug, &content,
+                    );
+                    let target = brain_observe::projection::write_projection(
+                        &store,
+                        &index,
+                        std::path::Path::new("."),
+                        &out.sid,
+                        &rel,
+                        &body,
+                    )
+                    .map_err(|e| e.to_string())?;
+                    println!("projected (read-only): {}", target.display());
+                }
+            }
+            Ok(())
+        }
+        Some("render") => {
+            let dir = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .cloned()
+                .unwrap_or_else(|| ".".to_string());
+            let prefix = parse_prefix(&args[1..]);
+            let only_kind = args
+                .iter()
+                .position(|a| a == "--kind")
+                .and_then(|i| args.get(i + 1))
+                .cloned();
+            let check = args.iter().any(|a| a == "--check");
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let root = std::path::Path::new(&dir);
+            if check {
+                let found = brain_observe::projection::drift(&store, &index, root, &prefix)
+                    .map_err(|e| e.to_string())?;
+                if found.is_empty() {
+                    println!("all projections match their contracts");
+                    return Ok(());
+                }
+                for d in &found {
+                    println!("{:?} {} — fix: {}", d.kind, d.path, d.fix);
+                }
+                if found
+                    .iter()
+                    .any(|d| d.kind == brain_observe::projection::DriftKind::HandEdited)
+                {
+                    return Err(format!(
+                        "refused: {} projection(s) drifted from the graph",
+                        found.len()
+                    ));
+                }
+                return Ok(());
+            }
+            let rendered = render_projections(&store, &index, root, &prefix, only_kind.as_deref())?;
+            println!("{rendered} projection(s) rendered under {}/docs/brain", dir.trim_end_matches('/'));
+            Ok(())
+        }
+        Some("ack") => {
+            let (prefix, kind, slug) = match (args.get(1), args.get(2), args.get(3)) {
+                (Some(p), Some(k), Some(s)) => (p, k, s),
+                _ => return Err(usage.to_string()),
+            };
+            let note = args
+                .iter()
+                .position(|a| a == "--note")
+                .and_then(|i| args.get(i + 1))
+                .map(String::as_str)
+                .unwrap_or("reviewed, still accurate");
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = brain_core::ids::StableId::derive(&[kind, prefix, slug]);
+            if index.entity_nodes(&sid).is_empty() {
+                return Err(format!("no {kind} '{slug}' under {prefix}"));
+            }
+            brain_observe::twin::ack(&store, &sid, note).map_err(|e| e.to_string())?;
+            println!("{kind} '{slug}' acknowledged — staleness clock reset");
+            Ok(())
+        }
+        Some("set-lifecycle") => {
+            let (prefix, kind, slug, state) =
+                match (args.get(1), args.get(2), args.get(3), args.get(4)) {
+                    (Some(p), Some(k), Some(s), Some(st)) => (p, k, s, st),
+                    _ => return Err(usage.to_string()),
+                };
+            let state = brain_observe::lifecycle::Lifecycle::parse(state).ok_or_else(|| {
+                format!("unknown state '{state}' (active|done|abandoned|retired|superseded)")
+            })?;
+            let why = args
+                .iter()
+                .position(|a| a == "--why")
+                .and_then(|i| args.get(i + 1))
+                .map(String::as_str);
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let sid = brain_core::ids::StableId::derive(&[kind, prefix, slug]);
+            if index.entity_nodes(&sid).is_empty() {
+                return Err(format!("no {kind} '{slug}' under {prefix}"));
+            }
+            let wrote = brain_observe::lifecycle::set(&store, &index, &sid, state, why)
+                .map_err(|e| e.to_string())?;
+            let verb = if wrote { "now" } else { "already" };
+            println!("{kind} '{slug}' {verb} {}", state.as_str());
+            Ok(())
+        }
         Some("list") => {
             let (prefix, kind) = match (args.get(1), args.get(2)) {
                 (Some(p), Some(k)) => (p, k),
                 _ => return Err(usage.to_string()),
             };
+            let all = args.iter().any(|a| a == "--all");
             let store = open_store()?;
             let index = build_index(&store)?;
             let mut seen = BTreeSet::new();
             let mut any = false;
+            let mut hidden = 0usize;
             for node in index.entities_by_kind(kind) {
                 let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
                 if labels.get("prefix") != Some(prefix) || !seen.insert(id.clone()) {
+                    continue;
+                }
+                let (lc, _) = brain_observe::lifecycle::of(&index, &store, &id)
+                    .map_err(|e| e.to_string())?;
+                if !lc.is_active() && !all {
+                    hidden += 1;
                     continue;
                 }
                 let slug = labels.get("slug").cloned().unwrap_or_default();
@@ -1167,11 +1862,16 @@ fn cmd_artifact(args: &[String]) -> Result<(), String> {
                     .map(|c| if c == "true" { "".to_string() } else { "  [nonconforming]".to_string() })
                     .unwrap_or_default();
                 let mentions = relation_targets(&store, &index, &id, "mentions")?.len();
-                println!("{slug}: {title}  ({mentions} mention(s)){conforms}");
+                let tag =
+                    if lc.is_active() { String::new() } else { format!("  [{}]", lc.as_str()) };
+                println!("{slug}: {title}  ({mentions} mention(s)){conforms}{tag}");
                 any = true;
             }
             if !any {
-                println!("no {kind} artifacts under {prefix}");
+                println!("no {}{kind} artifacts under {prefix}", if all { "" } else { "active " });
+            }
+            if hidden > 0 {
+                println!("({hidden} non-active hidden — --all shows history)");
             }
             Ok(())
         }
@@ -1217,6 +1917,216 @@ fn cmd_artifact(args: &[String]) -> Result<(), String> {
                 for m in mentions {
                     println!("{}", entity_label(&store, &index, &m));
                 }
+            }
+            Ok(())
+        }
+        _ => Err(usage.to_string()),
+    }
+}
+
+/// `brain tidy` — the brain cleans up: advisory scan, safe fixes via
+/// governed changes, deletion only by explicit `--rm`.
+fn cmd_tidy(args: &[String]) -> Result<(), String> {
+    let usage = "usage: brain tidy [dir] [--prefix <p>] [--fix --cap fs] [--rm <path> --cap fs]";
+    let dir = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .cloned()
+        .unwrap_or_else(|| ".".to_string());
+    let prefix = parse_prefix(args);
+    let apply_fix = args.iter().any(|a| a == "--fix");
+    let caps: Vec<String> = args
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| *a == "--cap")
+        .filter_map(|(i, _)| args.get(i + 1).cloned())
+        .collect();
+    let rm = args
+        .iter()
+        .position(|a| a == "--rm")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let root = std::path::Path::new(&dir);
+
+    if let Some(path) = rm {
+        let ok = brain_observe::tidy::remove_path(&store, root, &path, &caps)
+            .map_err(|e| e.to_string())?;
+        if ok {
+            println!("removed {path} (intent + receipt recorded)");
+        } else {
+            return Err(format!("removal of {path} failed — see the receipt"));
+        }
+        return Ok(());
+    }
+
+    let findings = brain_observe::tidy::scan(&store, &index, root, &prefix)
+        .map_err(|e| e.to_string())?;
+    if findings.is_empty() {
+        println!("nothing to tidy under {prefix}");
+        return Ok(());
+    }
+    for f in &findings {
+        println!("[{}] {} — {}\n    fix: {}", f.category, f.path, f.detail, f.fix);
+    }
+    if !apply_fix {
+        let fixable = findings.iter().filter(|f| f.fixable).count();
+        println!(
+            "({} finding(s), {fixable} fixable — `brain tidy {dir} --prefix {prefix} --fix --cap fs`; deletion only via --rm <path>)",
+            findings.len()
+        );
+        return Ok(());
+    }
+    let (fixed, skipped) =
+        brain_observe::tidy::fix(&store, root, &prefix, &findings, &caps)
+            .map_err(|e| e.to_string())?;
+    for m in &fixed {
+        println!("fixed: {m}");
+    }
+    for (path, why) in &skipped {
+        println!("skipped: {path} — {why}");
+    }
+    println!("({} fixed, {} skipped)", fixed.len(), skipped.len());
+    Ok(())
+}
+
+/// `brain instructions generate` — one guardrail block, every agent file.
+fn cmd_instructions(args: &[String]) -> Result<(), String> {
+    let usage = "usage: brain instructions generate [dir] [--prefix <p>] [--check]";
+    if args.first().map(String::as_str) != Some("generate") {
+        return Err(usage.to_string());
+    }
+    let dir = args
+        .get(1)
+        .filter(|a| !a.starts_with("--"))
+        .cloned()
+        .unwrap_or_else(|| ".".to_string());
+    let prefix = parse_prefix(&args[1..]);
+    let check = args.iter().any(|a| a == "--check");
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let root = std::path::Path::new(&dir);
+    if check {
+        let drifted = brain_observe::instructions::block_drift(&store, &index, root, &prefix)
+            .map_err(|e| e.to_string())?;
+        if drifted.is_empty() {
+            println!("instruction blocks match the registry");
+            return Ok(());
+        }
+        return Err(format!(
+            "instruction block out of date in: {} — run `brain instructions generate {dir} --prefix {prefix}`",
+            drifted.join(", ")
+        ));
+    }
+    for (file, changed) in
+        brain_observe::instructions::generate(&store, &index, root, &prefix)
+            .map_err(|e| e.to_string())?
+    {
+        let state = if changed { "updated" } else { "unchanged" };
+        println!("{file}: guardrail block {state}");
+    }
+    println!("every agent family now reads identical rules; regenerate after `brain template set`");
+    Ok(())
+}
+
+/// `brain asset ...` — typed binary artifacts: bytes stay files, identity,
+/// ownership, and staleness live in the graph.
+fn cmd_asset(args: &[String]) -> Result<(), String> {
+    let usage = "usage: brain asset add <file> --prefix <p> --for <kind>/<slug> \
+                 [--depicts <path|kind/slug>]... [--subtype s] | brain asset list <prefix> [--all]";
+    match args.first().map(String::as_str) {
+        Some("add") => {
+            let file = args.get(1).filter(|a| !a.starts_with("--")).ok_or(usage)?;
+            let mut prefix = None;
+            let mut owner = None;
+            let mut subtype = None;
+            let mut depicts: Vec<String> = Vec::new();
+            let mut it = args[2..].iter();
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--prefix" => prefix = it.next().cloned(),
+                    "--for" => owner = it.next().cloned(),
+                    "--subtype" => subtype = it.next().cloned(),
+                    "--depicts" => {
+                        depicts.push(it.next().cloned().ok_or("--depicts needs a value")?)
+                    }
+                    other => return Err(format!("unexpected argument '{other}'\n{usage}")),
+                }
+            }
+            let prefix = prefix.ok_or_else(|| format!("--prefix is required\n{usage}"))?;
+            let owner = owner.ok_or_else(|| format!("--for <kind>/<slug> is required\n{usage}"))?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let rel = file.trim_start_matches("./");
+            if store
+                .resolve(&format!("{prefix}/{rel}"))
+                .map_err(|e| e.to_string())?
+                .is_none()
+            {
+                return Err(format!(
+                    "'{rel}' is not twinned under {prefix} — run `brain twin refresh` first"
+                ));
+            }
+            let (okind, oslug) = owner
+                .split_once('/')
+                .ok_or("--for takes <kind>/<slug>, e.g. plan/twin-v3")?;
+            let owner_sid = brain_core::ids::StableId::derive(&[okind, &prefix, oslug]);
+            if index.entity_nodes(&owner_sid).is_empty() {
+                return Err(format!("no {okind} '{oslug}' under {prefix}"));
+            }
+            let mut targets = Vec::new();
+            for d in &depicts {
+                let sid = brain_observe::assets::resolve_depicts(&store, &index, &prefix, d)
+                    .map_err(|e| e.to_string())?
+                    .ok_or_else(|| format!("--depicts '{d}' matches no twinned entity"))?;
+                targets.push(sid);
+            }
+            let out = brain_observe::assets::add(
+                &store,
+                &prefix,
+                rel,
+                &owner_sid,
+                &targets,
+                subtype.as_deref(),
+            )
+            .map_err(|e| e.to_string())?;
+            let state = if out.wrote { "declared" } else { "already declared (unchanged)" };
+            println!(
+                "asset '{}' {state} under {prefix} (owner: {owner}, {} depicts)",
+                out.slug,
+                targets.len()
+            );
+            Ok(())
+        }
+        Some("list") => {
+            let prefix = args.get(1).filter(|a| !a.starts_with("--")).ok_or(usage)?;
+            let all = args.iter().any(|a| a == "--all");
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let rows = brain_observe::assets::list(&store, &index, prefix)
+                .map_err(|e| e.to_string())?;
+            let mut any = false;
+            let mut hidden = 0usize;
+            for row in rows {
+                if !row.lifecycle.is_active() && !all {
+                    hidden += 1;
+                    continue;
+                }
+                let owner = row.owner.map(|o| format!("  -> {o}")).unwrap_or_default();
+                let tag = if row.lifecycle.is_active() {
+                    String::new()
+                } else {
+                    format!("  [{}]", row.lifecycle.as_str())
+                };
+                println!("[{}] {} ({}){owner}{tag}", row.subtype, row.slug, row.path);
+                any = true;
+            }
+            if !any {
+                println!("no {}assets under {prefix}", if all { "" } else { "active " });
+            }
+            if hidden > 0 {
+                println!("({hidden} non-active hidden — --all shows history)");
             }
             Ok(())
         }
@@ -1288,10 +2198,24 @@ fn cmd_feature(args: &[String]) -> Result<(), String> {
                 };
             let store = open_store()?;
             let index = build_index(&store)?;
-            let (target_sid, kind) = features::resolve_target(&index, prefix, target)
+            let (target_sid, kind) = features::resolve_target(&store, &index, prefix, target)
+                .map_err(|e| e.to_string())?
                 .ok_or_else(|| {
-                    format!("no twinned entity matches '{target}' (file path, or a decision/plan/skill/feature slug)")
+                    format!("no twinned entity matches '{target}' (file path, or the slug of any registered kind)")
                 })?;
+            // Advisory link vocabulary: warn (never refuse) when the
+            // feature kind declares allowed predicates and this one is not
+            // among them.
+            let reg = brain_observe::kinds::registry(&store, &index)
+                .map_err(|e| e.to_string())?;
+            if let Some(def) = reg.get("feature") {
+                if !def.links.is_empty() && !def.links.contains(predicate) {
+                    eprintln!(
+                        "warning: '{predicate}' is not in the feature kind's link vocabulary [{}] — linked anyway",
+                        def.links.join(", ")
+                    );
+                }
+            }
             let wrote = features::link(&store, prefix, slug, predicate, &target_sid)
                 .map_err(|e| e.to_string())?;
             let state = if wrote { "linked" } else { "already linked" };
@@ -1676,6 +2600,21 @@ fn cmd_change(args: &[String]) -> Result<(), String> {
 }
 
 /// `brain attend` — the attention organ: what deserves attention now.
+/// `brain wake <prefix>` — one command, the whole present.
+fn cmd_wake(args: &[String]) -> Result<(), String> {
+    let prefix = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .ok_or("usage: brain wake <prefix> [--full]")?;
+    let full = args.iter().any(|a| a == "--full");
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let text = brain_observe::wake::wake(&store, &index, prefix, full)
+        .map_err(|e| e.to_string())?;
+    println!("{text}");
+    Ok(())
+}
+
 fn cmd_attend(args: &[String]) -> Result<(), String> {
     let prefix = args.first().filter(|a| !a.starts_with("--")).ok_or("usage: brain attend <prefix> [--top N]")?;
     let top = parse_top(args, 10)?;
