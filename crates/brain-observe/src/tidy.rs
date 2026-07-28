@@ -24,6 +24,14 @@ use std::process::Command;
 
 pub const ATTIC: &str = "docs/attic";
 
+/// Whether a path already lives in the attic.
+///
+/// Every archival check needs this: a finding that proposes moving an
+/// archived file deeper into the archive is a loop, not a cleanup.
+pub fn archived(path: &str) -> bool {
+    path == ATTIC || path.starts_with(&format!("{ATTIC}/"))
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Finding {
     pub category: String,
@@ -120,6 +128,12 @@ pub fn scan(
                 {
                     continue;
                 }
+                // Already archived. Without this, archiving is not
+                // idempotent: the next run proposes moving the attic into
+                // the attic, and the one after that moves that, forever.
+                if archived(&path) {
+                    continue;
+                }
                 if !state.is_active() {
                     out.push(Finding {
                         category: "retired-artifact-file".to_string(),
@@ -164,6 +178,9 @@ pub fn scan(
 
     // Orphaned assets: owner concluded. Archive the bytes, keep the graph.
     for (path, why) in crate::assets::orphaned(store, index, prefix)? {
+        if archived(&path) {
+            continue;
+        }
         out.push(Finding {
             category: "legacy-asset".to_string(),
             path: path.clone(),
@@ -192,6 +209,9 @@ pub fn scan(
             }
             let readme = sid_label(index, store, &file);
             if let Some(dir) = readme.rsplit_once('/').map(|(d, _)| d.to_string()) {
+                if archived(&dir) {
+                    continue;
+                }
                 out.push(Finding {
                     category: "concluded-prototype".to_string(),
                     path: dir.clone(),
@@ -579,6 +599,17 @@ mod tests {
         );
         assert!(src.path().join(format!("{ATTIC}/{rel}")).exists());
         assert!(!target.exists());
+
+        // Archiving is a fixed point. Without the attic guard the next
+        // scan proposes moving docs/attic into docs/attic/docs/attic, and
+        // cleanup becomes a treadmill.
+        crate::twin::refresh(&store, src.path(), "twin/app").unwrap();
+        let index = fresh_index(&store);
+        let again = scan(&store, &index, src.path(), "twin/app").unwrap();
+        assert!(
+            !again.iter().any(|f| f.path.starts_with(ATTIC)),
+            "tidy wants to archive the archive: {again:?}"
+        );
 
         // The move is a governed change: auditable and revertible.
         let index = fresh_index(&store);
