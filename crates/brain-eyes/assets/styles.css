@@ -715,3 +715,83 @@ body.in-mri { --page: #070b10; }
 .inflight-head { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; }
 .inflight-head strong { font-weight: 500; font-size: 12.5px; }
 .inflight-why { margin: 4px 0 0; color: var(--faint); font-size: 11px; }
+
+/* ==================================================================== map
+   The v4 rewrite of this stylesheet dropped every rule the Map surface
+   used. The visible result: an SVG <path> fills by default, so each
+   dependency curve rendered as a large black blob across the diagram.
+   Restored here, with the geometry rules that make position mean
+   something (ADR-024): a block's row is its dependency layer, and an
+   edge runs from the module that depends to the one depended on. */
+.map-wrap { display: flex; flex-direction: column; gap: 16px; }
+.map-head { display: flex; gap: 20px; align-items: flex-start; justify-content: space-between; }
+.map-head h1 { font: 400 22px/1.25 var(--judgment); margin: 0 0 6px; }
+.map-head p { margin: 0; color: var(--meta); font-size: 12px; max-width: 78ch; }
+
+.lenses { display: flex; gap: 6px; flex: none; }
+.lenses button {
+  padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--meta); font-size: 11.5px; white-space: nowrap;
+}
+.lenses button:hover { border-color: var(--control); color: var(--ink); }
+.lenses button.on { border-color: var(--trace); color: var(--trace); background: var(--trace-fill); }
+
+.map-field {
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px; overflow-x: auto;
+}
+.map-field svg { display: block; width: 100%; height: auto; min-width: 720px; }
+
+/* A dependency, not a shape. Without `fill: none` the browser closes the
+   curve and paints the area under it. */
+.mb-edge { fill: none; stroke: var(--line); stroke-opacity: .85; }
+
+.mb-block { cursor: pointer; }
+.mb-block rect { stroke: var(--line); stroke-width: 1; }
+.mb-block:hover rect, .mb-block:focus-visible rect { stroke: var(--trace); stroke-width: 1.5; }
+.mb-block .name { fill: var(--ink); font: 500 13px/1 var(--ui); }
+.mb-block .meta { fill: var(--meta); font: 400 11px/1 var(--ui); }
+.map-layer-label {
+  fill: var(--faint); font: 500 9.5px/1 var(--record);
+  text-transform: uppercase; letter-spacing: .1em;
+}
+
+.map-detail {
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.map-detail h2 { font: 400 16px/1.3 var(--judgment); margin: 0 0 4px; }
+.map-detail > p { margin: 0 0 10px; color: var(--meta); font-size: 12px; }
+.map-detail ul {
+  margin: 0; padding: 0; list-style: none;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px;
+}
+.map-detail li button {
+  width: 100%; text-align: left; padding: 4px 6px; border-radius: 5px;
+  font: 400 11.5px/1.5 var(--record); color: var(--body);
+}
+.map-detail li button:hover { background: var(--wash); color: var(--ink); }
+
+/* ------------------------------------------------------------ restored
+   Other rules the same rewrite dropped. Each is used by a live surface. */
+.page { max-width: 1180px; }
+
+.protocol {
+  display: grid; grid-template-columns: 108px 1fr; gap: 14px; width: 100%;
+  padding: 11px 0; border-top: 1px solid var(--line-soft); text-align: left;
+}
+.protocol:first-child { border-top: 0; }
+.protocol .when { color: var(--muted); font: 400 11px/1.6 var(--record); }
+
+.row-link {
+  padding: 0; font: 400 12px/1.5 var(--record); color: var(--body);
+  text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px;
+}
+.row-link:hover { color: var(--ink); text-decoration-color: var(--control); }
+
+.why { color: var(--muted); font-size: 11.5px; margin-left: auto; padding-left: 14px; }
+.finder-empty { color: var(--muted); font-size: 12px; margin: 10px 2px; }
+
+.glyph { display: inline-flex; width: 15px; height: 15px; color: var(--meta); }
+.rail-mri .rail-mark { opacity: .9; }
+.speakable { outline: 2px solid var(--trace); outline-offset: 3px; border-radius: 4px; }

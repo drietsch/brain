@@ -1293,3 +1293,76 @@ fn the_roadmap_keeps_a_stage_apart_from_the_features_planned_for_it() {
         assert!(item.because.is_none());
     }
 }
+
+/// Every class the browser puts on an element has a rule behind it.
+///
+/// Twice now a stylesheet rewrite has dropped rules that a surface still
+/// used, and both times it went unnoticed until someone looked: the Map's
+/// dependency curves rendered as large black shapes, because an SVG path
+/// with no `fill: none` is a filled region, and the rule that said so had
+/// been deleted. Nothing in the type system connects a class name in the
+/// browser to a selector in the stylesheet, so this does.
+#[test]
+fn every_class_the_browser_uses_has_a_rule() {
+    const CSS: &str = include_str!("../assets/styles.css");
+    let sources = [
+        include_str!("../assets/app.js"),
+        include_str!("../assets/list.js"),
+        include_str!("../assets/mri.js"),
+        include_str!("../assets/index.html"),
+    ];
+
+    // Selectors the stylesheet defines.
+    let mut defined: BTreeMap<String, ()> = BTreeMap::new();
+    for (index, _) in CSS.match_indices('.') {
+        let rest = &CSS[index + 1..];
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+            .collect();
+        if !name.is_empty() && name.chars().next().is_some_and(char::is_alphabetic) {
+            defined.insert(name, ());
+        }
+    }
+
+    // Classes the browser sets. Template holes (`${…}`) are skipped: what
+    // they interpolate is a tone or a state, and those are covered by the
+    // static half of the same attribute.
+    let mut used: BTreeMap<String, ()> = BTreeMap::new();
+    for source in sources {
+        for opener in ["class: \"", "class=\"", "class: `", "\"class\", \""] {
+            for (index, _) in source.match_indices(opener) {
+                let rest = &source[index + opener.len()..];
+                let close = opener.chars().last().unwrap();
+                let Some(end) = rest.find(close) else { continue };
+                let mut value = rest[..end].to_string();
+                // Drop interpolations, keeping the literal words around them.
+                while let (Some(open), Some(shut)) = (value.find("${"), value.find('}')) {
+                    if shut < open {
+                        break;
+                    }
+                    value.replace_range(open..=shut, " ");
+                }
+                for name in value.split_whitespace() {
+                    if name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+                        && name.chars().next().is_some_and(char::is_alphabetic)
+                    {
+                        used.insert(name.to_string(), ());
+                    }
+                }
+            }
+        }
+    }
+
+    // A grid child needs no rule of its own; anything else is a gap.
+    let allowed_bare = ["coverage-row"];
+    let missing: Vec<&str> = used
+        .keys()
+        .map(String::as_str)
+        .filter(|name| !defined.contains_key(*name) && !allowed_bare.contains(name))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "the browser sets these classes and the stylesheet says nothing about them: {missing:?}"
+    );
+}
