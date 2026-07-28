@@ -13,6 +13,7 @@ pub mod map;
 pub mod media;
 pub mod mri;
 pub mod now;
+pub mod roadmap;
 pub mod tests;
 pub mod thing;
 pub mod timeline;

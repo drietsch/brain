@@ -370,6 +370,40 @@ pub fn reach_sentence(declared: usize, reached: usize, files: usize) -> String {
     )
 }
 
+/// What a stage's features can show — never whether the stage is done.
+///
+/// The wording keeps the subject on the features on purpose. "All four
+/// are ready" beside "Stage 1 — the authoring experiment" would read as
+/// an answer to the research question, which is not something the graph
+/// can know.
+pub fn stage_verdict(ready: usize, total: usize) -> String {
+    match (ready, total) {
+        (_, 0) => "No feature is planned for this yet.".to_string(),
+        (_, 1) if ready == 1 => "The one feature planned for it can show its evidence.".to_string(),
+        (_, 1) => "The one feature planned for it cannot show its evidence yet.".to_string(),
+        (r, t) if r == t => format!("All {t} features planned for it can show their evidence."),
+        (r, t) => format!("{r} of {t} features planned for it can show theirs."),
+    }
+}
+
+/// The roadmap in one line.
+pub fn roadmap_headline(stages: usize, moving: usize) -> String {
+    if stages == 0 {
+        return "Nothing here records a plan yet.".to_string();
+    }
+    if moving == 0 {
+        return format!(
+            "{}, and nothing is in flight.",
+            count(stages as u64, "stage", "stages")
+        );
+    }
+    format!(
+        "{}, and {} in flight.",
+        count(stages as u64, "stage", "stages"),
+        count(moving as u64, "thing is", "things are")
+    )
+}
+
 /// How much of the graph any feature reaches, in one sentence.
 pub fn coverage_sentence(claimed: usize, total: usize) -> String {
     if total == 0 {

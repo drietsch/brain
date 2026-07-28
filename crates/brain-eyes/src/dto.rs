@@ -929,3 +929,77 @@ pub struct CoverageRow {
     pub unclaimed: Vec<Ref>,
     pub unclaimed_total: usize,
 }
+
+// ---------------------------------------------------------------------------
+// Roadmap
+// ---------------------------------------------------------------------------
+
+/// What is planned, what is in flight, and what is done — read down the
+/// spine rather than across a list of kinds.
+#[derive(Debug, Clone, Serialize)]
+pub struct RoadmapView {
+    pub snapshot: Snapshot,
+    pub headline: String,
+    pub note: String,
+    pub stages: Vec<RoadmapStage>,
+    /// Features no stage claims. Shown rather than filed away, because a
+    /// roadmap that hides work is not a roadmap.
+    pub unplanned: Vec<RoadmapRow>,
+    /// Work in flight that no feature claims. Eyes never invents an owner.
+    pub unattributed: Vec<InFlight>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RoadmapStage {
+    pub id: String,
+    pub slug: String,
+    pub title: String,
+    pub summary: String,
+    /// The stage's own lifecycle, as recorded — never derived from the
+    /// readiness of its features. A stage is a body of work, and four
+    /// finished features do not finish a research question.
+    pub state: Option<String>,
+    pub tone: String,
+    pub ready: usize,
+    pub total: usize,
+    /// "3 of 7 features linked to it are ready."
+    pub verdict: String,
+    pub features: Vec<RoadmapRow>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RoadmapRow {
+    pub id: String,
+    pub slug: String,
+    pub title: String,
+    pub done: bool,
+    pub met: usize,
+    pub total: usize,
+    pub verdict: String,
+    pub tone: String,
+    pub strip: Vec<StripCell>,
+    /// Unfinished work against this feature, right now.
+    pub inflight: Vec<InFlight>,
+    /// The newest thing that moved anywhere in its reach.
+    pub last_touched: String,
+    pub last_touched_what: Option<Ref>,
+}
+
+/// Something unfinished, and how Eyes knows which feature it belongs to.
+#[derive(Debug, Clone, Serialize)]
+pub struct InFlight {
+    pub id: String,
+    pub kind: String,
+    pub noun: String,
+    pub glyph: String,
+    pub title: String,
+    pub stage: String,
+    pub note: String,
+    pub tone: String,
+    pub when: String,
+    pub at_ms: u64,
+    /// The path from the feature to this, named. A derived attribution
+    /// that cannot show its join is an invention.
+    pub because: Option<String>,
+    pub fix_command: Option<String>,
+}

@@ -1026,6 +1026,71 @@ function coverageView(coverage) {
     })));
 }
 
+/* =====================================================================
+   Roadmap — what is planned, what is moving, what is done.
+   ===================================================================== */
+
+views.roadmap = async () => {
+  const data = await api("/api/roadmap");
+  state.snapshot = data.snapshot;
+  paintChrome(data.snapshot);
+
+  const inflightRow = (item) =>
+    h("div", { class: `inflight ${item.tone}` },
+      h("button", { class: "inflight-head", onclick: () => openThing(item.id) },
+        glyph(item.glyph), h("strong", { text: item.title }), chip(item.stage, item.tone)),
+      h("p", { class: "item-sub", text: item.note }),
+      // A derived attribution always shows the join that justifies it.
+      item.because ? h("p", { class: "inflight-why", text: item.because }) : null,
+      item.fix_command ? commandLine(item.fix_command) : null);
+
+  const featureRow = (row) =>
+    h("div", { class: "road-feature" },
+      h("button", { class: "road-feature-head", onclick: () => openThing(row.id) },
+        glyph("hexagon"),
+        h("strong", { text: row.title }),
+        strip(row.strip),
+        h("span", { class: "road-verdict", text: row.verdict })),
+      row.last_touched
+        ? h("p", { class: "road-when" }, `last moved ${row.last_touched}`,
+            row.last_touched_what
+              ? h("button", { class: "linky", text: row.last_touched_what.label,
+                              onclick: () => openThing(row.last_touched_what.id) })
+              : null)
+        : null,
+      row.inflight.length
+        ? h("div", { class: "inflights" }, row.inflight.map(inflightRow))
+        : null);
+
+  const parts = [
+    h("h1", { class: "lede", text: data.headline }),
+    h("p", { class: "sub", text: data.note }),
+  ];
+
+  for (const phase of data.stages) {
+    parts.push(h("section", { class: "stage" },
+      h("div", { class: "stage-head" },
+        h("h2", { class: "stage-title", text: phase.title }),
+        phase.state ? chip(phase.state, phase.tone) : null),
+      phase.summary ? h("p", { class: "stage-summary", text: phase.summary }) : null,
+      h("p", { class: "stage-verdict", text: phase.verdict }),
+      phase.features.length
+        ? h("div", { class: "road-features" }, phase.features.map(featureRow))
+        : null));
+  }
+
+  if (data.unplanned.length) {
+    parts.push(h("h2", { class: "section", text: "Not planned for any stage" }));
+    parts.push(h("div", { class: "road-features" }, data.unplanned.map(featureRow)));
+  }
+  if (data.unattributed.length) {
+    parts.push(h("h2", { class: "section", text: "In flight, belonging to nothing yet" }));
+    parts.push(h("div", { class: "inflights" }, data.unattributed.map(inflightRow)));
+  }
+
+  stage.replaceChildren(h("div", { class: "page" }, ...parts));
+};
+
 views.features = async (params) => {
   const data = await api("/api/features");
   state.snapshot = data.snapshot;
@@ -1583,8 +1648,9 @@ themeButton.addEventListener("click", () => {
 /* Counts on the rail, so the nav says where the trouble is. */
 async function paintRail() {
   try {
-    const [now, work, tests, evidence] = await Promise.all([
+    const [now, work, tests, evidence, roadmap] = await Promise.all([
       api("/api/now"), api("/api/work"), api("/api/tests"), api("/api/evidence"),
+      api("/api/roadmap"),
     ]);
     const set = (key, value, tone) => {
       const node = document.querySelector(`[data-count="${key}"]`);
@@ -1600,6 +1666,9 @@ async function paintRail() {
     set("work", work.sessions.filter((s) => s.live).length + work.changes.length,
       work.changes.length ? "watch" : null);
     set("tests", tests.failing.length, tests.failing.length ? "bad" : null);
+    const planned = roadmap.stages.reduce((n, s) => n + s.total - s.ready, 0)
+      + roadmap.unplanned.length;
+    set("roadmap", planned, planned ? "watch" : null);
     set("evidence", evidence.claims.filter((c) => !c.supported).length,
       evidence.claims.some((c) => !c.supported) ? "watch" : null);
     const live = document.querySelector("[data-live]");

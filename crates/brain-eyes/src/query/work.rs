@@ -151,7 +151,7 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
 }
 
 /// Governed changes that have not reached a settled state.
-fn changes(loaded: &Loaded) -> Result<Vec<WorkItem>, String> {
+pub(crate) fn changes(loaded: &Loaded) -> Result<Vec<WorkItem>, String> {
     let store = &loaded.store;
     let index = &loaded.index;
     let prefix = loaded.prefix();
@@ -201,7 +201,7 @@ fn changes(loaded: &Loaded) -> Result<Vec<WorkItem>, String> {
 }
 
 /// Plans that are still open.
-fn plans(loaded: &Loaded) -> Result<Vec<WorkItem>, String> {
+pub(crate) fn plans(loaded: &Loaded) -> Result<Vec<WorkItem>, String> {
     let store = &loaded.store;
     let index = &loaded.index;
     let prefix = loaded.prefix();

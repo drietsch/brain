@@ -125,6 +125,7 @@ fn handle(request: Request, state: &Arc<AppState>) {
         "/api/mri" => json_result(request, state.read(|loaded| loaded.mri())),
         "/api/evidence" => json_result(request, state.read(|loaded| loaded.evidence())),
         "/api/features" => json_result(request, state.read(query::features::build)),
+        "/api/roadmap" => json_result(request, state.read(query::roadmap::build)),
         "/api/media" => {
             let root = state.config.content_root.clone();
             json_result(

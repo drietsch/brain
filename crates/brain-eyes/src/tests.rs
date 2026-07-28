@@ -1052,6 +1052,7 @@ fn every_surface_is_a_read() {
     // A crawl of everything a person can open.
     f.state.read(crate::query::now::build).unwrap();
     f.state.read(crate::query::work::build).unwrap();
+    f.state.read(crate::query::roadmap::build).unwrap();
     f.state.read(crate::query::tests::build).unwrap();
     f.state.read(crate::query::evidence::build).unwrap();
     f.state
@@ -1258,5 +1259,37 @@ fn a_record_names_the_features_it_serves_and_stays_quiet_otherwise() {
             assert_eq!(reference.kind, "feature");
             assert!(!reference.label.is_empty());
         }
+    }
+}
+
+
+/// A stage says what was recorded about it; its features say what they
+/// can show. The roadmap must never collapse those into one verdict — a
+/// research question is not answered by four finished features.
+#[test]
+fn the_roadmap_keeps_a_stage_apart_from_the_features_planned_for_it() {
+    let f = fixture();
+    let view = f.state.read(crate::query::roadmap::build).unwrap();
+
+    // The fixture teaches no stages, so there are none — and the surface
+    // says so rather than inventing one.
+    assert!(view.stages.is_empty(), "absence is silence");
+    assert!(
+        !view.unplanned.is_empty(),
+        "the fixture's feature belongs to no stage, and is shown anyway"
+    );
+    for row in &view.unplanned {
+        assert!(!row.verdict.is_empty());
+        // Every in-flight item attributed to a feature shows its join.
+        for item in &row.inflight {
+            assert!(
+                item.because.as_deref().is_some_and(|why| !why.is_empty()),
+                "a derived attribution must name the path that justifies it"
+            );
+        }
+    }
+    // Work the graph cannot attribute is shown, never given an owner.
+    for item in &view.unattributed {
+        assert!(item.because.is_none());
     }
 }
