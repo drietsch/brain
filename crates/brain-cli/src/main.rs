@@ -2749,17 +2749,31 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
         return Err("backends disagree — cortex does not earn adoption".to_string());
     }
 
-    // A real query mix over the warm index.
+    // A real query mix over the warm index — against a *fresh* store.
+    //
+    // The store caches objects for the life of the process, so running
+    // this on the store the cold replay just walked would measure a fully
+    // warm cache and report a number no real command can achieve. A
+    // command opens a checkpoint and then reads the objects it needs; this
+    // reproduces that.
+    let query_store = open_store()?;
+    let query_index = cortex::Cortex::open(&query_store).map_err(|e| e.to_string())?;
     let t2 = std::time::Instant::now();
     let mut edges = 0usize;
     for sid in &sids {
-        edges += warm.relations_from(sid, "imports").len();
-        edges += warm.relations_to(sid, "imports").len();
-        edges += warm.relations_from(sid, "contains").len();
+        edges += query_index.relations_from(sid, "imports").len();
+        edges += query_index.relations_to(sid, "imports").len();
+        edges += query_index.relations_from(sid, "contains").len();
     }
-    let ins =
-        brain_observe::twin::insights_with(&store, &warm, &prefix).map_err(|e| e.to_string())?;
+    let ins = brain_observe::twin::insights_with(&query_store, &query_index, &prefix)
+        .map_err(|e| e.to_string())?;
     let query_time = t2.elapsed();
+
+    // And again on the same store, to show what the cache is worth.
+    let t3 = std::time::Instant::now();
+    let _ = brain_observe::twin::insights_with(&query_store, &query_index, &prefix)
+        .map_err(|e| e.to_string())?;
+    let requery_time = t3.elapsed();
 
     println!(
         "store: {objects} objects; probes: {} entities, {edges} edge answers",
@@ -2771,7 +2785,8 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
         warm.delta(),
         cold_time.as_secs_f64() / warm_time.as_secs_f64().max(1e-9)
     );
-    println!("query mix (edges + full insights):      {query_time:?}");
+    println!("query mix (edges + full insights):      {query_time:?}  (cold store)");
+    println!("the same query again (warm objects):    {requery_time:?}");
     println!(
         "answers: identical across backends ({} files in insights)",
         ins.files
