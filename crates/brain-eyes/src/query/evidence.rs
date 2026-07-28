@@ -123,9 +123,39 @@ fn feature_claims(loaded: &Loaded) -> Result<Vec<Claim>, String> {
 
         let mut proof = Vec::new();
         let mut holds = report.done;
+
+        // A feature with parts is judged by its parts, so its parts are
+        // its proof. Each one reports its own readiness — never merely
+        // that it exists.
+        for part in &report.parts {
+            let part_sid = features::feature_sid(prefix, &part.slug);
+            proof.push(Proof {
+                text: if part.done {
+                    format!("{} is ready ({}/{})", part.title, part.met, part.total)
+                } else {
+                    format!(
+                        "{} is not ready yet ({}/{})",
+                        part.title, part.met, part.total
+                    )
+                },
+                basis: Some(if part.met == 0 {
+                    "nothing is linked to it at all".to_string()
+                } else {
+                    "judged the same way, against its own requirements".to_string()
+                }),
+                tone: if part.done { "good" } else { "watch" }.to_string(),
+                target: Some(query::make_ref(index, store, &part_sid)),
+            });
+        }
+
         for check in &report.checks {
             let label = say::dod_label(&check.predicate);
             if check.count == 0 {
+                // A parent judged by its parts is not failing because it
+                // has no direct links of its own; that is the normal shape.
+                if report.by_parts() {
+                    continue;
+                }
                 proof.push(Proof {
                     text: format!("nothing is linked as {label}"),
                     basis: None,
@@ -134,15 +164,17 @@ fn feature_claims(loaded: &Loaded) -> Result<Vec<Claim>, String> {
                 });
                 continue;
             }
-            // Resolve each linked record to what it currently says.
-            for (_, to) in twin::live_from(index, store, &sid, &check.predicate)
-                .map_err(|e| e.to_string())?
-                .iter()
-                .take(6)
-            {
+            // Resolve each linked record to what it currently says. No
+            // silent truncation: a claim that hides half its evidence is
+            // the failure this surface exists to prevent.
+            let linked = twin::live_from(index, store, &sid, &check.predicate)
+                .map_err(|e| e.to_string())?;
+            for (_, to) in &linked {
                 let reference = query::make_ref(index, store, to);
                 let (text, basis, tone) = resolve_link(loaded, to, label, &reference)?;
-                if tone == "bad" {
+                // A direct link on a parent is supporting detail, not the
+                // verdict — the parts decide.
+                if tone == "bad" && !report.by_parts() {
                     holds = false;
                 }
                 proof.push(Proof {
@@ -154,13 +186,21 @@ fn feature_claims(loaded: &Loaded) -> Result<Vec<Claim>, String> {
             }
         }
 
-        let met = report.checks.iter().filter(|c| c.count > 0).count();
-        let verdict = if report.done && holds {
+        let (met, total) = report.score();
+        let verdict = if report.by_parts() {
+            match (&report.blocked_by, report.done) {
+                (_, true) => format!("every one of its {total} parts is ready"),
+                (Some(blocking), _) => {
+                    format!("{met} of {total} parts are ready; waiting on {blocking}")
+                }
+                (None, _) => format!("{met} of {total} parts are ready"),
+            }
+        } else if report.done && holds {
             "every requirement is linked, and every linked record still stands".to_string()
         } else if report.done {
             "every requirement is linked, but a linked record no longer holds".to_string()
         } else {
-            format!("{met} of {} requirements are linked", report.checks.len())
+            format!("{met} of {total} requirements are linked")
         };
 
         out.push(Claim {
@@ -179,7 +219,7 @@ fn feature_claims(loaded: &Loaded) -> Result<Vec<Claim>, String> {
 }
 
 /// What a linked definition-of-done target currently says about itself.
-fn resolve_link(
+pub(crate) fn resolve_link(
     loaded: &Loaded,
     target: &brain_core::ids::StableId,
     label: &str,
@@ -222,6 +262,34 @@ fn resolve_link(
                 ));
             }
             Ok((format!("{name} is linked as {label}"), None, "good".to_string()))
+        }
+        // A linked feature must answer for itself. Reporting it as good
+        // merely because it exists would let a parent look supported
+        // while the thing supporting it was nowhere near done.
+        "feature" => {
+            let slug = query::labels_of(index, store, target)
+                .get("slug")
+                .cloned()
+                .unwrap_or_default();
+            let report = features::evaluate(store, index, loaded.prefix(), &slug)
+                .map_err(|e| e.to_string())?;
+            let (met, total) = report.score();
+            let terms = if report.by_parts() { "parts" } else { "requirements" };
+            Ok(if report.done {
+                (
+                    format!("{name} is ready ({met}/{total} {terms})"),
+                    Some("judged against its own requirements".to_string()),
+                    "good".to_string(),
+                )
+            } else {
+                (
+                    format!("{name} is not ready yet ({met}/{total} {terms})"),
+                    report
+                        .blocked_by
+                        .map(|blocking| format!("waiting on {blocking}")),
+                    "bad".to_string(),
+                )
+            })
         }
         _ => {
             let (state, why) = brain_observe::lifecycle::of(index, store, target)

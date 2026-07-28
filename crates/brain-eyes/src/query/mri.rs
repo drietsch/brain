@@ -230,6 +230,7 @@ pub fn build(loaded: &Loaded) -> Result<MriView, String> {
             "documented_in",
             "changes",
             "attached_to",
+            "part_of",
         ] {
             for (_, to) in twin::live_from(index, store, sid, predicate)
                 .map_err(|e| e.to_string())?

@@ -1074,3 +1074,81 @@ fn every_surface_is_a_read() {
         "Eyes wrote something while only being looked at"
     );
 }
+
+#[test]
+fn a_part_that_is_not_ready_sinks_its_parent() {
+    let f = fixture();
+    let store = Store::open(f.state.config.store_root.clone()).unwrap();
+
+    // The fixture's `core` feature is 2 of 4. Give it a part that is
+    // fully linked, and one that has nothing.
+    brain_observe::features::add(&store, "twin/app", "core-engine", "Engine", "building").unwrap();
+    brain_observe::features::add(&store, "twin/app", "core-ui", "Interface", "building").unwrap();
+    let parent = brain_observe::features::feature_sid("twin/app", "core");
+    for part in ["core-engine", "core-ui"] {
+        brain_observe::features::link(
+            &store,
+            "twin/app",
+            part,
+            brain_observe::features::PART_OF,
+            &parent,
+        )
+        .unwrap();
+    }
+    let file = StableId::derive(&["file", "crates/core-lib/src/lib.rs"]);
+    let decision = StableId::derive(&["decision", "twin/app", "adr-001-shape"]);
+    let readme = StableId::derive(&["file", "README.md"]);
+    for (predicate, target) in [
+        ("implemented_by", &file),
+        ("tested_by", &file),
+        ("decided_by", &decision),
+        ("documented_in", &readme),
+    ] {
+        brain_observe::features::link(&store, "twin/app", "core-engine", predicate, target).unwrap();
+    }
+
+    let view = f.state.read(crate::query::evidence::build).unwrap();
+    let claim = view
+        .claims
+        .iter()
+        .find(|c| c.claim.starts_with("Core is"))
+        .expect("the parent still makes a claim");
+
+    assert!(
+        !claim.supported,
+        "a parent with an unfinished part cannot be supported"
+    );
+    assert!(
+        claim.verdict.contains("1 of 2 parts") && claim.verdict.contains("Interface"),
+        "the verdict counts parts and names the blocker: {}",
+        claim.verdict
+    );
+
+    // Both parts appear as proof, each answering for itself — the ready
+    // one positively, the empty one not.
+    let engine = claim
+        .proof
+        .iter()
+        .find(|p| p.text.starts_with("Engine"))
+        .expect("the ready part is proof");
+    assert_eq!(engine.tone, "good");
+    let ui = claim
+        .proof
+        .iter()
+        .find(|p| p.text.starts_with("Interface"))
+        .expect("the unready part is proof too");
+    assert_eq!(ui.tone, "watch");
+    assert!(ui.text.contains("not ready yet"), "{}", ui.text);
+    assert_eq!(
+        ui.basis.as_deref(),
+        Some("nothing is linked to it at all"),
+        "and it says why"
+    );
+
+    // The parent is judged by parts, so its own empty slots are not
+    // reported as failures — that is the normal shape for a parent.
+    assert!(
+        !claim.proof.iter().any(|p| p.text.starts_with("nothing is linked as")),
+        "a parent judged by parts is not failing for having no direct links"
+    );
+}

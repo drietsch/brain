@@ -6,6 +6,7 @@
 //! agreement, and how a dossier stopped costing nine passes over the store.
 
 pub mod evidence;
+pub mod features;
 pub mod find;
 pub mod library;
 pub mod map;

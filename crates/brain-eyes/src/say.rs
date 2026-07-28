@@ -339,6 +339,7 @@ pub fn dod_label(predicate: &str) -> &'static str {
         "tested_by" => "tested",
         "decided_by" => "decided",
         "documented_in" => "documented",
+        "part_of" => "part of",
         _ => "linked",
     }
 }
@@ -377,6 +378,8 @@ pub fn predicate_phrase(predicate: &str, outgoing: bool) -> String {
         ("failed", true) => "failed",
         ("attached_to", true) => "belongs to",
         ("attached_to", false) => "owns",
+        ("part_of", true) => "is part of",
+        ("part_of", false) => "is made of",
         ("depicts", true) => "shows",
         ("depicts", false) => "is shown by",
         ("renamed_to", true) => "moved to",

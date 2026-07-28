@@ -24,41 +24,43 @@
   </header>
 
   <nav class="rail" aria-label="Sections">
-    <button data-go="now" class="on">
+    <button data-go="now" data-icon="now" class="on">
       <span class="rail-mark" aria-hidden="true">◍</span><span>Now</span>
       <span class="rail-count" data-count="now" hidden></span>
     </button>
-    <button data-go="work">
+    <button data-go="work" data-icon="orbit">
       <span class="rail-mark" aria-hidden="true">◔</span><span>Work</span>
       <span class="rail-count" data-count="work" hidden></span>
     </button>
-    <button data-go="features">
+    <button data-go="features" data-icon="hexagon">
       <span class="rail-mark" aria-hidden="true">⬡</span><span>Features</span>
       <span class="rail-count" data-count="features" hidden></span>
     </button>
-    <button data-go="tests">
+    <button data-go="tests" data-icon="diamond">
       <span class="rail-mark" aria-hidden="true">◈</span><span>Tests</span>
       <span class="rail-count" data-count="tests" hidden></span>
     </button>
-    <button data-go="library">
+    <button data-go="library" data-icon="page">
       <span class="rail-mark" aria-hidden="true">▤</span><span>Artifacts</span>
       <span class="rail-count" data-count="library" hidden></span>
     </button>
-    <button data-go="evidence">
+    <button data-go="evidence" data-icon="seal">
       <span class="rail-mark" aria-hidden="true">◇</span><span>Evidence</span>
       <span class="rail-count" data-count="evidence" hidden></span>
     </button>
-    <button data-go="timeline">
+    <button data-go="timeline" data-icon="history">
       <span class="rail-mark" aria-hidden="true">⋮</span><span>History</span>
     </button>
-    <button data-go="map">
+    <button data-go="map" data-icon="map">
       <span class="rail-mark" aria-hidden="true">▦</span><span>Map</span>
     </button>
-    <button data-go="mri" class="rail-mri">
+    <button data-go="mri" data-icon="mri" class="rail-mri">
       <span class="rail-mark" aria-hidden="true">◉</span><span>MRI</span>
       <span class="rail-live" data-live hidden></span>
     </button>
   </nav>
+
+  <!--SPRITE-->
 
   <main id="stage" class="stage" tabindex="-1">
     <p class="loading">Reading the graph…</p>

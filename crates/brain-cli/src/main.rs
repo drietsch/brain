@@ -2331,12 +2331,41 @@ fn cmd_deliverable(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// One line of a feature tree: readiness, then the score in its own terms.
+fn print_part(title: &str, slug: &str, done: bool, score: (usize, usize), lead: &str) {
+    let (met, total) = score;
+    let mark = if done { "✓" } else { "·" };
+    let tally = if total == 0 {
+        "nothing to check".to_string()
+    } else {
+        format!("{met}/{total}")
+    };
+    println!("{lead}{mark} {title}  ({slug})  {tally}");
+}
+
+/// The parts under a feature, drawn with box characters so depth reads.
+fn print_parts(parts: &[brain_observe::features::PartReport], lead: &str) {
+    for (index, part) in parts.iter().enumerate() {
+        let last = index + 1 == parts.len();
+        let branch = if last { "└ " } else { "├ " };
+        print_part(
+            &part.title,
+            &part.slug,
+            part.done,
+            (part.met, part.total),
+            &format!("{lead}{branch}"),
+        );
+        let deeper = format!("{lead}{}", if last { "  " } else { "│ " });
+        print_parts(&part.parts, &deeper);
+    }
+}
+
 /// `brain feature ...` — the registry: features as entities, links as edges.
 fn cmd_feature(args: &[String]) -> Result<(), String> {
     use brain_observe::features;
-    let usage = "usage: brain feature add <prefix> <slug> [--title T] [--status S] | \
-                 feature link <prefix> <slug> <predicate> <target> | \
-                 feature list <prefix> | feature matrix <prefix>";
+    let usage = "usage: brain feature add <prefix> <slug> [--title T] [--status S] [--part-of <parent>] | \
+                 feature link <prefix> <slug> <predicate> <target> [--kind k] | \
+                 feature list <prefix> | feature matrix <prefix> | feature tree <prefix> [slug]";
     match args.first().map(String::as_str) {
         Some("add") => {
             let (prefix, slug) = match (args.get(1), args.get(2)) {
@@ -2345,11 +2374,13 @@ fn cmd_feature(args: &[String]) -> Result<(), String> {
             };
             let mut title = slug.clone();
             let mut status = "planned".to_string();
+            let mut part_of: Option<String> = None;
             let mut it = args[3..].iter();
             while let Some(a) = it.next() {
                 match a.as_str() {
                     "--title" => title = it.next().cloned().unwrap_or(title),
                     "--status" => status = it.next().cloned().unwrap_or(status),
+                    "--part-of" => part_of = it.next().cloned(),
                     other => return Err(format!("unexpected argument '{other}'\n{usage}")),
                 }
             }
@@ -2358,21 +2389,95 @@ fn cmd_feature(args: &[String]) -> Result<(), String> {
                 features::add(&store, prefix, slug, &title, &status).map_err(|e| e.to_string())?;
             let state = if wrote { "recorded" } else { "unchanged" };
             println!("feature '{slug}' {state} under {prefix} (status: {status})");
+
+            // Creating a part and attaching it is one act.
+            if let Some(parent) = part_of {
+                let index = build_index(&store)?;
+                let (parent_sid, _) =
+                    features::resolve_target_as(&store, &index, prefix, &parent, Some("feature"))
+                        .map_err(|e| e.to_string())?
+                        .ok_or_else(|| {
+                            format!("no feature '{parent}' under {prefix} — register it first")
+                        })?;
+                let linked = features::link(&store, prefix, slug, features::PART_OF, &parent_sid)
+                    .map_err(|e| e.to_string())?;
+                println!(
+                    "  {} part of '{parent}'",
+                    if linked { "now" } else { "already" }
+                );
+            }
+            Ok(())
+        }
+        Some("tree") => {
+            let prefix = args.get(1).ok_or(usage)?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let only = args.get(2).filter(|a| !a.starts_with("--"));
+
+            // Roots are features nothing else claims as a parent, unless
+            // one was named.
+            let mut roots: Vec<String> = Vec::new();
+            for row in features::list(&store, &index, prefix).map_err(|e| e.to_string())? {
+                if let Some(want) = only {
+                    if row.slug == **want {
+                        roots.push(row.slug);
+                    }
+                    continue;
+                }
+                let sid = features::feature_sid(prefix, &row.slug);
+                if features::parent(&store, &index, &sid)
+                    .map_err(|e| e.to_string())?
+                    .is_none()
+                {
+                    roots.push(row.slug);
+                }
+            }
+            if roots.is_empty() {
+                println!("no features under {prefix}");
+                return Ok(());
+            }
+            for slug in roots {
+                let report =
+                    features::evaluate(&store, &index, prefix, &slug).map_err(|e| e.to_string())?;
+                let title = features::list(&store, &index, prefix)
+                    .map_err(|e| e.to_string())?
+                    .into_iter()
+                    .find(|r| r.slug == slug)
+                    .map(|r| r.title)
+                    .unwrap_or_else(|| slug.clone());
+                print_part(&title, &slug, report.done, report.score(), "");
+                print_parts(&report.parts, "");
+                if let Some(blocking) = &report.blocked_by {
+                    println!("  waiting on: {blocking}");
+                }
+            }
             Ok(())
         }
         Some("link") => {
-            let (prefix, slug, predicate, target) =
-                match (args.get(1), args.get(2), args.get(3), args.get(4)) {
-                    (Some(p), Some(s), Some(pr), Some(t)) => (p, s, pr, t),
-                    _ => return Err(usage.to_string()),
-                };
+            let pos = positional(&args[1..]);
+            let (prefix, slug, predicate, target) = match pos.as_slice() {
+                [p, s, pr, t] => (*p, *s, *pr, *t),
+                _ => return Err(usage.to_string()),
+            };
+            // A composition edge must land on a feature; otherwise a part
+            // named like an ADR would silently attach to the ADR.
+            let mut want = args
+                .iter()
+                .position(|a| a == "--kind")
+                .and_then(|i| args.get(i + 1))
+                .map(String::as_str);
+            if want.is_none() && predicate == features::PART_OF {
+                want = Some("feature");
+            }
             let store = open_store()?;
             let index = build_index(&store)?;
-            let (target_sid, kind) = features::resolve_target(&store, &index, prefix, target)
-                .map_err(|e| e.to_string())?
-                .ok_or_else(|| {
-                    format!("no twinned entity matches '{target}' (file path, or the slug of any registered kind)")
-                })?;
+            let (target_sid, kind) =
+                features::resolve_target_as(&store, &index, prefix, target, want)
+                    .map_err(|e| e.to_string())?
+                    .ok_or_else(|| match want {
+                        Some(k) => format!("no {k} '{target}' under {prefix}"),
+                        None => format!("no twinned entity matches '{target}' (file path, or the slug of any registered kind)"),
+                    })?;
             // Advisory link vocabulary: warn (never refuse) when the
             // feature kind declares allowed predicates and this one is not
             // among them.
@@ -2402,14 +2507,17 @@ fn cmd_feature(args: &[String]) -> Result<(), String> {
             for row in rows {
                 let report = features::evaluate(&store, &index, prefix, &row.slug)
                     .map_err(|e| e.to_string())?;
-                let met = report.checks.iter().filter(|c| c.count > 0).count();
+                let (met, total) = report.score();
                 let done = if report.done { " ✓ done" } else { "" };
+                let sid = features::feature_sid(prefix, &row.slug);
+                let under = features::parent(&store, &index, &sid)
+                    .map_err(|e| e.to_string())?
+                    .map(|(_, parent)| format!("  part of {parent}"))
+                    .unwrap_or_default();
+                let terms = if report.by_parts() { "parts" } else { "linked" };
                 println!(
-                    "[{}] {}: {}  ({met}/{}{done})",
-                    row.status,
-                    row.slug,
-                    row.title,
-                    report.checks.len()
+                    "[{}] {}: {}  ({met}/{total} {terms}{done}){under}",
+                    row.status, row.slug, row.title,
                 );
             }
             Ok(())
@@ -2459,15 +2567,40 @@ fn cmd_done(args: &[String]) -> Result<(), String> {
     let store = open_store()?;
     let index = build_index(&store)?;
     let report = features::evaluate(&store, &index, prefix, slug).map_err(|e| e.to_string())?;
-    for check in &report.checks {
-        let mark = if check.count > 0 { "✓" } else { "✗" };
-        println!("{mark} {}  ({} link(s))", check.predicate, check.count);
+
+    if report.by_parts() {
+        // A feature with parts is judged by its parts; its own links are
+        // still shown, but they are evidence, not the verdict.
+        println!("judged by its {} part(s):", report.parts.len());
+        print_parts(&report.parts, "");
+        let linked = report.checks.iter().filter(|c| c.count > 0).count();
+        if linked > 0 {
+            println!(
+                "(also linked directly: {})",
+                report
+                    .checks
+                    .iter()
+                    .filter(|c| c.count > 0)
+                    .map(|c| c.predicate.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+    } else {
+        for check in &report.checks {
+            let mark = if check.count > 0 { "✓" } else { "✗" };
+            println!("{mark} {}  ({} link(s))", check.predicate, check.count);
+        }
     }
+
     println!(
         "{}: {}",
         slug,
         if report.done { "DONE" } else { "not done" }
     );
+    if let Some(blocking) = &report.blocked_by {
+        println!("waiting on: {blocking}");
+    }
     features::record_done(&store, &index, prefix, slug, &report).map_err(|e| e.to_string())?;
     Ok(())
 }

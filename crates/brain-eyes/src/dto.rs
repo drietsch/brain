@@ -624,6 +624,8 @@ pub struct ThingExtras {
     pub attachments: Vec<Attachment>,
     /// Agent session: what it did.
     pub session: Option<Session>,
+    /// Feature: its parts, its strip, and what is holding it up.
+    pub feature: Option<FeatureNode>,
 }
 
 /// One line of an action's story. `recorded` distinguishes what the graph
@@ -741,4 +743,56 @@ pub struct FindView {
     pub query: String,
     pub hits: Vec<FindHit>,
     pub note: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Features and their parts
+// ---------------------------------------------------------------------------
+
+/// One cell of the dimension strip: a part of a feature, or — for a
+/// feature with no parts — one of its requirements.
+///
+/// The same five states carry through every scale at which the strip is
+/// drawn, and each is a shape as well as a colour.
+#[derive(Debug, Clone, Serialize)]
+pub struct StripCell {
+    pub label: String,
+    /// ready | stale | failing | absent | unproven
+    pub state: String,
+    /// What that means, in a sentence.
+    pub detail: String,
+    /// The part this cell stands for, when it is a part.
+    pub id: Option<String>,
+}
+
+/// A feature and everything under it.
+#[derive(Debug, Clone, Serialize)]
+pub struct FeatureNode {
+    pub id: String,
+    pub slug: String,
+    pub title: String,
+    pub status: String,
+    pub done: bool,
+    pub met: usize,
+    pub total: usize,
+    /// Whether it is judged by its parts rather than its own requirements.
+    pub by_parts: bool,
+    pub blocked_by: Option<String>,
+    pub verdict: String,
+    pub tone: String,
+    pub strip: Vec<StripCell>,
+    pub parts: Vec<FeatureNode>,
+    pub depth: usize,
+    pub when: String,
+    pub at_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FeaturesView {
+    pub snapshot: Snapshot,
+    pub headline: String,
+    pub note: String,
+    pub roots: Vec<FeatureNode>,
+    /// Every dimension name in use, so the list can be faceted by them.
+    pub dimensions: Vec<String>,
 }

@@ -116,8 +116,9 @@ pub const COMMANDS: &[Cmd] = &[
     Cmd { group: "Sessions", name: "sessions import", args: "[dir] [--prefix p] [--agent claude|codex] [--since 2h]", summary: "record the coding-agent sessions that ran in this workspace: objective, model, turns, tools, and the files they edited (never the conversation)" },
     Cmd { group: "Sessions", name: "sessions list", args: "<prefix>", summary: "who worked here and what they were trying to do, most recent first" },
 
-    Cmd { group: "Features", name: "feature add", args: "<prefix> <slug> [--title T] [--status S]", summary: "register (or update) a feature" },
-    Cmd { group: "Features", name: "feature link", args: "<prefix> <slug> <predicate> <target>", summary: "link a feature to files, tests, decisions, docs" },
+    Cmd { group: "Features", name: "feature add", args: "<prefix> <slug> [--title T] [--status S] [--part-of <parent>]", summary: "register (or update) a feature; --part-of makes it a part of another feature in one act" },
+    Cmd { group: "Features", name: "feature link", args: "<prefix> <slug> <predicate> <target> [--kind k]", summary: "link a feature to files, tests, decisions, docs; part_of joins it to a parent feature" },
+    Cmd { group: "Features", name: "feature tree", args: "<prefix> [slug]", summary: "features and their parts, with readiness rolled up from the leaves" },
     Cmd { group: "Features", name: "feature list|matrix", args: "<prefix>", summary: "the registry; matrix renders the definition of done as a query" },
     Cmd { group: "Features", name: "done", args: "<prefix> <slug>", summary: "evaluate a feature against the DoD and record the outcome" },
 

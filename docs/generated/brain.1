@@ -164,11 +164,14 @@ who worked here and what they were trying to do, most recent first
 .SH FEATURES
 The registry: features as entities, the definition of done as relation predicates, done\-ness as a query.
 .TP
-.B brain feature add \fI<prefix> <slug> [\-\-title T] [\-\-status S]\fR
-register (or update) a feature
+.B brain feature add \fI<prefix> <slug> [\-\-title T] [\-\-status S] [\-\-part\-of <parent>]\fR
+register (or update) a feature; \-\-part\-of makes it a part of another feature in one act
 .TP
-.B brain feature link \fI<prefix> <slug> <predicate> <target>\fR
-link a feature to files, tests, decisions, docs
+.B brain feature link \fI<prefix> <slug> <predicate> <target> [\-\-kind k]\fR
+link a feature to files, tests, decisions, docs; part_of joins it to a parent feature
+.TP
+.B brain feature tree \fI<prefix> [slug]\fR
+features and their parts, with readiness rolled up from the leaves
 .TP
 .B brain feature list|matrix \fI<prefix>\fR
 the registry; matrix renders the definition of done as a query

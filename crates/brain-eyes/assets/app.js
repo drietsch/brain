@@ -6,33 +6,18 @@
  */
 "use strict";
 
+import { h, icon, kindIcon, strip, stripWide, table } from "/assets/list.js";
+
 const stage = document.getElementById("stage");
-const state = { view: "now", params: {}, snapshot: null, findRows: [], findIndex: 0 };
+const state = { view: "now", params: {}, snapshot: null, findRows: [], findIndex: 0, thingHome: null };
 /* Declared here because render() runs at load, before the sections below. */
 let mriHandle = null;
 let speaking = false;
 
 /* ------------------------------------------------------------------ utils */
 
-function h(tag, props = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(props)) {
-    if (value === null || value === undefined || value === false) continue;
-    if (key === "class") node.className = value;
-    else if (key === "text") node.textContent = value;
-    else if (key === "html") node.innerHTML = value;
-    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
-    else node.setAttribute(key, value);
-  }
-  for (const child of children.flat()) {
-    if (child === null || child === undefined || child === false) continue;
-    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
-  }
-  return node;
-}
-
 function glyph(shape) {
-  return h("i", { class: `glyph ${shape || "block"}`, "aria-hidden": "true" });
+  return kindIcon(shape);
 }
 
 function chip(label, tone) {
@@ -151,8 +136,10 @@ async function render() {
   state.params = route.params;
   for (const button of document.querySelectorAll(".rail button")) {
     const target = button.dataset.go;
+    const home = route.view === "thing" ? state.thingHome : null;
     button.classList.toggle("on", target === route.view ||
-      (target === "library" && ["concepts", "media", "thing"].includes(route.view)));
+      (target === "library" && ["concepts", "media"].includes(route.view)) ||
+      (home !== null && target === home));
   }
   stage.classList.toggle("dark", route.view === "map");
   document.body.classList.toggle("in-mri", route.view === "mri");
@@ -187,7 +174,7 @@ views.now = async () => {
     parts.push(h("h2", { class: "section", text: "Needs you" }));
     parts.push(h("div", { class: "concerns" }, data.needs_you.map((concern) => {
       const node = h("div", { class: `concern ${concern.severity}` },
-        h("i", { class: "dot" }),
+        h("i", { class: `mark ${({ act: "bad", watch: "watch" })[concern.severity] ?? "quiet"}` }),
         h("div", {},
           h("h3", { text: concern.title }),
           h("p", { text: concern.reason }),
@@ -241,29 +228,50 @@ function episodeRow(episode) {
 
 views.library = async (params) => {
   const shelf = params.shelf || "decisions";
-  const query = params.q || "";
-  const data = await api(`/api/library?shelf=${encodeURIComponent(shelf)}&q=${encodeURIComponent(query)}`);
+  const data = await api(`/api/library?shelf=${encodeURIComponent(shelf)}`);
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
 
-  const search = h("input", {
-    class: "shelf-search", type: "search", value: query,
-    placeholder: `Search ${data.label.toLowerCase()}…`,
-  });
-  let timer = null;
-  search.addEventListener("input", () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => go("library", { shelf: data.shelf, q: search.value }), 220);
-  });
+  const host = h("div", {});
+  stage.replaceChildren(h("div", { class: "library" },
+    shelfRail(data.shelves, data.shelf),
+    h("div", {},
+      h("h1", { class: "lede", text: data.label }),
+      h("p", { class: "sub", text: data.note }),
+      host)));
 
-  const body = data.items.length
-    ? h("div", { class: "items" }, data.items.map(shelfItem))
-    : h("p", { class: "empty", text: query ? "Nothing here matches that." : "This shelf is empty." });
-
-  stage.replaceChildren(
-    h("div", { class: "page-head" }, h("h1", { text: data.label })),
-    h("p", { class: "page-note", text: data.note }),
-    h("div", { class: "library" }, shelfRail(data.shelves, data.shelf), h("div", {}, search, body)));
+  table(host, {
+    rows: data.items,
+    noun: "records",
+    keyOf: (row) => row.id,
+    search: (row) => `${row.title} ${row.label} ${row.excerpt ?? ""} ${row.facts.join(" ")}`,
+    placeholder: `Filter ${data.label.toLowerCase()}…`,
+    facets: [
+      { id: "state", get: (row) => row.state },
+      { id: "kind", get: (row) => row.noun },
+    ],
+    sort: [
+      { key: "changed", label: "by last change", by: (row) => -row.at_ms },
+      { key: "title", label: "by name", by: (row) => row.title },
+      { key: "state", label: "by state", by: (row) => row.state ?? "" },
+    ],
+    columns: [
+      { key: "title", label: data.label, width: "minmax(260px, 3fr)",
+        cell: (row) => h("span", { class: "pill-row" },
+          kindIcon(row.glyph), h("span", { text: row.title })) },
+      { key: "state", label: "State", width: "116px",
+        cell: (row) => (row.state ? chip(row.state, row.tone) : "") },
+      { key: "why", label: "Because", width: "minmax(200px, 3fr)", class: "dim nowrap",
+        cell: (row) => row.state_note ?? row.excerpt ?? "" },
+      { key: "where", label: "Where", width: "minmax(140px, 1.4fr)", class: "dim nowrap record",
+        cell: (row) => row.facts.find((f) => f.includes("/")) ?? "" },
+      { key: "changed", label: "Changed", width: "92px", class: "dim num",
+        cell: (row) => row.when ?? "" },
+    ],
+    onPeek: (row) => showInspector(row.id),
+    onPush: (row) => openThing(row.id),
+    empty: "Nothing on this shelf matches that.",
+  });
 };
 
 function shelfRail(shelves, current) {
@@ -278,24 +286,6 @@ function shelfRail(shelves, current) {
       class: shelf.id === current ? "on" : "",
       onclick: () => (shelf.view === "library" ? go("library", { shelf: shelf.id }) : go(shelf.view)),
     }, h("span", { text: shelf.label }), shelf.count !== null ? h("em", { text: shelf.count }) : null)));
-}
-
-function shelfItem(item) {
-  return h("button", { class: "item", onclick: () => openThing(item.id) },
-    h("div", { class: "item-head" },
-      glyph(item.glyph),
-      h("h3", { text: item.title }),
-      item.coverage ? coverageStrip(item.coverage) : null,
-      chip(item.state, item.tone)),
-    h("p", { class: "item-sub" },
-      [item.noun, item.when, item.state_note].filter(Boolean).join(" · ")),
-    item.excerpt ? h("p", { class: "item-excerpt", text: item.excerpt }) : null,
-    item.facts.length ? h("ul", { class: "item-facts" }, item.facts.map((fact) => h("li", { text: fact }))) : null);
-}
-
-function coverageStrip(cells) {
-  return h("span", { class: "coverage", title: cells.map((cell) => `${cell.label}: ${cell.detail}`).join("\n") },
-    cells.map((cell) => h("i", { class: cell.met ? "met" : "" })));
 }
 
 views.concepts = async () => {
@@ -484,6 +474,15 @@ views.timeline = async () => {
 views.thing = async (params) => {
   if (!params.id) return go("now");
   const data = await api(`/api/thing?id=${encodeURIComponent(params.id)}`);
+  // Light the section this thing belongs to, so the rail never claims you
+  // are somewhere you are not.
+  state.thingHome = ({
+    feature: "features", test_case: "tests", test_run: "tests",
+    agent_session: "work", change: "work", asset: "library",
+  })[data.kind] ?? "library";
+  for (const button of document.querySelectorAll(".rail button")) {
+    button.classList.toggle("on", button.dataset.go === state.thingHome);
+  }
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
 
@@ -506,11 +505,29 @@ views.thing = async (params) => {
         h("span", { text: step.when ? `${step.when} — ${step.note}` : step.note })))));
   }
 
-  if (data.extras.coverage.length) {
+  // A feature: the strip at its third and largest scale, then the parts
+  // themselves, each answering for itself.
+  const feature = data.extras.feature;
+  if (feature) {
+    parts.push(h("p", { class: "lede", text: feature.verdict }));
+    parts.push(stripWide(feature.strip));
+    if (feature.parts.length) {
+      parts.push(h("h2", { class: "section", text: "Its parts" }));
+      parts.push(h("div", { class: "facts" }, feature.parts.map((part) =>
+        h("button", { class: `fact ${part.done ? "good" : "watch"}`, onclick: () => openThing(part.id) },
+          h("i", { class: `mark ${part.done ? "good" : "unproven"}` }),
+          h("span", {},
+            h("strong", { text: part.title }), " — ", part.verdict),
+          strip(part.strip)))));
+    }
+    if (feature.blocked_by) {
+      parts.push(h("p", { class: "sub", text: `Waiting on ${feature.blocked_by}.` }));
+    }
+  } else if (data.extras.coverage.length) {
     parts.push(h("h2", { class: "section", text: "What backs this claim" }));
     parts.push(h("div", { class: "facts" }, data.extras.coverage.map((cell) =>
       h("div", { class: `fact ${cell.met ? "good" : "watch"}` },
-        h("i", { class: "mark" }),
+        h("i", { class: `mark ${cell.met ? "good" : "watch"}` }),
         h("span", {}, h("strong", { text: cell.label }), " — ", cell.detail)))));
   }
 
@@ -869,22 +886,87 @@ function commandLine(command) {
    Features — the definition of done, with its evidence resolved.
    ===================================================================== */
 
-views.features = async () => {
-  const data = await api("/api/evidence");
+views.features = async (params) => {
+  const data = await api("/api/features");
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
-  const claims = data.claims.filter((claim) => claim.category === "features");
-  if (!claims.length) {
+
+  if (!data.roots.length) {
     stage.replaceChildren(h("div", { class: "page" },
-      h("h1", { class: "lede", text: "No features are registered yet." }),
-      h("p", { class: "sub", text: "A feature is what the system claims to do; the graph holds none." }),
+      h("h1", { class: "lede", text: data.headline }),
+      h("p", { class: "sub", text: "A feature is what the system claims to do. The graph holds none yet." }),
       commandLine("brain feature add <prefix> <slug> --title \"…\"")));
     return;
   }
+
+  // A colour nobody can decode is decoration. The strip says what its
+  // cells mean, once, next to the strips themselves.
+  const legend = h("p", { class: "legend" }, [
+    ["ready", "proven"],
+    ["unproven", "linked, but nothing establishes it"],
+    ["failing", "contradicted"],
+    ["absent", "nothing linked"],
+  ].map(([cell, meaning]) =>
+    h("span", {}, h("i", { class: "strip" }, h("i", { "data-cell": cell })), meaning)));
+
+  const host = h("div", {});
   stage.replaceChildren(h("div", { class: "page" },
-    h("h1", { class: "lede", text: `${claims.length} feature${claims.length === 1 ? "" : "s"} registered.` }),
-    h("p", { class: "sub", text: "Each row states what it claims, then what actually backs the claim." }),
-    ...claims.map(claimRow)));
+    h("h1", { class: "lede", text: data.headline }),
+    h("p", { class: "sub", text: data.note }),
+    legend,
+    host));
+
+  table(host, {
+    rows: data.roots,
+    noun: "features",
+    keyOf: (row) => row.id,
+    childrenOf: (row) => row.parts,
+    expandedByDefault: data.roots.filter((r) => !r.done).map((r) => r.id),
+    search: (row) => `${row.title} ${row.slug} ${row.status} ${row.verdict}`,
+    placeholder: "Filter features…",
+    facets: [
+      {
+        id: "state",
+        get: (row) => (row.done ? "ready" : row.met === 0 ? "not started" : "in progress"),
+        options: [
+          { value: "in progress", label: "in progress" },
+          { value: "not started", label: "not started" },
+          { value: "ready", label: "ready" },
+        ],
+      },
+      { id: "status", get: (row) => row.status },
+      {
+        id: "shape",
+        get: (row) => (row.by_parts ? "has parts" : "a single claim"),
+        options: [{ value: "has parts", label: "has parts" }, { value: "a single claim", label: "a single claim" }],
+      },
+    ],
+    sort: [
+      { key: "title", label: "by name", by: (row) => row.title },
+      { key: "ready", label: "by readiness", by: (row) => row.met / Math.max(row.total, 1) },
+      { key: "changed", label: "by last change", by: (row) => -row.at_ms },
+    ],
+    columns: [
+      { key: "title", label: "Feature", width: "minmax(220px, 2fr)",
+        cell: (row) => h("span", { class: "pill-row" },
+          kindIcon("hexagon"),
+          h("span", { text: row.title })) },
+      { key: "dims", label: "Parts", width: "70px", class: "dim",
+        cell: (row) => strip(row.strip, () => showInspector(row.id)) },
+      { key: "score", label: "Ready", width: "62px", class: "dim num",
+        cell: (row) => `${row.met}/${row.total}` },
+      { key: "verdict", label: "Verdict", width: "minmax(200px, 2fr)", class: "dim nowrap",
+        cell: (row) => row.verdict },
+      { key: "status", label: "Status", width: "90px", class: "dim",
+        cell: (row) => chip(row.status, "quiet") },
+      { key: "changed", label: "Changed", width: "88px", class: "dim num",
+        cell: (row) => row.when },
+    ],
+    onPeek: (row) => showInspector(row.id),
+    onPush: (row) => openThing(row.id),
+    empty: "No feature matches that.",
+  });
+  const _ = params;
 };
 
 /* =====================================================================
@@ -945,86 +1027,112 @@ views.tests = async (params) => {
   const data = await api("/api/tests");
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
-  const filter = params.show || (data.failing.length ? "failing" : "all");
-  const framework = params.framework || "";
 
-  let cases = data.cases;
-  if (filter === "failing") cases = cases.filter((c) => c.result === "failing");
-  if (filter === "flaky") cases = cases.filter((c) => c.flips >= 3);
-  if (framework) cases = cases.filter((c) => c.framework === framework);
+  // Cases are grouped by the file or module that defines them, so a
+  // suite reads as a suite rather than 150 loose rows.
+  const groups = new Map();
+  for (const row of data.cases) {
+    if (!groups.has(row.group)) groups.set(row.group, []);
+    groups.get(row.group).push(row);
+  }
+  const rows = [...groups.entries()].map(([name, cases]) => ({
+    group: true,
+    id: `group:${name}`,
+    name,
+    cases,
+    failing: cases.filter((c) => c.result === "failing").length,
+    frameworks: [...new Set(cases.map((c) => c.framework).filter(Boolean))],
+  }));
 
-  const tab = (id, label, count) => h("button", {
-    class: `chip${filter === id ? " on" : ""}`,
-    text: count === undefined ? label : `${label} ${count}`,
-    onclick: () => go("tests", { ...params, show: id }),
-  });
-
+  const host = h("div", {});
   const parts = [
     h("h1", { class: "lede", text: data.headline }),
     h("p", { class: "sub",
       text: `${data.declared} tests declared across ${data.files} files; ${data.cases.length} have a recorded result.` }),
-    h("div", { class: "chips" },
-      tab("failing", "failing", data.failing.length),
-      tab("flaky", "changed their mind", data.flaky.length),
-      tab("all", "everything", data.cases.length),
-      ...data.frameworks.map((f) => h("button", {
-        class: `chip${framework === f.label ? " on" : ""}`,
-        text: `${f.label} · ${f.files} file${f.files === 1 ? "" : "s"}`,
-        onclick: () => go("tests", { ...params, framework: framework === f.label ? "" : f.label }),
-      }))),
+    host,
   ];
-
-  parts.push(h("h2", { class: "section", text: "Cases" }));
-  if (!cases.length) {
-    parts.push(h("p", { class: "empty", text: "Nothing matches that." }));
-  }
-  for (const row of cases.slice(0, 400)) parts.push(caseRow(row));
-  if (cases.length > 400) {
-    parts.push(h("p", { class: "empty", text: `and ${cases.length - 400} more` }));
-  }
 
   if (data.protocols.length) {
     parts.push(h("h2", { class: "section", text: "Runs" }));
-    for (const run of data.protocols) parts.push(protocolRow(run));
+    for (const run of data.protocols.slice(0, 8)) parts.push(protocolRow(run));
   }
-
-  if (data.suites.length) {
-    parts.push(h("h2", { class: "section", text: "Where the tests live" }));
-    parts.push(h("div", { class: "rows" }, data.suites.map((suite) =>
-      h("button", { class: "row", onclick: () => openThing(suite.id) },
-        h("span", { class: "when", text: suite.framework_label }),
-        h("span", { class: "case-name", text: suite.path }),
-        h("span", { class: "session-meta",
-          text: `${suite.declared} declared${suite.covers.length ? `, covers ${suite.covers.length}` : ""}` })))));
-  }
-
   if (data.uncovered.length) {
     parts.push(h("h2", { class: "section", text: "Depended on, but no test touches them" }));
     parts.push(h("div", { class: "chips" }, data.uncovered.map((item) =>
       h("button", { class: "chip", text: item.label, onclick: () => openThing(item.id) }))));
   }
-
   stage.replaceChildren(h("div", { class: "page" }, ...parts));
-};
 
-function caseRow(row) {
-  const detail = [h("p", { class: "case-name", text: row.name })];
-  if (row.error) detail.push(h("p", { class: "case-error", text: row.error }));
-  if (row.note) detail.push(h("p", { class: "case-note", text: row.note }));
-  if (row.attachments.length) {
-    detail.push(h("div", { class: "case-shots" }, row.attachments.map((attachment) =>
-      attachment.subtype === "image"
-        ? h("img", { src: `/api/body?id=${encodeURIComponent(attachment.id)}`,
-                     alt: `${attachment.noun} from ${row.name}`, loading: "lazy" })
-        : h("button", { class: "chip", text: attachment.noun,
-                        onclick: () => openThing(attachment.id) }))));
-  }
-  return h("button", { class: "case", onclick: () => openThing(row.id) },
-    h("span", { class: `case-verdict ${row.tone}`, text: row.result }),
-    h("div", {}, ...detail),
-    h("span", { class: "session-meta",
-      text: [row.duration, row.framework].filter(Boolean).join(" · ") }));
-}
+  const verdictOf = (row) => (row.group
+    ? (row.failing ? "failing" : "passing")
+    : row.result);
+
+  table(host, {
+    rows,
+    noun: "suites",
+    keyOf: (row) => row.id,
+    childrenOf: (row) => (row.group ? row.cases : null),
+    expandedByDefault: rows.filter((r) => r.failing).map((r) => r.id),
+    search: (row) => (row.group ? row.name : `${row.name} ${row.error ?? ""}`),
+    placeholder: "Filter tests…",
+    facets: [
+      {
+        id: "result",
+        get: verdictOf,
+        options: [
+          { value: "failing", label: "failing" },
+          { value: "skipped", label: "skipped" },
+          { value: "passing", label: "passing" },
+        ],
+      },
+      { id: "framework", get: (row) => (row.group ? row.frameworks : row.framework) },
+      {
+        id: "history",
+        get: (row) => (!row.group && row.flips >= 3 ? "changed its mind" : null),
+        options: [{ value: "changed its mind", label: "changed its mind" }],
+      },
+    ],
+    sort: [
+      { key: "name", label: "by name", by: (row) => row.name },
+      { key: "result", label: "failing first", by: (row) => (verdictOf(row) === "failing" ? 0 : 1) },
+      { key: "size", label: "by size", by: (row) => -(row.cases?.length ?? 0) },
+    ],
+    columns: [
+      { key: "name", label: "Test", width: "minmax(320px, 3fr)",
+        cell: (row) => row.group
+          ? h("span", { class: "pill-row" }, kindIcon("diamond"), h("span", { class: "record", text: row.name }))
+          : h("span", { class: "case-name", text: row.name.split("::").pop() }) },
+      { key: "result", label: "Result", width: "88px",
+        cell: (row) => row.group
+          ? h("span", { class: "dim", text: `${row.cases.length} case${row.cases.length === 1 ? "" : "s"}` })
+          : h("span", { class: `chip ${row.tone}`, text: row.result }) },
+      { key: "detail", label: "Detail", width: "minmax(180px, 2fr)", class: "dim nowrap",
+        cell: (row) => {
+          if (row.group) {
+            if (row.failing) return h("span", { class: "case-error", text: `${row.failing} failing` });
+            const extra = row.frameworks.join(", ");
+            return extra ? `all passing · ${extra}` : "all passing";
+          }
+          if (row.error) return h("span", { class: "case-error", text: row.error });
+          if (row.note) return h("span", { class: "case-note", text: row.note });
+          return "";
+        } },
+      { key: "evidence", label: "Evidence", width: "110px", class: "dim",
+        cell: (row) => {
+          if (row.group || !row.attachments.length) return "";
+          return h("span", { class: "chips" }, row.attachments.map((a) =>
+            h("button", { class: "chip", text: a.noun,
+              onclick: (e) => { e.stopPropagation(); openThing(a.id); } })));
+        } },
+      { key: "duration", label: "Took", width: "76px", class: "dim num",
+        cell: (row) => (row.group ? "" : row.duration ?? "") },
+    ],
+    onPeek: (row) => !row.group && showInspector(row.id),
+    onPush: (row) => !row.group && openThing(row.id),
+    empty: "No test matches that.",
+  });
+  const _ = params;
+};
 
 function protocolRow(run) {
   const width = (n) => `${(n / Math.max(run.total, 1)) * 100}%`;
@@ -1348,6 +1456,16 @@ async function paintRail() {
 paintRail();
 setInterval(paintRail, 30000);
 
+/* The shape vocabulary is inlined once so every icon is a local
+   reference and nothing is fetched while drawing. */
+function mountSprite() {
+  for (const button of document.querySelectorAll(".rail button[data-icon]")) {
+    const mark = button.querySelector(".rail-mark");
+    if (mark) mark.replaceChildren(icon(button.dataset.icon));
+  }
+}
+
 /* The first paint happens last: every view must be registered before a
    route is resolved, or a deep link falls back to Now. */
+mountSprite();
 render();

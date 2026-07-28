@@ -17,6 +17,9 @@ use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 const INDEX_HTML: &str = include_str!("../assets/index.html");
 const APP_JS: &str = include_str!("../assets/app.js");
 const MRI_JS: &str = include_str!("../assets/mri.js");
+const LIST_JS: &str = include_str!("../assets/list.js");
+/// The shape vocabulary, inlined into the page so nothing is fetched.
+pub const ICONS_SVG: &str = include_str!("../assets/icons.svg");
 const STYLES_CSS: &str = include_str!("../assets/styles.css");
 const WORKERS: usize = 4;
 
@@ -86,9 +89,17 @@ fn handle(request: Request, state: &Arc<AppState>) {
     let param = |key: &str| query_param(&query_string, key).map(percent_decode);
 
     match path.as_str() {
-        "/" | "/index.html" => text(request, 200, INDEX_HTML, "text/html; charset=utf-8"),
+        // The shape vocabulary is inlined into the document rather than
+        // fetched: an icon should never cost a round trip, and the first
+        // paint should not wait for one.
+        "/" | "/index.html" => {
+            let page = INDEX_HTML.replace("<!--SPRITE-->", ICONS_SVG);
+            text(request, 200, &page, "text/html; charset=utf-8")
+        }
         "/assets/app.js" => text(request, 200, APP_JS, "text/javascript; charset=utf-8"),
         "/assets/mri.js" => text(request, 200, MRI_JS, "text/javascript; charset=utf-8"),
+        "/assets/list.js" => text(request, 200, LIST_JS, "text/javascript; charset=utf-8"),
+        "/assets/icons.svg" => text(request, 200, ICONS_SVG, "image/svg+xml; charset=utf-8"),
         "/assets/styles.css" => text(request, 200, STYLES_CSS, "text/css; charset=utf-8"),
 
         "/api/snapshot" => json_result(request, state.snapshot()),
@@ -113,6 +124,7 @@ fn handle(request: Request, state: &Arc<AppState>) {
         "/api/work" => json_result(request, state.read(query::work::build)),
         "/api/mri" => json_result(request, state.read(|loaded| loaded.mri())),
         "/api/evidence" => json_result(request, state.read(query::evidence::build)),
+        "/api/features" => json_result(request, state.read(query::features::build)),
         "/api/media" => {
             let root = state.config.content_root.clone();
             json_result(

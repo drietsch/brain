@@ -58,6 +58,8 @@ cargo run -p brain -- agentcfg list twin/self  # CLAUDE.md/AGENTS.md/.cursorrule
 cargo run -p brain -- deliverable new adr --title "Use X"  # scaffold from graph template
 cargo run -p brain -- template set runbook --applies-to runbook --capture "docs/runbooks/*.md" \
   --fields "title=heading, service=line" --requires "title,service"  # teach a new kind, no code
+cargo run -p brain -- feature add twin/self core --part-of auth  # a feature has testable parts
+cargo run -p brain -- feature tree twin/self    # parts, with readiness rolled up from the leaves
 cargo run -p brain -- feature matrix twin/self # definition-of-done as a rendered query
 cargo test 2>&1 | cargo run -p brain -- testrun import - --prefix twin/self  # protocol -> graph
 npx playwright test --reporter=json | brain testrun import - --prefix twin/self  # + screenshots, videos, traces

@@ -571,6 +571,7 @@ fn extras(
             extras.audit = audit(loaded, sid, slug, &current)?;
         }
         "feature" => {
+            extras.feature = Some(super::features::node(loaded, slug, 0)?);
             let report =
                 features::evaluate(store, index, prefix, slug).map_err(|e| e.to_string())?;
             extras.coverage = report
