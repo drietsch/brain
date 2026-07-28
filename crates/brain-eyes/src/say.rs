@@ -72,6 +72,7 @@ pub fn kind_noun(kind: &str) -> &'static str {
         "task_list" => "task list",
         "capability_matrix" => "capability matrix",
         "run_log" => "run log",
+        "agent_session" => "agent session",
         other => leak_noun(other),
     }
 }
@@ -97,7 +98,105 @@ pub fn kind_glyph(kind: &str) -> &'static str {
         "change" => "chevron",
         "template" => "shield",
         "module" => "circle",
+        "agent_session" => "orbit",
         _ => "block",
+    }
+}
+
+/// A test's recorded verdict.
+pub fn test_result(result: &str) -> (&'static str, &'static str) {
+    match result {
+        "pass" => ("passing", "good"),
+        "fail" => ("failing", "bad"),
+        "skip" => ("skipped", "quiet"),
+        _ => ("no result recorded", "quiet"),
+    }
+}
+
+/// The framework a test belongs to, as its makers spell it.
+pub fn framework_noun(framework: &str) -> &'static str {
+    match framework {
+        "rust" => "Rust",
+        "playwright" => "Playwright",
+        "jest" => "Jest",
+        "pytest" => "pytest",
+        "phpunit" => "PHPUnit",
+        _ => "tests",
+    }
+}
+
+/// What a run report format is called in conversation.
+pub fn report_format(format: &str) -> &'static str {
+    match format {
+        "cargo" => "cargo test",
+        "junit" => "a JUnit report",
+        "playwright" => "Playwright",
+        _ => "an imported report",
+    }
+}
+
+/// A duration in milliseconds, rounded to something worth saying.
+pub fn duration(ms: u64) -> String {
+    match ms {
+        0..=999 => format!("{ms} ms"),
+        1000..=59_999 => {
+            let seconds = (ms as f64 / 100.0).round() / 10.0;
+            format!("{seconds:.1} seconds")
+        }
+        60_000..=3_599_999 => count((ms as f64 / 60_000.0).round() as u64, "minute", "minutes"),
+        _ => count((ms as f64 / 3_600_000.0).round() as u64, "hour", "hours"),
+    }
+}
+
+/// What an attached file is, by its subtype.
+pub fn attachment_noun(subtype: &str) -> &'static str {
+    match subtype {
+        "image" => "screenshot",
+        "screencast" => "recording",
+        "audio" => "audio",
+        "trace" => "trace",
+        "template" => "template",
+        _ => "file",
+    }
+}
+
+/// What a level of verification actually establishes. The taxonomy is the
+/// substrate's; these are the claims it licenses.
+pub fn evidence_level(level: &str) -> &'static str {
+    match level {
+        "behavioral" => "it was run and observed",
+        "structural" => "its shape was checked",
+        "empirical" => "it was measured",
+        "formal" => "it was proved",
+        "interpretive" => "someone judged it",
+        "transactional" => "the effect was confirmed",
+        "authorization" => "someone authorised it",
+        _ => "nothing supports it yet",
+    }
+}
+
+/// Marks a value Eyes worked out rather than read.
+///
+/// The graph records no command line, no actor for historical intents,
+/// and no owner for an inferred link. Where Eyes reconstructs one, it
+/// must say so — a plausible sentence presented as a record is the exact
+/// failure this whole system exists to prevent.
+pub const RECONSTRUCTED: &str = "reconstructed from what the graph records, not itself recorded";
+
+/// How long a session ran.
+pub fn span(from_ms: u64, to_ms: u64) -> String {
+    if from_ms == 0 || to_ms <= from_ms {
+        return "a moment".to_string();
+    }
+    duration(to_ms - from_ms)
+}
+
+/// Which agent did the work.
+pub fn agent_noun(agent: &str) -> &'static str {
+    match agent {
+        "claude" => "Claude Code",
+        "codex" => "Codex",
+        _ => "an agent",
     }
 }
 

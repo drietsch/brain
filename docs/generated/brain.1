@@ -148,11 +148,19 @@ instantiate a scaffold from the graph to stdout
 .SH TESTS
 Tests as graph citizens: framework classification and covers\-relations at refresh; imported run protocols with per\-case result timelines.
 .TP
-.B brain testrun import \fI<report|\-> \-\-prefix <p>\fR
-ingest cargo\-test output or JUnit XML as a content\-addressed protocol
+.B brain testrun import \fI<report|\-> \-\-prefix <p> [\-\-dir <d>]\fR
+ingest cargo\-test output, JUnit XML, or Playwright JSON as a content\-addressed protocol; Playwright's screenshots, videos and traces become assets owned by the case that produced them
 .TP
 .B brain testrun list \fI<prefix>\fR
 imported protocols, newest first
+.SH SESSIONS
+Who worked here: the coding\-agent sessions that ran in this workspace, with their objective, model, tools and blast radius \(em the graph's only record of a principal.
+.TP
+.B brain sessions import \fI[dir] [\-\-prefix p] [\-\-agent claude|codex] [\-\-since 2h]\fR
+record the coding\-agent sessions that ran in this workspace: objective, model, turns, tools, and the files they edited (never the conversation)
+.TP
+.B brain sessions list \fI<prefix>\fR
+who worked here and what they were trying to do, most recent first
 .SH FEATURES
 The registry: features as entities, the definition of done as relation predicates, done\-ness as a query.
 .TP

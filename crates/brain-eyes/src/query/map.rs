@@ -271,7 +271,7 @@ pub fn build(loaded: &Loaded, lens: &str) -> Result<MapView, String> {
 
 /// The module a path belongs to: a workspace member if there is one, else
 /// its top-level directory.
-fn module_of(path: &str) -> String {
+pub fn module_of(path: &str) -> String {
     let parts: Vec<&str> = path.split('/').collect();
     match parts.as_slice() {
         [container, member, ..]

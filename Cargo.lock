@@ -101,6 +101,7 @@ dependencies = [
  "brain-core",
  "brain-index",
  "brain-store",
+ "serde_json",
  "tempfile",
 ]
 

@@ -369,7 +369,7 @@ pub fn verify(
     let mut raw = String::from_utf8_lossy(&out.stdout).into_owned();
     raw.push_str(&String::from_utf8_lossy(&out.stderr));
     let report = crate::testing::parse_report(&raw);
-    let outcome = crate::testing::record_run(store, prefix, &report, &raw)?;
+    let outcome = crate::testing::record_run_in(store, root, prefix, &report, &raw)?;
     let mut written = BTreeSet::new();
     relate(
         store,

@@ -3,18 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <title>Eyes</title>
   <link rel="stylesheet" href="/assets/styles.css">
-  <script src="/assets/app.js" defer></script>
+  <script type="module" src="/assets/app.js"></script>
 </head>
 <body>
   <header class="topbar">
     <button class="wordmark" data-go="now">Eyes</button>
     <span class="project" id="project">…</span>
     <button class="finder" id="open-find">
-      <span>Find anything</span><kbd>⌘K</kbd>
+      <span>Search or ask…</span><kbd>⌘K</kbd>
     </button>
+    <button class="ghost" id="brief-me" title="Read this screen out loud">
+      <span aria-hidden="true">◑</span> Brief me
+    </button>
+    <button class="ghost" id="theme" title="Light or dark" aria-label="Switch theme">◐</button>
     <span class="freshness" id="freshness">reading the graph…</span>
     <span class="readonly" title="Eyes never writes. It shows you the command instead.">read only</span>
   </header>
@@ -22,15 +26,37 @@
   <nav class="rail" aria-label="Sections">
     <button data-go="now" class="on">
       <span class="rail-mark" aria-hidden="true">◍</span><span>Now</span>
+      <span class="rail-count" data-count="now" hidden></span>
+    </button>
+    <button data-go="work">
+      <span class="rail-mark" aria-hidden="true">◔</span><span>Work</span>
+      <span class="rail-count" data-count="work" hidden></span>
+    </button>
+    <button data-go="features">
+      <span class="rail-mark" aria-hidden="true">⬡</span><span>Features</span>
+      <span class="rail-count" data-count="features" hidden></span>
+    </button>
+    <button data-go="tests">
+      <span class="rail-mark" aria-hidden="true">◈</span><span>Tests</span>
+      <span class="rail-count" data-count="tests" hidden></span>
     </button>
     <button data-go="library">
-      <span class="rail-mark" aria-hidden="true">▤</span><span>Library</span>
+      <span class="rail-mark" aria-hidden="true">▤</span><span>Artifacts</span>
+      <span class="rail-count" data-count="library" hidden></span>
+    </button>
+    <button data-go="evidence">
+      <span class="rail-mark" aria-hidden="true">◇</span><span>Evidence</span>
+      <span class="rail-count" data-count="evidence" hidden></span>
+    </button>
+    <button data-go="timeline">
+      <span class="rail-mark" aria-hidden="true">⋮</span><span>History</span>
     </button>
     <button data-go="map">
       <span class="rail-mark" aria-hidden="true">▦</span><span>Map</span>
     </button>
-    <button data-go="timeline">
-      <span class="rail-mark" aria-hidden="true">⋮</span><span>Timeline</span>
+    <button data-go="mri" class="rail-mri">
+      <span class="rail-mark" aria-hidden="true">◉</span><span>MRI</span>
+      <span class="rail-live" data-live hidden></span>
     </button>
   </nav>
 
@@ -38,9 +64,22 @@
     <p class="loading">Reading the graph…</p>
   </main>
 
+  <aside class="inspector" id="inspector" hidden aria-label="Inspector">
+    <div class="inspector-head">
+      <span class="glyph" id="inspector-glyph"></span>
+      <div>
+        <p class="inspector-kind" id="inspector-kind"></p>
+        <h2 id="inspector-title"></h2>
+      </div>
+      <button class="ghost" id="inspector-close" aria-label="Close">✕</button>
+    </div>
+    <div class="inspector-body" id="inspector-body"></div>
+  </aside>
+
   <div class="finder-overlay" id="find-overlay" hidden>
-    <div class="finder-panel" role="dialog" aria-label="Find">
-      <input id="find-input" type="search" placeholder="Find a file, decision, plan, feature…"
+    <div class="finder-panel" role="dialog" aria-label="Search or ask">
+      <input id="find-input" type="search"
+             placeholder="A name, or: why is X stale · features missing documentation · what changed today"
              autocomplete="off" spellcheck="false">
       <div class="finder-results" id="find-results"></div>
     </div>

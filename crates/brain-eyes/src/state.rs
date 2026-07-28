@@ -82,6 +82,10 @@ pub struct Loaded {
     findings: OnceLock<Vec<Finding>>,
     registry: OnceLock<BTreeMap<String, KindDef>>,
     fitness: OnceLock<Vec<TemplateFitness>>,
+    /// The laid-out anatomy. Held for the same reason as the rest, and for
+    /// one more: a layout that were recomputed per request would place
+    /// things differently each time a tab reloaded.
+    mri: OnceLock<crate::dto::MriView>,
 }
 
 impl Loaded {
@@ -127,6 +131,15 @@ impl Loaded {
         })
     }
 
+    /// The laid-out graph, computed once per version.
+    pub fn mri(&self) -> Result<crate::dto::MriView, String> {
+        if let Some(view) = self.mri.get() {
+            return Ok(view.clone());
+        }
+        let view = crate::query::mri::build(self)?;
+        Ok(self.mri.get_or_init(|| view).clone())
+    }
+
     /// Compute the costly views up front so the first person to look does
     /// not wait for them.
     pub fn warm(&self) {
@@ -136,6 +149,7 @@ impl Loaded {
         self.findings();
         self.registry();
         self.fitness();
+        let _ = self.mri();
     }
 }
 
@@ -272,6 +286,7 @@ fn build(config: &Config) -> Result<Loaded, String> {
         findings: OnceLock::new(),
         registry: OnceLock::new(),
         fitness: OnceLock::new(),
+        mri: OnceLock::new(),
     })
 }
 

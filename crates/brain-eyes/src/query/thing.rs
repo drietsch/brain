@@ -400,6 +400,108 @@ fn source_noun(source: &str) -> &'static str {
     }
 }
 
+/// The audit record for a governed change: what the graph holds about
+/// the action, in the order it happened.
+///
+/// The briefing asks for requester, interface and inputs. The graph
+/// records none of the first two — an `Intent` has four fields and a
+/// principal is not among them — so this says so rather than inventing an
+/// actor. What it *can* show is real: the exact before and after bytes,
+/// the capability that was required, the receipt, and the run that
+/// verified it. The command is reconstructed from the change's own
+/// labels, and is labelled as such.
+fn audit(
+    loaded: &Loaded,
+    sid: &StableId,
+    slug: &str,
+    status: &str,
+) -> Result<Vec<AuditEntry>, String> {
+    let store = &loaded.store;
+    let index = &loaded.index;
+    let prefix = loaded.prefix();
+    let mut out = Vec::new();
+
+    let recorded = |label: &str, value: String, note: Option<String>| AuditEntry {
+        label: label.to_string(),
+        value,
+        note,
+        recorded: true,
+    };
+
+    if let Some(reason) = twin::latest(index, store, sid, "reason").map_err(|e| e.to_string())? {
+        out.push(recorded("Why", reason, None));
+    }
+    if let Some(target) = twin::latest(index, store, sid, "target").map_err(|e| e.to_string())? {
+        out.push(recorded("What it touched", target, None));
+    }
+
+    // Before and after are content hashes; the bytes themselves are shown
+    // separately as a diff.
+    let short = |hash: String| hash.chars().take(12).collect::<String>();
+    if let Some(before) = twin::latest(index, store, sid, "before_b3").map_err(|e| e.to_string())? {
+        out.push(recorded(
+            "The file before",
+            if before == "absent" {
+                "the file did not exist".to_string()
+            } else {
+                short(before)
+            },
+            Some("the exact bytes are recorded, not just this fingerprint".to_string()),
+        ));
+    }
+    if let Some(after) = twin::latest(index, store, sid, "after_b3").map_err(|e| e.to_string())? {
+        out.push(recorded("The file after", short(after), None));
+    }
+
+    out.push(recorded(
+        "Authority required",
+        "fs — permission to write the workspace".to_string(),
+        Some("no ambient authority: the write is refused without it".to_string()),
+    ));
+
+    // The Intent id is observed onto the change when the effect is
+    // attempted; the Receipt is reachable from the intent.
+    if let Some(intent) = twin::latest(index, store, sid, "intent").map_err(|e| e.to_string())? {
+        out.push(recorded(
+            "Intent",
+            "recorded before the file was touched".to_string(),
+            Some("this ordering is what makes a crash recoverable".to_string()),
+        ));
+        if let Ok(node) = brain_core::ids::NodeId::parse(&intent) {
+            for receipt_node in index.receipts_for(&node) {
+                if let Ok(Object::Receipt { ok, detail, .. }) = store.get(&receipt_node) {
+                    out.push(recorded(
+                        "Receipt",
+                        if ok {
+                            format!("confirmed: {detail}")
+                        } else {
+                            format!("failed: {detail}")
+                        },
+                        None,
+                    ));
+                }
+            }
+        }
+    }
+
+    let (_, note) = say::change_stage(status);
+    if !note.is_empty() {
+        out.push(recorded("Outcome", note.to_string(), None));
+    }
+
+    out.push(AuditEntry {
+        label: "The same thing from a terminal".to_string(),
+        value: match status {
+            "proposed" => format!("brain change apply {prefix} {slug} --cap fs"),
+            "applied" => format!("brain change verify {prefix} {slug}"),
+            _ => format!("brain change show {prefix} {slug}"),
+        },
+        note: Some(say::RECONSTRUCTED.to_string()),
+        recorded: false,
+    });
+    Ok(out)
+}
+
 fn extras(
     loaded: &Loaded,
     sid: &StableId,
@@ -466,6 +568,7 @@ fn extras(
                 .map_err(|e| e.to_string())?;
             extras.after_text =
                 twin::latest(index, store, sid, "content").map_err(|e| e.to_string())?;
+            extras.audit = audit(loaded, sid, slug, &current)?;
         }
         "feature" => {
             let report =
@@ -530,6 +633,32 @@ fn extras(
                     detail: None,
                 })
                 .collect();
+
+            // What the run left behind about this case: the screenshot,
+            // the recording, the trace.
+            for (_, asset) in twin::live_to(index, store, sid, "attached_to")
+                .map_err(|e| e.to_string())?
+            {
+                let labels = query::labels_of(index, store, &asset);
+                let path = labels.get("path").cloned().unwrap_or_default();
+                let subtype = twin::latest(index, store, &asset, "subtype")
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or_default();
+                extras.attachments.push(Attachment {
+                    id: asset.to_string(),
+                    label: path.rsplit('/').next().unwrap_or(&path).to_string(),
+                    noun: say::attachment_noun(&subtype).to_string(),
+                    subtype,
+                    path,
+                });
+            }
+            extras.attachments.sort_by(|a, b| a.label.cmp(&b.label));
+        }
+        "agent_session" => {
+            extras.session = crate::query::work::build(loaded)?
+                .sessions
+                .into_iter()
+                .find(|session| session.id == sid.to_string());
         }
         _ => {}
     }

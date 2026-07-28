@@ -60,7 +60,10 @@ cargo run -p brain -- template set runbook --applies-to runbook --capture "docs/
   --fields "title=heading, service=line" --requires "title,service"  # teach a new kind, no code
 cargo run -p brain -- feature matrix twin/self # definition-of-done as a rendered query
 cargo test 2>&1 | cargo run -p brain -- testrun import - --prefix twin/self  # protocol -> graph
+npx playwright test --reporter=json | brain testrun import - --prefix twin/self  # + screenshots, videos, traces
 cargo run -p brain -- twin tests twin/self     # frameworks, covers-relations, failing
+cargo run -p brain -- sessions import . --prefix twin/self  # which agent worked here, and on what
+cargo run -p brain -- sessions list twin/self  # objectives, models, blast radius
 cargo run -p brain -- twin stale twin/self     # docs invalidated by later file changes
 brain docs generate            # regenerate docs: md + screenshots + narrated screencast
 cargo run -p brain -- twin insights twin/self   # churn, hubs, growth, notes, decisions
@@ -73,6 +76,7 @@ cargo run -p brain -- adr ack twin/self <slug>     # reviewed, still accurate â€
 cargo run -p brain -- artifact new twin/self plan sprint --title "Sprint"  # graph-first: renders a READ-ONLY projection
 cargo run -p brain -- asset add docs/assets/flow.svg --prefix twin/self --for plan/sprint --depicts src/ui.rs
 cargo run -p brain -- instructions generate     # one guardrail block into CLAUDE.md + AGENTS.md, from the registry
+cargo run -p brain -- eyes --prefix twin/self   # the visual layer for people: judgments, evidence, media, the anatomy
 cargo run -p brain -- tidy . --prefix twin/self # drifted projections, retired files, legacy assets â€” fixes are governed
 cargo run -p brain -- template fitness          # which contract versions work: conformance, outcomes, verdicts
 cargo run -p brain -- hook install --tests --gate  # opt-in pre-commit: refuse hand-edited projections + contract violations

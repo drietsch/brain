@@ -16,6 +16,7 @@ use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 const INDEX_HTML: &str = include_str!("../assets/index.html");
 const APP_JS: &str = include_str!("../assets/app.js");
+const MRI_JS: &str = include_str!("../assets/mri.js");
 const STYLES_CSS: &str = include_str!("../assets/styles.css");
 const WORKERS: usize = 4;
 
@@ -87,6 +88,7 @@ fn handle(request: Request, state: &Arc<AppState>) {
     match path.as_str() {
         "/" | "/index.html" => text(request, 200, INDEX_HTML, "text/html; charset=utf-8"),
         "/assets/app.js" => text(request, 200, APP_JS, "text/javascript; charset=utf-8"),
+        "/assets/mri.js" => text(request, 200, MRI_JS, "text/javascript; charset=utf-8"),
         "/assets/styles.css" => text(request, 200, STYLES_CSS, "text/css; charset=utf-8"),
 
         "/api/snapshot" => json_result(request, state.snapshot()),
@@ -107,7 +109,17 @@ fn handle(request: Request, state: &Arc<AppState>) {
             )
         }
         "/api/concepts" => json_result(request, state.read(query::library::concepts)),
-        "/api/tests" => json_result(request, state.read(query::library::tests)),
+        "/api/tests" => json_result(request, state.read(query::tests::build)),
+        "/api/work" => json_result(request, state.read(query::work::build)),
+        "/api/mri" => json_result(request, state.read(|loaded| loaded.mri())),
+        "/api/evidence" => json_result(request, state.read(query::evidence::build)),
+        "/api/media" => {
+            let root = state.config.content_root.clone();
+            json_result(
+                request,
+                state.read(|loaded| query::media::build(loaded, Some(&root))),
+            )
+        }
         "/api/map" => {
             let lens = param("lens").unwrap_or_else(|| "attention".to_string());
             json_result(request, state.read(|loaded| query::map::build(loaded, &lens)))
@@ -153,44 +165,135 @@ fn raw_body(request: Request, state: &Arc<AppState>, id: &str) {
         let resolved = body::resolve(loaded, &sid, &kind, &labels, Some(&root))?;
         Ok((resolved.view, resolved.bytes))
     });
-    match resolved {
-        Ok((view, bytes)) => {
-            // Only media keeps its real type; everything else is served as
-            // plain text so nothing from the workspace can execute.
-            let media = matches!(view.format.as_str(), "image" | "audio" | "video" | "pdf");
-            let content_type = if media {
-                view.media_type.as_str()
-            } else {
-                "text/plain; charset=utf-8"
-            };
-            let filename = view
-                .path
-                .as_deref()
-                .and_then(|path| std::path::Path::new(path).file_name())
-                .and_then(|name| name.to_str())
-                .unwrap_or("body")
-                .replace(['"', '\r', '\n'], "_");
-            let disposition = if media {
-                format!("inline; filename=\"{filename}\"")
-            } else {
-                format!("attachment; filename=\"{filename}\"")
-            };
-            let mut response = Response::from_data(bytes).with_status_code(StatusCode(200));
+    let (view, bytes) = match resolved {
+        Ok(pair) => pair,
+        Err(message) => return error(request, 400, &message),
+    };
+
+    // Only media keeps its real type; everything else is served as
+    // plain text so nothing from the workspace can execute.
+    let media = matches!(view.format.as_str(), "image" | "audio" | "video" | "pdf");
+    let content_type = if media {
+        view.media_type.as_str()
+    } else {
+        "text/plain; charset=utf-8"
+    };
+    let filename = view
+        .path
+        .as_deref()
+        .and_then(|path| std::path::Path::new(path).file_name())
+        .and_then(|name| name.to_str())
+        .unwrap_or("body")
+        .replace(['"', '\r', '\n'], "_");
+    let disposition = if media {
+        format!("inline; filename=\"{filename}\"")
+    } else {
+        format!("attachment; filename=\"{filename}\"")
+    };
+
+    // A <video> or <audio> element cannot seek without byte ranges, and
+    // Safari will not start playback at all without them. The tour and
+    // every Playwright recording depend on this.
+    let total = bytes.len() as u64;
+    let requested = header_value(&request, "range").and_then(|value| parse_range(&value, total));
+    let (status, bytes, content_range) = match requested {
+        Some(Ok((start, end))) => {
+            let slice = bytes[start as usize..=end as usize].to_vec();
+            (
+                206,
+                slice,
+                Some(format!("bytes {start}-{end}/{total}")),
+            )
+        }
+        // A range outside the file is a 416, not a silent whole-file reply.
+        Some(Err(())) => {
+            let mut response = Response::from_data(Vec::new()).with_status_code(StatusCode(416));
             for (name, value) in [
-                ("Content-Type", content_type),
-                ("Content-Disposition", disposition.as_str()),
-                ("X-Content-Type-Options", "nosniff"),
-                ("Cache-Control", "no-store"),
-                ("Content-Security-Policy", "default-src 'none'; sandbox"),
+                ("Content-Range", format!("bytes */{total}")),
+                ("Accept-Ranges", "bytes".to_string()),
             ] {
                 if let Ok(header) = Header::from_bytes(name.as_bytes(), value.as_bytes()) {
                     response = response.with_header(header);
                 }
             }
-            let _ = request.respond(response);
+            return drop(request.respond(response));
         }
-        Err(message) => error(request, 400, &message),
+        None => (200, bytes, None),
+    };
+
+    let mut response = Response::from_data(bytes)
+        .with_status_code(StatusCode(status))
+        .with_chunked_threshold(NEVER_CHUNK);
+    let mut headers: Vec<(&str, String)> = vec![
+        ("Content-Type", content_type.to_string()),
+        ("Content-Disposition", disposition),
+        ("Accept-Ranges", "bytes".to_string()),
+        ("X-Content-Type-Options", "nosniff".to_string()),
+        // Media is fetched a range at a time while scrubbing; refusing to
+        // store it means re-reading the whole file on every seek. The
+        // window is short and the server is loopback-only.
+        (
+            "Cache-Control",
+            if media {
+                "private, max-age=60".to_string()
+            } else {
+                "no-store".to_string()
+            },
+        ),
+        ("Content-Security-Policy", "default-src 'none'; sandbox".to_string()),
+    ];
+    if let Some(range) = content_range {
+        headers.push(("Content-Range", range));
     }
+    for (name, value) in headers {
+        if let Ok(header) = Header::from_bytes(name.as_bytes(), value.as_bytes()) {
+            response = response.with_header(header);
+        }
+    }
+    let _ = request.respond(response);
+}
+
+fn header_value(request: &Request, field: &'static str) -> Option<String> {
+    request
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv(field))
+        .map(|header| header.value.as_str().to_string())
+}
+
+/// Parse a single byte range against a known length.
+///
+/// `Ok((start, end))` is inclusive on both ends, as HTTP defines it.
+/// `Err(())` means the range is unsatisfiable; `None` means there was no
+/// usable range and the whole body should be sent. Multi-range requests
+/// fall into `None`: no browser needs them for media, and answering one
+/// range of several would be a lie.
+pub fn parse_range(value: &str, total: u64) -> Option<Result<(u64, u64), ()>> {
+    let spec = value.trim().strip_prefix("bytes=")?.trim();
+    if spec.contains(',') {
+        return None;
+    }
+    let (from, to) = spec.split_once('-')?;
+    if total == 0 {
+        return Some(Err(()));
+    }
+    let last = total - 1;
+    let (start, end) = match (from.trim(), to.trim()) {
+        // `-500`: the final 500 bytes.
+        ("", suffix) => {
+            let length: u64 = suffix.parse().ok()?;
+            if length == 0 {
+                return Some(Err(()));
+            }
+            (total.saturating_sub(length), last)
+        }
+        (start, "") => (start.parse().ok()?, last),
+        (start, end) => (start.parse().ok()?, end.parse::<u64>().ok()?.min(last)),
+    };
+    if start > last || start > end {
+        return Some(Err(()));
+    }
+    Some(Ok((start, end)))
 }
 
 fn json_result<T: Serialize>(request: Request, result: Result<T, String>) {
@@ -212,8 +315,17 @@ fn error(request: Request, status: u16, message: &str) {
     text(request, status, &body, "application/json; charset=utf-8");
 }
 
+/// Above this many bytes tiny_http would switch to chunked transfer.
+///
+/// Every response here is already complete in memory, so a length is
+/// always knowable and always better: chunked cost the browser a flat
+/// twenty seconds per large response while `curl` saw two milliseconds.
+const NEVER_CHUNK: usize = usize::MAX;
+
 fn text(request: Request, status: u16, body: &str, content_type: &str) {
-    let mut response = Response::from_string(body).with_status_code(StatusCode(status));
+    let mut response = Response::from_string(body)
+        .with_status_code(StatusCode(status))
+        .with_chunked_threshold(NEVER_CHUNK);
     for (name, value) in [
         ("Content-Type", content_type),
         ("Cache-Control", "no-store"),

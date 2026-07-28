@@ -17,6 +17,9 @@ struct Fixture {
     state: AppState,
 }
 
+/// 32 recognisable bytes standing in for a screenshot.
+const MEDIA_BYTES: &[u8; 32] = b"\x89PNG\r\n\x1a\n0123456789abcdefghijklmn";
+
 /// A small but complete world: two crates where one uses the other, a
 /// document that drifted, a decision, a feature, and a test.
 fn fixture() -> Fixture {
@@ -60,6 +63,21 @@ fn fixture() -> Fixture {
     let decision = StableId::derive(&["decision", "twin/app", "adr-001-shape"]);
     brain_observe::features::link(&store, "twin/app", "core", "decided_by", &decision).unwrap();
 
+    // A generated screenshot: media the browser must be able to stream.
+    fs::create_dir_all(root.join("docs/generated/img")).unwrap();
+    fs::write(root.join("docs/generated/img/shot.png"), MEDIA_BYTES).unwrap();
+
+    // A browser test that failed and left evidence behind.
+    fs::create_dir_all(root.join("e2e")).unwrap();
+    fs::create_dir_all(root.join("test-results/login")).unwrap();
+    fs::write(
+        root.join("e2e/login.spec.ts"),
+        "import { test } from '@playwright/test';\ntest('signs in', async () => {});\ntest('rejects a bad password', async () => {});\n",
+    )
+    .unwrap();
+    fs::write(root.join("test-results/login/test-failed-1.png"), MEDIA_BYTES).unwrap();
+    twin::refresh(&store, root, "twin/app").unwrap();
+
     // The code moves after the documents were written: drift.
     std::thread::sleep(std::time::Duration::from_millis(5));
     fs::write(
@@ -68,6 +86,30 @@ fn fixture() -> Fixture {
     )
     .unwrap();
     twin::refresh(&store, root, "twin/app").unwrap();
+
+    // Declared as an asset, the way the docs pipeline declares its own.
+    let repo = StableId::derive(&["repo", "twin/app"]);
+    brain_observe::assets::add(
+        &store,
+        "twin/app",
+        "docs/generated/img/shot.png",
+        &repo,
+        &[],
+        Some("image"),
+    )
+    .unwrap();
+
+    // A Playwright protocol: one pass, one failure with its screenshot.
+    let report = r#"{"stats":{"duration":2400},"suites":[{"title":"e2e/login.spec.ts","file":"e2e/login.spec.ts","specs":[
+      {"title":"signs in","file":"e2e/login.spec.ts","line":2,
+       "tests":[{"projectName":"","results":[{"status":"passed","duration":410}]}]},
+      {"title":"rejects a bad password","file":"e2e/login.spec.ts","line":3,
+       "tests":[{"projectName":"","results":[{"status":"failed","duration":1200,
+         "error":{"message":"Expected 401, got 500"},
+         "attachments":[{"name":"screenshot","path":"test-results/login/test-failed-1.png","contentType":"image/png"}]}]}]}
+    ]}]}"#;
+    let parsed = brain_observe::testing::parse_report(report);
+    brain_observe::testing::record_run_in(&store, root, "twin/app", &parsed, report).unwrap();
 
     let state = AppState::new(Config {
         store_root: store_dir.path().to_path_buf(),
@@ -220,15 +262,140 @@ fn concepts_explain_the_vocabulary_including_what_the_brain_learned() {
 }
 
 #[test]
-fn tests_view_reports_results_not_just_declarations() {
+fn every_test_is_listed_with_its_verdict_and_its_evidence() {
     let f = fixture();
-    let view = f.state.read(crate::query::library::tests).unwrap();
+    let view = f.state.read(crate::query::tests::build).unwrap();
+
     assert!(
-        view.headline.contains("No test run"),
-        "honest when nothing was imported: {}",
+        view.headline.contains("1 of 2 tests failed"),
+        "the headline leads with the failure: {}",
         view.headline
     );
-    assert!(view.last_run.is_none());
+
+    // Every case, not a summary — and the failing one is first.
+    assert_eq!(view.cases.len(), 2);
+    let failing = &view.cases[0];
+    assert_eq!(failing.result, "failing");
+    assert!(failing.name.contains("rejects a bad password"));
+    assert_eq!(
+        failing.error.as_deref(),
+        Some("Expected 401, got 500"),
+        "the reason it failed, not just that it failed"
+    );
+    assert_eq!(failing.duration.as_deref(), Some("1.2 seconds"));
+    assert_eq!(failing.framework.as_deref(), Some("Playwright"));
+    assert_eq!(
+        failing.file.as_ref().map(|f| f.label.as_str()),
+        Some("e2e/login.spec.ts"),
+        "the case knows where it lives"
+    );
+
+    // The screenshot the failure produced is attached to the case.
+    let shot = failing
+        .attachments
+        .first()
+        .expect("a failing browser test shows its screenshot");
+    assert_eq!(shot.noun, "screenshot");
+    assert_eq!(shot.path, "test-results/login/test-failed-1.png");
+
+    // The run itself is a thing you can open.
+    let protocol = view.protocols.first().expect("the run is listed");
+    assert_eq!((protocol.total, protocol.passed, protocol.failed), (2, 1, 1));
+    assert_eq!(protocol.verdict, "1 of 2 failed");
+    assert_eq!(protocol.source, "from Playwright");
+    assert_eq!(protocol.duration.as_deref(), Some("2.4 seconds"));
+    assert!(
+        protocol.named.iter().any(|c| c.result == "failing"),
+        "a run names what failed"
+    );
+
+    // The suite the twin classified, with its framework.
+    let suite = view
+        .suites
+        .iter()
+        .find(|s| s.path == "e2e/login.spec.ts")
+        .expect("the spec file is a suite");
+    assert_eq!(suite.framework_label, "Playwright");
+    assert_eq!(suite.declared, 2);
+    assert!(view
+        .frameworks
+        .iter()
+        .any(|f| f.label == "Playwright" && f.files == 1));
+}
+
+#[test]
+fn work_names_who_did_something_and_stays_quiet_when_nobody_did() {
+    let f = fixture();
+    let view = f.state.read(crate::query::work::build).unwrap();
+    assert!(view.sessions.is_empty());
+    assert!(
+        view.sessions_hint.as_deref().is_some_and(|hint| hint.contains("Import them")),
+        "an empty surface says how to fill it: {:?}",
+        view.sessions_hint
+    );
+    assert_eq!(
+        view.sessions_hint_command.as_deref(),
+        Some("brain sessions import . --prefix twin/app"),
+        "and the command lives in a command field, not in the sentence"
+    );
+    assert!(view.headline.contains("Nothing is in flight"));
+}
+
+#[test]
+fn evidence_shows_when_a_claim_outruns_its_proof() {
+    let f = fixture();
+    let view = f.state.read(crate::query::evidence::build).unwrap();
+
+    // The fixture's feature links a decision and an implementation but is
+    // not done; the claim must not read as supported.
+    let feature = view
+        .claims
+        .iter()
+        .find(|claim| claim.category == "features")
+        .expect("the feature makes a claim");
+    assert!(!feature.supported);
+    assert!(
+        feature.verdict.contains("2 of 4"),
+        "the verdict counts what is missing: {}",
+        feature.verdict
+    );
+    assert!(
+        feature.proof.iter().any(|p| p.text.contains("nothing is linked as")),
+        "the proof names the gap"
+    );
+
+    // The failing run is evidence, and it says what kind of evidence.
+    let run = view
+        .claims
+        .iter()
+        .find(|claim| claim.category == "tests")
+        .expect("the run is evidence");
+    assert!(!run.supported, "the suite failed");
+    assert!(run.proof.iter().any(|p| p
+        .basis
+        .as_deref()
+        .is_some_and(|b| b.contains("run and observed"))));
+
+    assert!(view.headline.contains("cannot show proof"), "{}", view.headline);
+}
+
+#[test]
+fn media_carries_its_provenance_and_its_freshness() {
+    let f = fixture();
+    let root = f.state.config.content_root.clone();
+    let view = f
+        .state
+        .read(|loaded| crate::query::media::build(loaded, Some(&root)))
+        .unwrap();
+
+    let shot = view
+        .items
+        .iter()
+        .find(|item| item.label == "shot.png")
+        .expect("the declared screenshot is media");
+    assert_eq!(shot.noun, "screenshot");
+    // No tour exists in the fixture, so nothing is invented for one.
+    assert!(view.tour.is_none());
 }
 
 #[test]
@@ -558,6 +725,78 @@ fn prose_of(f: &Fixture) -> String {
         prose.push(concept.enforcement_note.clone());
         prose.push(concept.rot_note.clone());
     }
+
+    // The surfaces added in v3 answer to the same rule.
+    let tests = f.state.read(crate::query::tests::build).unwrap();
+    prose.push(tests.headline.clone());
+    for case in &tests.cases {
+        prose.push(case.result.clone());
+        prose.extend(case.note.clone());
+        prose.extend(case.error.clone());
+        prose.extend(case.duration.clone());
+        for attachment in &case.attachments {
+            prose.push(attachment.noun.clone());
+        }
+    }
+    for run in &tests.protocols {
+        prose.push(run.verdict.clone());
+        prose.push(run.source.clone());
+        prose.extend(run.evidence.clone());
+    }
+    for suite in &tests.suites {
+        prose.push(suite.note.clone());
+        prose.push(suite.framework_label.clone());
+    }
+
+    let work = f.state.read(crate::query::work::build).unwrap();
+    prose.push(work.headline.clone());
+    prose.extend(work.sessions_hint.clone());
+    for session in &work.sessions {
+        prose.push(session.state.clone());
+        prose.push(session.ran_for.clone());
+        prose.push(session.agent_label.clone());
+        for tool in &session.tools {
+            prose.push(tool.label.clone());
+        }
+    }
+    for item in work.changes.iter().chain(work.plans.iter()) {
+        prose.push(item.stage.clone());
+        prose.push(item.note.clone());
+    }
+
+    let evidence = f.state.read(crate::query::evidence::build).unwrap();
+    prose.push(evidence.headline.clone());
+    for category in &evidence.categories {
+        prose.push(category.label.clone());
+        prose.push(category.note.clone());
+    }
+    for claim in &evidence.claims {
+        prose.push(claim.claim.clone());
+        prose.push(claim.verdict.clone());
+        for proof in &claim.proof {
+            prose.push(proof.text.clone());
+            prose.extend(proof.basis.clone());
+        }
+    }
+
+    let root = f.state.config.content_root.clone();
+    let media = f
+        .state
+        .read(|loaded| crate::query::media::build(loaded, Some(&root)))
+        .unwrap();
+    prose.push(media.headline.clone());
+    for item in &media.items {
+        prose.push(item.state.clone());
+        prose.push(item.state_note.clone());
+        prose.push(item.noun.clone());
+    }
+
+    let mri = f.state.read(|loaded| loaded.mri()).unwrap();
+    prose.push(mri.headline.clone());
+    for cluster in &mri.clusters {
+        prose.push(cluster.label.clone());
+        prose.push(cluster.note.clone());
+    }
     prose.join("\n")
 }
 
@@ -663,4 +902,175 @@ fn the_server_answers_over_a_real_socket_and_refuses_the_rest() {
     // A thing that does not exist is a 404, not a 500.
     let unknown = request("GET /api/thing?id=sid:doesnotexist HTTP/1.1");
     assert!(unknown.starts_with("HTTP/1.1 404"), "{unknown}");
+}
+
+#[test]
+fn media_can_be_streamed_and_seeked() {
+    use std::io::{Read, Write};
+    let f = fixture();
+    let asset = brain_observe::assets::asset_sid("twin/app", "shot");
+    let (server, address, state) = crate::http::bind(Config {
+        port: 0,
+        ..f.state.config.clone()
+    })
+    .unwrap();
+    std::thread::spawn(move || {
+        let _ = crate::http::run(server, state);
+    });
+
+    // Raw bytes, so a Range slice can be compared exactly.
+    let fetch = |range: Option<&str>| -> (String, Vec<u8>) {
+        let mut socket = std::net::TcpStream::connect(&address).unwrap();
+        let range = range
+            .map(|r| format!("Range: {r}\r\n"))
+            .unwrap_or_default();
+        socket
+            .write_all(
+                format!(
+                    "GET /api/body?id={} HTTP/1.1\r\nHost: localhost\r\n{range}Connection: close\r\n\r\n",
+                    asset.0
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+        let mut raw = Vec::new();
+        socket.read_to_end(&mut raw).unwrap();
+        let split = raw
+            .windows(4)
+            .position(|w| w == b"\r\n\r\n")
+            .expect("headers end");
+        (
+            String::from_utf8_lossy(&raw[..split]).to_string(),
+            raw[split + 4..].to_vec(),
+        )
+    };
+
+    // Whole file: advertises that ranges are available at all, which is
+    // what a browser checks before it will let anyone scrub a video.
+    let (head, body) = fetch(None);
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    assert!(head.contains("Accept-Ranges: bytes"), "{head}");
+    assert!(head.contains("Content-Type: image/png"), "{head}");
+    assert_eq!(body, MEDIA_BYTES.to_vec());
+
+    // A middle slice.
+    let (head, body) = fetch(Some("bytes=8-11"));
+    assert!(head.starts_with("HTTP/1.1 206"), "{head}");
+    assert!(head.contains("Content-Range: bytes 8-11/32"), "{head}");
+    assert_eq!(body, b"0123".to_vec());
+
+    // Open-ended, and suffix — both forms browsers actually send.
+    let (head, body) = fetch(Some("bytes=28-"));
+    assert!(head.contains("Content-Range: bytes 28-31/32"), "{head}");
+    assert_eq!(body, b"klmn".to_vec());
+    let (head, body) = fetch(Some("bytes=-4"));
+    assert!(head.contains("Content-Range: bytes 28-31/32"), "{head}");
+    assert_eq!(body, b"klmn".to_vec());
+
+    // Past the end is refused, not silently answered with the whole file.
+    let (head, _) = fetch(Some("bytes=99-200"));
+    assert!(head.starts_with("HTTP/1.1 416"), "{head}");
+    assert!(head.contains("Content-Range: bytes */32"), "{head}");
+}
+
+#[test]
+fn byte_ranges_are_read_the_way_http_defines_them() {
+    use crate::http::parse_range;
+    assert_eq!(parse_range("bytes=0-0", 32), Some(Ok((0, 0))));
+    assert_eq!(parse_range("bytes=8-11", 32), Some(Ok((8, 11))));
+    assert_eq!(parse_range("bytes=28-", 32), Some(Ok((28, 31))));
+    assert_eq!(parse_range("bytes=-4", 32), Some(Ok((28, 31))));
+    // An end past the file is clamped; a start past it is not satisfiable.
+    assert_eq!(parse_range("bytes=30-999", 32), Some(Ok((30, 31))));
+    assert_eq!(parse_range("bytes=32-40", 32), Some(Err(())));
+    assert_eq!(parse_range("bytes=-0", 32), Some(Err(())));
+    assert_eq!(parse_range("bytes=0-10", 0), Some(Err(())));
+    // Nothing usable: send the whole body rather than guess.
+    assert_eq!(parse_range("bytes=0-1,4-5", 32), None);
+    assert_eq!(parse_range("items=0-1", 32), None);
+    assert_eq!(parse_range("bytes=abc-def", 32), None);
+}
+
+
+#[test]
+fn the_anatomy_is_stable_and_keeps_every_node() {
+    let f = fixture();
+    let first = f.state.read(|loaded| loaded.mri()).unwrap();
+    let second = f.state.read(|loaded| loaded.mri()).unwrap();
+
+    // A layout that moved between reads would make motion meaningless.
+    assert_eq!(first.nodes.len(), second.nodes.len());
+    for (a, b) in first.nodes.iter().zip(second.nodes.iter()) {
+        assert_eq!((a.id.as_str(), a.x, a.y, a.z), (b.id.as_str(), b.x, b.y, b.z));
+    }
+
+    // Nothing is dropped: every entity the graph holds under this prefix
+    // is in the payload, which is the promise the old whole-graph view
+    // broke by silently discarding three quarters of it.
+    let files = f
+        .state
+        .read(|loaded| crate::query::present_files(&loaded.index, &loaded.store, "twin/app"))
+        .unwrap();
+    for (path, sid) in &files {
+        assert!(
+            first.nodes.iter().any(|node| node.id == sid.to_string()),
+            "{path} is missing from the anatomy"
+        );
+    }
+    assert_eq!(first.levels.iter().sum::<usize>(), first.nodes.len());
+
+    // Height means dependency depth: the crate that uses another sits
+    // above it.
+    let y_of = |path: &str| {
+        let sid = StableId::derive(&["file", path]);
+        first
+            .nodes
+            .iter()
+            .find(|node| node.id == sid.to_string())
+            .map(|node| node.y)
+            .unwrap_or_default()
+    };
+    assert!(
+        y_of("crates/app/src/lib.rs") > y_of("crates/core-lib/src/lib.rs"),
+        "what depends on something sits above it"
+    );
+
+    // Edges point at real nodes.
+    for edge in &first.edges {
+        assert!((edge.a as usize) < first.nodes.len());
+        assert!((edge.b as usize) < first.nodes.len());
+    }
+}
+
+#[test]
+fn every_surface_is_a_read() {
+    let f = fixture();
+    let store = Store::open(f.state.config.store_root.clone()).unwrap();
+    let before = store.count_objects().unwrap();
+    let root = f.state.config.content_root.clone();
+
+    // A crawl of everything a person can open.
+    f.state.read(crate::query::now::build).unwrap();
+    f.state.read(crate::query::work::build).unwrap();
+    f.state.read(crate::query::tests::build).unwrap();
+    f.state.read(crate::query::evidence::build).unwrap();
+    f.state
+        .read(|loaded| crate::query::media::build(loaded, Some(&root)))
+        .unwrap();
+    f.state.read(crate::query::library::concepts).unwrap();
+    f.state.read(|loaded| loaded.mri()).unwrap();
+    for lens in ["attention", "tests", "recent"] {
+        f.state
+            .read(|loaded| crate::query::map::build(loaded, lens))
+            .unwrap();
+    }
+    f.state
+        .read(|loaded| crate::query::timeline::build(loaded, 50))
+        .unwrap();
+
+    assert_eq!(
+        store.count_objects().unwrap(),
+        before,
+        "Eyes wrote something while only being looked at"
+    );
 }

@@ -3339,7 +3339,6 @@ mod tests {
 
         let doc = StableId::derive(&["decision", "twin/app", "adr-001-x"]);
         let a = StableId::derive(&["file", "src/a.rs"]);
-        let b = StableId::derive(&["file", "src/b.rs"]);
         {
             let index = fresh_index(&store);
             assert_eq!(

@@ -76,6 +76,13 @@ in `object_edges` — every backend shares them.
   strongest verification level actually available for a node: unverified code
   runs sandbox-only; behavioral evidence unlocks scoped effects; formal
   evidence is required for irreversible ones.
+- **Who is recorded, but grants nothing.** `agent_session` entities
+  (ADR-025) are the only record of a principal: which coding agent ran,
+  what it was asked to do, and which files it edited. They are history, not
+  authority — an `Intent` still carries no requester, `Object::Capability`
+  is still never constructed, and the only check that exists is membership
+  of the capability set passed on the command line. Nothing in the graph
+  can approve anything.
 
 ## Crash safety
 

@@ -33,6 +33,10 @@ pub const GROUPS: &[(&str, &str)] = &[
         "Tests as graph citizens: framework classification and covers-relations at refresh; imported run protocols with per-case result timelines.",
     ),
     (
+        "Sessions",
+        "Who worked here: the coding-agent sessions that ran in this workspace, with their objective, model, tools and blast radius — the graph's only record of a principal.",
+    ),
+    (
         "Features",
         "The registry: features as entities, the definition of done as relation predicates, done-ness as a query.",
     ),
@@ -106,8 +110,11 @@ pub const COMMANDS: &[Cmd] = &[
     Cmd { group: "Documents", name: "asset list", args: "<prefix> [--all]", summary: "assets with subtype, path, owner, lifecycle" },
     Cmd { group: "Documents", name: "deliverable new", args: "<template> [--title T]", summary: "instantiate a scaffold from the graph to stdout" },
 
-    Cmd { group: "Tests", name: "testrun import", args: "<report|-> --prefix <p>", summary: "ingest cargo-test output or JUnit XML as a content-addressed protocol" },
+    Cmd { group: "Tests", name: "testrun import", args: "<report|-> --prefix <p> [--dir <d>]", summary: "ingest cargo-test output, JUnit XML, or Playwright JSON as a content-addressed protocol; Playwright's screenshots, videos and traces become assets owned by the case that produced them" },
     Cmd { group: "Tests", name: "testrun list", args: "<prefix>", summary: "imported protocols, newest first" },
+
+    Cmd { group: "Sessions", name: "sessions import", args: "[dir] [--prefix p] [--agent claude|codex] [--since 2h]", summary: "record the coding-agent sessions that ran in this workspace: objective, model, turns, tools, and the files they edited (never the conversation)" },
+    Cmd { group: "Sessions", name: "sessions list", args: "<prefix>", summary: "who worked here and what they were trying to do, most recent first" },
 
     Cmd { group: "Features", name: "feature add", args: "<prefix> <slug> [--title T] [--status S]", summary: "register (or update) a feature" },
     Cmd { group: "Features", name: "feature link", args: "<prefix> <slug> <predicate> <target>", summary: "link a feature to files, tests, decisions, docs" },

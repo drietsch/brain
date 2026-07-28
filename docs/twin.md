@@ -266,8 +266,11 @@ this file?" is `relations_to(file, covers)` — and insights surface
 covering spec, the concentrated-risk list.
 
 **Dynamic (protocols).** `brain testrun import` ingests a report — raw
-`cargo test` output, or JUnit XML, the interchange format Playwright,
-pytest, PHPUnit, and Jest all export. With `brain hook install --tests`,
+`cargo test` output, JUnit XML (the interchange format Playwright,
+pytest, PHPUnit, and Jest all export), or Playwright's own JSON reporter.
+Prefer the JSON one for browser tests: it is the only report that names
+the screenshots, videos and traces a run produced, and those become
+assets owned by the case that produced them. With `brain hook install --tests`,
 this happens automatically on every commit: the test command (inferred
 from the repo's manifest, or set with `--test-cmd`) is stored as a
 `test_command` observation on the repo entity — change it any time
@@ -275,7 +278,7 @@ without touching the hooks, and it replicates with the graph:
 
 ```bash
 cargo test 2>&1 | brain testrun import - --prefix twin/app
-npx playwright test --reporter=junit | brain testrun import - --prefix twin/app
+npx playwright test --reporter=json | brain testrun import - --prefix twin/app
 brain testrun list twin/app
 brain twin tests twin/app        # files, frameworks, covers, failing cases
 ```
@@ -291,8 +294,17 @@ What the graph gives you:
 - **Evidence, not just data.** Every run writes a Behavioral-level
   Evidence object on the repo entity (`testrun@<hash>`), tying test
   protocols into the same verification taxonomy native code uses.
-- **File linkage.** JUnit classnames that are twinned paths (Playwright's
-  convention) produce `test_case -defined_in-> file` relations.
+- **File linkage.** A spec file named by the reporter — or a JUnit
+  classname that is a twinned path, Playwright's convention — produces
+  `test_case -defined_in-> file` relations.
+- **Evidence you can look at.** Playwright's JSON also carries the failure
+  message, the duration, the retry count, and the attachments. Each
+  attachment becomes a declared asset `attached_to` its case, so a failing
+  browser test in Eyes shows its screenshot rather than just its name.
+- **Run membership where it means something.** A run links to the cases
+  that failed, were skipped, or changed their mind (`failed`, `skipped`,
+  `includes`). Passing cases are deliberately not linked to every run —
+  the case's own result timeline already says what it does.
 - **Replication.** Runs, timelines, and evidence travel with `brain pull`.
 
 ## Teach brain a new artifact type (no code)

@@ -52,7 +52,37 @@ pub fn add(
 ) -> Result<AssetOutcome, StoreError> {
     let mut index = MemIndex::new();
     replay(store, &mut index)?;
-    let now = now_ms();
+    let mut written = BTreeSet::new();
+    declare(
+        store,
+        &index,
+        &mut written,
+        prefix,
+        rel_path,
+        owner,
+        depicts,
+        subtype,
+        now_ms(),
+    )
+}
+
+/// `add` against an index the caller already holds.
+///
+/// Ingest paths that declare many assets in one pass — a Playwright run
+/// with a screenshot per failure, the docs pipeline with a screenshot per
+/// section — must not replay the whole log once per file.
+#[allow(clippy::too_many_arguments)]
+pub fn declare(
+    store: &Store,
+    index: &MemIndex,
+    written: &mut BTreeSet<(StableId, String, StableId)>,
+    prefix: &str,
+    rel_path: &str,
+    owner: &StableId,
+    depicts: &[StableId],
+    subtype: Option<&str>,
+    now: u64,
+) -> Result<AssetOutcome, StoreError> {
     let file_sid = StableId::derive(&["file", rel_path]);
     let slug = crate::docs::slug_of(rel_path);
     let sid = asset_sid(prefix, &slug);
@@ -69,24 +99,23 @@ pub fn add(
 
     let mut wrote = false;
     let subtype = subtype.unwrap_or_else(|| infer_subtype(rel_path));
-    if latest(&index, store, &sid, "subtype")?.as_deref() != Some(subtype) {
+    if latest(index, store, &sid, "subtype")?.as_deref() != Some(subtype) {
         observe_src(store, &sid, "subtype", subtype, "agent", now)?;
         wrote = true;
     }
 
-    let mut written: BTreeSet<(StableId, String, StableId)> = BTreeSet::new();
     let repo_sid = StableId::derive(&["repo", prefix]);
     for (kind, to) in [
         ("recorded_in", &file_sid),
         ("attached_to", owner),
         ("concerns", &repo_sid),
     ] {
-        if relate(store, &index, &mut written, &sid, kind, to, now)? {
+        if relate(store, index, written, &sid, kind, to, now)? {
             wrote = true;
         }
     }
     for target in depicts {
-        if relate(store, &index, &mut written, &sid, "depicts", target, now)? {
+        if relate(store, index, written, &sid, "depicts", target, now)? {
             wrote = true;
         }
     }
@@ -113,9 +142,24 @@ pub fn list(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<AssetRo
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
+        // An owner with no display label (a repository) would otherwise
+        // print its raw identifier, which tells a reader nothing.
         let owner = crate::twin::live_from(index, store, &id, "attached_to")?
             .first()
-            .map(|(_, o)| sid_label(index, store, o));
+            .map(|(_, o)| {
+                let label = sid_label(index, store, o);
+                if !label.starts_with("sid:") {
+                    return label;
+                }
+                for node in index.entity_nodes(o) {
+                    if let Ok(Object::Entity { labels, .. }) = store.get(&node) {
+                        if let Some(prefix) = labels.get("prefix") {
+                            return prefix.clone();
+                        }
+                    }
+                }
+                label
+            });
         out.push(AssetRow {
             slug: labels.get("slug").cloned().unwrap_or_default(),
             path: labels.get("path").cloned().unwrap_or_default(),
@@ -254,7 +298,6 @@ mod tests {
         let store = Store::open(store_dir.path()).unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
 
-        let index = fresh_index(&store);
         let plan = StableId::derive(&["plan", "twin/app", "build"]);
         let ui = StableId::derive(&["file", "src/ui.rs"]);
         let out = add(

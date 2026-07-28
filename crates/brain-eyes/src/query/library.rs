@@ -10,9 +10,7 @@ use crate::dto::*;
 use crate::query;
 use crate::say;
 use crate::state::Loaded;
-use brain_core::ids::StableId;
-use brain_index::Index;
-use brain_observe::{features, lifecycle, testing, twin};
+use brain_observe::{features, lifecycle, twin};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Shelf id → (label, note, kinds it gathers).
@@ -81,6 +79,29 @@ pub fn shelves(loaded: &Loaded) -> Result<Vec<Shelf>, String> {
             count,
         });
     }
+    // Pictures and recordings get their own surface: a screenshot is
+    // something you look at, not a row in a list.
+    let media = query::scoped(index, store, prefix, "asset")?
+        .into_iter()
+        .filter(|(sid, _)| {
+            matches!(
+                twin::latest(index, store, sid, "subtype")
+                    .ok()
+                    .flatten()
+                    .as_deref(),
+                Some("image") | Some("screencast") | Some("audio")
+            )
+        })
+        .count();
+    if media > 0 {
+        out.push(Shelf {
+            id: "media".to_string(),
+            label: "Pictures & recordings".to_string(),
+            note: "Screenshots, screencasts, and the narrated tour.".to_string(),
+            count: media,
+        });
+    }
+
     // Kinds taught at runtime that no fixed shelf gathers.
     let known: BTreeSet<&str> = SHELVES.iter().flat_map(|(_, _, _, k)| k.iter().copied()).collect();
     for kind in loaded.registry().keys() {
@@ -427,112 +448,6 @@ pub fn concepts(loaded: &Loaded) -> Result<ConceptsView, String> {
     Ok(ConceptsView {
         snapshot: loaded.snapshot.clone(),
         concepts: out,
-    })
-}
-
-// ---------------------------------------------------------------------------
-// Tests: results, not just declarations
-// ---------------------------------------------------------------------------
-
-pub fn tests(loaded: &Loaded) -> Result<TestsView, String> {
-    let store = &loaded.store;
-    let index = &loaded.index;
-    let prefix = loaded.prefix();
-    let now = loaded.snapshot.generated_at_ms;
-    let insights = loaded.insights();
-
-    let runs: Vec<TestSummary> = testing::runs(store, index, prefix)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .take(8)
-        .map(|(at, total, passed, failed, _)| TestSummary {
-            total,
-            passed,
-            failed,
-            when: say::ago(now, at),
-        })
-        .collect();
-    let last_run = runs.first().cloned();
-
-    let failing: Vec<FailingCase> = testing::failing_cases(store, index, prefix)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|name| {
-            let sid = StableId::derive(&["test", prefix, &name]);
-            FailingCase {
-                id: sid.to_string(),
-                name,
-                note: "failing in the last imported run".to_string(),
-            }
-        })
-        .collect();
-
-    // A case whose result flipped more than once has a history worth
-    // seeing: every transition is one observation.
-    let mut flaky = Vec::new();
-    for (sid, labels) in query::scoped(index, store, prefix, "test_case")? {
-        let mut flips = 0usize;
-        for node in index.observations_of(&sid) {
-            if let Ok(brain_core::object::Object::Observation { property, .. }) = store.get(&node) {
-                if property == "result" {
-                    flips += 1;
-                }
-            }
-        }
-        if flips < 3 {
-            continue;
-        }
-        let result = twin::latest(index, store, &sid, "result")
-            .map_err(|e| e.to_string())?
-            .unwrap_or_else(|| "unknown".to_string());
-        flaky.push(CaseHistory {
-            name: labels
-                .get("name")
-                .cloned()
-                .unwrap_or_else(|| twin::sid_label(index, store, &sid)),
-            id: sid.to_string(),
-            result,
-            flips,
-            note: format!(
-                "changed result {} — worth a look",
-                say::count(flips as u64, "time", "times")
-            ),
-        });
-    }
-    flaky.sort_by(|a, b| b.flips.cmp(&a.flips));
-    flaky.truncate(8);
-
-    let uncovered: Vec<Ref> = insights
-        .untested_hubs
-        .iter()
-        .take(8)
-        .map(|(path, _)| {
-            let sid = StableId::derive(&["file", path]);
-            query::make_ref(index, store, &sid)
-        })
-        .collect();
-
-    let headline = match &last_run {
-        Some(run) if run.failed == 0 => {
-            format!("All {} tests passed {}.", run.total, run.when)
-        }
-        Some(run) => format!(
-            "{} of {} tests failed {}.",
-            run.failed, run.total, run.when
-        ),
-        None => "No test run has been imported yet.".to_string(),
-    };
-
-    Ok(TestsView {
-        snapshot: loaded.snapshot.clone(),
-        headline,
-        last_run,
-        runs,
-        failing,
-        flaky,
-        declared: insights.tests_declared,
-        files: insights.test_files,
-        uncovered,
     })
 }
 

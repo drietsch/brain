@@ -210,6 +210,333 @@ pub struct TestsView {
     pub declared: usize,
     pub files: usize,
     pub uncovered: Vec<Ref>,
+    /// Every recorded run, in full.
+    pub protocols: Vec<Protocol>,
+    /// Every recorded case, with its verdict and its evidence.
+    pub cases: Vec<CaseRow>,
+    /// The test files the twin classified, by framework.
+    pub suites: Vec<Suite>,
+    pub frameworks: Vec<FrameworkCount>,
+}
+
+/// One imported run, as a thing you can open.
+#[derive(Debug, Clone, Serialize)]
+pub struct Protocol {
+    pub id: String,
+    pub when: String,
+    pub at_ms: u64,
+    pub verdict: String,
+    pub tone: String,
+    pub source: String,
+    pub total: usize,
+    pub passed: usize,
+    pub failed: usize,
+    pub skipped: usize,
+    pub duration: Option<String>,
+    /// Cases this run named: what failed, what was skipped, what changed
+    /// its mind. Passing cases are not linked to runs — see ADR-027.
+    pub named: Vec<CaseRef>,
+    /// The Evidence object this run wrote, if any.
+    pub evidence: Option<String>,
+    pub verified_change: Option<Ref>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CaseRef {
+    pub id: String,
+    pub name: String,
+    pub result: String,
+    pub tone: String,
+}
+
+/// One test case, everything the graph knows about it.
+#[derive(Debug, Clone, Serialize)]
+pub struct CaseRow {
+    pub id: String,
+    pub name: String,
+    /// The suite or file it belongs to, for grouping.
+    pub group: String,
+    pub result: String,
+    pub tone: String,
+    pub when: String,
+    pub at_ms: u64,
+    pub framework: Option<String>,
+    pub duration: Option<String>,
+    pub error: Option<String>,
+    pub retries: usize,
+    pub flips: usize,
+    pub note: Option<String>,
+    pub file: Option<Ref>,
+    /// Screenshots, recordings and traces the run produced.
+    pub attachments: Vec<Attachment>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Attachment {
+    pub id: String,
+    pub label: String,
+    pub noun: String,
+    pub subtype: String,
+    pub path: String,
+}
+
+/// A file the twin classified as holding tests.
+#[derive(Debug, Clone, Serialize)]
+pub struct Suite {
+    pub id: String,
+    pub path: String,
+    pub framework: String,
+    pub framework_label: String,
+    pub declared: usize,
+    pub whole_file: bool,
+    pub covers: Vec<Ref>,
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FrameworkCount {
+    pub framework: String,
+    pub label: String,
+    pub files: usize,
+    pub declared: usize,
+}
+
+// ---------------------------------------------------------------------------
+// Work
+// ---------------------------------------------------------------------------
+
+/// An agent session: the graph's only record of who did something.
+#[derive(Debug, Clone, Serialize)]
+pub struct Session {
+    pub id: String,
+    pub agent: String,
+    pub agent_label: String,
+    pub objective: String,
+    pub model: Option<String>,
+    pub when: String,
+    pub at_ms: u64,
+    pub ran_for: String,
+    pub turns: usize,
+    pub tools: Vec<ToolUse>,
+    pub live: bool,
+    pub state: String,
+    pub touched: Vec<Ref>,
+    pub more_touched: usize,
+    /// Artifacts this session produced, derived from what it edited.
+    pub produced: Vec<Ref>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolUse {
+    pub name: String,
+    pub label: String,
+    pub count: usize,
+}
+
+/// Something in flight that is not a session: a change, a plan.
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkItem {
+    pub id: String,
+    pub title: String,
+    pub kind: String,
+    pub noun: String,
+    pub glyph: String,
+    pub stage: String,
+    pub note: String,
+    pub tone: String,
+    pub when: String,
+    pub at_ms: u64,
+    pub fix_command: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkView {
+    pub snapshot: Snapshot,
+    pub headline: String,
+    pub sessions: Vec<Session>,
+    pub changes: Vec<WorkItem>,
+    pub plans: Vec<WorkItem>,
+    /// Told plainly when no agent history has been imported. The
+    /// sentence and the command are separate fields, as everywhere else:
+    /// a command is not prose, and mixing them is how flag names end up
+    /// being read out loud.
+    pub sessions_hint: Option<String>,
+    pub sessions_hint_command: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Evidence
+// ---------------------------------------------------------------------------
+
+/// A claim the system makes, and what stands behind it.
+#[derive(Debug, Clone, Serialize)]
+pub struct Claim {
+    pub id: String,
+    pub subject: Option<Ref>,
+    /// What is being asserted.
+    pub claim: String,
+    /// Whether the proof holds it up.
+    pub supported: bool,
+    pub tone: String,
+    /// Why it is or is not supported.
+    pub verdict: String,
+    pub proof: Vec<Proof>,
+    pub category: String,
+    pub fix_command: Option<String>,
+}
+
+/// One link in a proof: a fact, and what kind of fact it is.
+#[derive(Debug, Clone, Serialize)]
+pub struct Proof {
+    pub text: String,
+    /// What this level of verification actually establishes.
+    pub basis: Option<String>,
+    pub tone: String,
+    pub target: Option<Ref>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EvidenceCategory {
+    pub id: String,
+    pub label: String,
+    pub note: String,
+    pub supported: usize,
+    pub unsupported: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EvidenceView {
+    pub snapshot: Snapshot,
+    pub headline: String,
+    pub categories: Vec<EvidenceCategory>,
+    pub claims: Vec<Claim>,
+}
+
+// ---------------------------------------------------------------------------
+// Media
+// ---------------------------------------------------------------------------
+
+/// A picture, recording or audio file the graph knows about.
+#[derive(Debug, Clone, Serialize)]
+pub struct MediaItem {
+    pub id: String,
+    pub label: String,
+    pub subtype: String,
+    pub noun: String,
+    pub path: String,
+    /// The command that produced it, when one was recorded.
+    pub rendered_from: Option<String>,
+    pub when: String,
+    pub at_ms: u64,
+    pub state: String,
+    pub state_note: String,
+    pub tone: String,
+    pub owner: Option<Ref>,
+    pub depicts: Vec<Ref>,
+}
+
+/// One chapter of the generated tour.
+#[derive(Debug, Clone, Serialize)]
+pub struct Chapter {
+    pub id: String,
+    pub title: String,
+    pub command: String,
+    pub image: Option<MediaItem>,
+    /// The narration sentence that belongs to this chapter, when the
+    /// script has one for it.
+    pub narration: Option<String>,
+}
+
+/// A sentence the recorded tour still asserts that the graph has moved on
+/// from.
+#[derive(Debug, Clone, Serialize)]
+pub struct NarrationDrift {
+    pub recorded: Option<String>,
+    pub current: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Tour {
+    pub video: Option<MediaItem>,
+    pub script: Vec<String>,
+    pub chapters: Vec<Chapter>,
+    pub state: String,
+    pub state_note: String,
+    pub tone: String,
+    pub drift: Vec<NarrationDrift>,
+    pub regenerate_command: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MediaView {
+    pub snapshot: Snapshot,
+    pub headline: String,
+    pub tour: Option<Tour>,
+    pub items: Vec<MediaItem>,
+}
+
+// ---------------------------------------------------------------------------
+// MRI — the living graph
+// ---------------------------------------------------------------------------
+
+/// One thing in the anatomy.
+///
+/// Positions are computed on the server and are stable for a given graph
+/// version, so the picture does not rearrange itself while a person is
+/// looking at it. `level` drives level-of-detail: nothing is ever dropped,
+/// detail resolves as the camera approaches.
+#[derive(Debug, Clone, Serialize)]
+pub struct MriNode {
+    pub id: String,
+    pub label: String,
+    pub kind: String,
+    pub glyph: String,
+    pub cluster: String,
+    pub group: String,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub size: f32,
+    /// 0 landmarks, 1 ordinary things, 2 fine detail.
+    pub level: u8,
+    pub tone: String,
+    /// Why it is lit: "changed", "failing", "working", "unfinished".
+    pub pulse: Option<String>,
+    pub at_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MriEdge {
+    /// Indices into `nodes`, not identifiers: the browser draws millions
+    /// of these and should not parse a string per line.
+    pub a: u32,
+    pub b: u32,
+    pub predicate: String,
+    /// The higher of the two endpoints' levels.
+    pub level: u8,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MriCluster {
+    pub id: String,
+    pub label: String,
+    pub note: String,
+    pub count: usize,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub radius: f32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MriView {
+    pub snapshot: Snapshot,
+    pub headline: String,
+    pub clusters: Vec<MriCluster>,
+    pub nodes: Vec<MriNode>,
+    pub edges: Vec<MriEdge>,
+    /// Counts per level, so the view can say how much is on screen.
+    pub levels: Vec<usize>,
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +618,23 @@ pub struct ThingExtras {
     /// Governed change: the recorded before/after text.
     pub before_text: Option<String>,
     pub after_text: Option<String>,
+    /// Governed change: the audit record, in the order it happened.
+    pub audit: Vec<AuditEntry>,
+    /// Test case: attachments the run produced about it.
+    pub attachments: Vec<Attachment>,
+    /// Agent session: what it did.
+    pub session: Option<Session>,
+}
+
+/// One line of an action's story. `recorded` distinguishes what the graph
+/// holds from what Eyes worked out — a reconstructed command is useful,
+/// but presenting it as a record would be a lie.
+#[derive(Debug, Clone, Serialize)]
+pub struct AuditEntry {
+    pub label: String,
+    pub value: String,
+    pub note: Option<String>,
+    pub recorded: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

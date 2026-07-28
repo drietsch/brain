@@ -5,12 +5,17 @@
 //! workspace already computes — that is how Eyes and the CLI stay in
 //! agreement, and how a dossier stopped costing nine passes over the store.
 
+pub mod evidence;
 pub mod find;
 pub mod library;
 pub mod map;
+pub mod media;
+pub mod mri;
 pub mod now;
+pub mod tests;
 pub mod thing;
 pub mod timeline;
+pub mod work;
 
 use crate::dto::Ref;
 use crate::say;

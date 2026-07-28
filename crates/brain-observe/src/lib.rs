@@ -36,11 +36,13 @@ pub mod instructions;
 pub mod kinds;
 pub mod lifecycle;
 pub mod projection;
+pub mod sessions;
 pub mod sleep;
 pub mod symbols;
 pub mod templates;
 pub mod testing;
 pub mod tidy;
+pub mod tour;
 pub mod twin;
 pub mod wake;
 

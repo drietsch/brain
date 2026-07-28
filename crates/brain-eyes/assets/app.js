@@ -8,6 +8,9 @@
 
 const stage = document.getElementById("stage");
 const state = { view: "now", params: {}, snapshot: null, findRows: [], findIndex: 0 };
+/* Declared here because render() runs at load, before the sections below. */
+let mriHandle = null;
+let speaking = false;
 
 /* ------------------------------------------------------------------ utils */
 
@@ -149,9 +152,12 @@ async function render() {
   for (const button of document.querySelectorAll(".rail button")) {
     const target = button.dataset.go;
     button.classList.toggle("on", target === route.view ||
-      (target === "library" && ["concepts", "tests", "thing"].includes(route.view)));
+      (target === "library" && ["concepts", "media", "thing"].includes(route.view)));
   }
   stage.classList.toggle("dark", route.view === "map");
+  document.body.classList.toggle("in-mri", route.view === "mri");
+  if (route.view !== "mri" && mriHandle) { mriHandle.destroy(); mriHandle = null; }
+  stopSpeaking();
   stage.replaceChildren(h("p", { class: "loading", text: "Reading the graph…" }));
   try {
     const renderer = views[route.view] || views.now;
@@ -261,14 +267,15 @@ views.library = async (params) => {
 };
 
 function shelfRail(shelves, current) {
+  // A media shelf opens the surface built for looking at things; the
+  // rest are lists.
   const all = [
-    ...shelves.map((shelf) => ({ ...shelf, view: "library" })),
-    { id: "tests", label: "Tests", count: null, view: "tests" },
+    ...shelves.map((shelf) => ({ ...shelf, view: shelf.id === "media" ? "media" : "library" })),
     { id: "concepts", label: "Concepts", count: null, view: "concepts" },
   ];
   return h("nav", { class: "shelves" }, all.map((shelf) =>
     h("button", {
-      class: shelf.id === current && shelf.view === "library" ? "on" : "",
+      class: shelf.id === current ? "on" : "",
       onclick: () => (shelf.view === "library" ? go("library", { shelf: shelf.id }) : go(shelf.view)),
     }, h("span", { text: shelf.label }), shelf.count !== null ? h("em", { text: shelf.count }) : null)));
 }
@@ -315,49 +322,6 @@ views.concepts = async () => {
             h("dt", { text: "Rules" }), h("dd", { text: concept.enforcement_note }),
             h("dt", { text: "Ageing" }), h("dd", { text: concept.rot_note })),
           concept.verdicts.map((verdict) => h("p", { class: "verdict", text: verdict })))))));
-};
-
-views.tests = async () => {
-  const data = await api("/api/tests");
-  state.snapshot = data.snapshot;
-  paintChrome(data.snapshot);
-  const sections = [
-    h("h1", { class: "headline", text: data.headline }),
-    h("p", { class: "subhead",
-      text: `${data.declared} tests declared across ${data.files} test files.` }),
-  ];
-  if (data.failing.length) {
-    sections.push(h("h2", { class: "section", text: "Failing now" }));
-    sections.push(h("div", { class: "items" }, data.failing.map((item) =>
-      h("button", { class: "item", onclick: () => openThing(item.id) },
-        h("div", { class: "item-head" }, glyph("diamond"), h("h3", { text: item.name }), chip("failing", "bad")),
-        h("p", { class: "item-sub", text: item.note })))));
-  }
-  if (data.flaky.length) {
-    sections.push(h("h2", { class: "section", text: "Changed their mind more than once" }));
-    sections.push(h("div", { class: "items" }, data.flaky.map((item) =>
-      h("button", { class: "item", onclick: () => openThing(item.id) },
-        h("div", { class: "item-head" }, glyph("diamond"), h("h3", { text: item.name }),
-          chip(item.result, item.result === "pass" ? "good" : "bad")),
-        h("p", { class: "item-sub", text: item.note })))));
-  }
-  if (data.uncovered.length) {
-    sections.push(h("h2", { class: "section", text: "Depended on, but no test touches them" }));
-    sections.push(h("div", { class: "tests-grid" }, data.uncovered.map((item) =>
-      h("button", { class: "item", onclick: () => openThing(item.id) },
-        h("div", { class: "who" }, glyph(item.glyph), item.label)))));
-  }
-  if (data.runs.length) {
-    sections.push(h("h2", { class: "section", text: "Recent runs" }));
-    sections.push(h("div", { class: "rows" }, data.runs.map((run) =>
-      h("div", { class: "row" },
-        h("span", { class: "when", text: run.when }),
-        h("span", { text: run.failed === 0
-          ? `all ${run.total} passed`
-          : `${run.failed} of ${run.total} failed` })))));
-  }
-  stage.replaceChildren(
-    h("div", { class: "library" }, shelfRail(await shelvesFor(), "tests"), h("div", {}, ...sections)));
 };
 
 let shelfCache = null;
@@ -809,4 +773,581 @@ setInterval(async () => {
   } catch (_) { /* the server went away; keep showing the last view */ }
 }, 6000);
 
+/* =====================================================================
+   Work — who did something, and what is unfinished.
+   ===================================================================== */
+
+views.work = async () => {
+  const data = await api("/api/work");
+  state.snapshot = data.snapshot;
+  paintChrome(data.snapshot);
+  const parts = [
+    h("h1", { class: "lede", text: data.headline }),
+    h("p", { class: "sub", text: "Agent sessions, governed changes, and plans still open." }),
+  ];
+
+  if (data.sessions_hint) {
+    parts.push(h("p", { class: "empty", text: data.sessions_hint }));
+    if (data.sessions_hint_command) parts.push(commandLine(data.sessions_hint_command));
+  }
+  for (const session of data.sessions) {
+    parts.push(sessionCard(session));
+  }
+
+  if (data.changes.length) {
+    parts.push(h("h2", { class: "section", text: "Governed changes" }));
+    parts.push(h("div", { class: "items" }, data.changes.map(workItem)));
+  }
+  if (data.plans.length) {
+    parts.push(h("h2", { class: "section", text: "Plans still open" }));
+    parts.push(h("div", { class: "items" }, data.plans.map(workItem)));
+  }
+  stage.replaceChildren(h("div", { class: "page" }, ...parts));
+};
+
+function sessionCard(session) {
+  const head = h("div", { class: "session-head" },
+    h("span", { class: "session-actor", text: session.agent_label }),
+    session.model ? h("span", { class: "session-meta", text: session.model }) : null,
+    h("span", { class: "session-meta", text: "·" }),
+    session.live
+      ? h("span", { class: "session-meta" }, h("i", { class: "session-live-dot" }), session.state)
+      : h("span", { class: "session-meta", text: session.state }));
+
+  const meta = h("p", { class: "pill-row" },
+    h("span", { text: `${session.turns} instruction${session.turns === 1 ? "" : "s"}` }),
+    h("span", { text: `spanned ${session.ran_for}` }),
+    h("span", { text: `${session.touched.length + session.more_touched} file${
+      session.touched.length + session.more_touched === 1 ? "" : "s"} edited` }));
+
+  const body = [head, h("p", { class: "session-objective", text: session.objective }), meta];
+
+  if (session.tools.length) {
+    body.push(h("div", { class: "chips" }, session.tools.map((tool) =>
+      h("span", { class: "chip", text: `${tool.label} ${tool.count}` }))));
+  }
+  if (session.touched.length) {
+    body.push(h("div", { class: "touched" },
+      session.touched.map((ref) =>
+        h("a", { href: `#thing?id=${encodeURIComponent(ref.id)}`, text: ref.label })),
+      session.more_touched
+        ? h("span", { class: "session-meta", text: `and ${session.more_touched} more` })
+        : null));
+  }
+  if (session.produced.length) {
+    body.push(h("p", { class: "pill-row" }, h("span", { text: "produced" }),
+      ...session.produced.map((ref) =>
+        h("a", { href: `#thing?id=${encodeURIComponent(ref.id)}`, text: ref.label }))));
+  }
+  return h("article", { class: `session${session.live ? " live" : ""}` }, ...body);
+}
+
+function workItem(item) {
+  return h("button", { class: "item", onclick: () => openThing(item.id) },
+    h("div", { class: "item-head" }, glyph(item.glyph), h("h3", { text: item.title }),
+      chip(item.stage, item.tone)),
+    h("p", { class: "item-sub", text: item.note }),
+    item.fix_command ? commandLine(item.fix_command) : null);
+}
+
+/* A command you can copy. Eyes never runs it. */
+function commandLine(command) {
+  return h("code", {
+    class: "command", text: command, title: "Click to copy",
+    onclick: (event) => {
+      event.stopPropagation();
+      navigator.clipboard?.writeText(command);
+      const node = event.currentTarget;
+      const was = node.textContent;
+      node.textContent = "copied";
+      setTimeout(() => { node.textContent = was; }, 900);
+    },
+  });
+}
+
+/* =====================================================================
+   Features — the definition of done, with its evidence resolved.
+   ===================================================================== */
+
+views.features = async () => {
+  const data = await api("/api/evidence");
+  state.snapshot = data.snapshot;
+  paintChrome(data.snapshot);
+  const claims = data.claims.filter((claim) => claim.category === "features");
+  if (!claims.length) {
+    stage.replaceChildren(h("div", { class: "page" },
+      h("h1", { class: "lede", text: "No features are registered yet." }),
+      h("p", { class: "sub", text: "A feature is what the system claims to do; the graph holds none." }),
+      commandLine("brain feature add <prefix> <slug> --title \"…\"")));
+    return;
+  }
+  stage.replaceChildren(h("div", { class: "page" },
+    h("h1", { class: "lede", text: `${claims.length} feature${claims.length === 1 ? "" : "s"} registered.` }),
+    h("p", { class: "sub", text: "Each row states what it claims, then what actually backs the claim." }),
+    ...claims.map(claimRow)));
+};
+
+/* =====================================================================
+   Evidence — claim on the left, proof on the right, never the reverse.
+   ===================================================================== */
+
+views.evidence = async (params) => {
+  const data = await api("/api/evidence");
+  state.snapshot = data.snapshot;
+  paintChrome(data.snapshot);
+  const only = params.category;
+  const shown = only ? data.claims.filter((claim) => claim.category === only) : data.claims;
+
+  const filters = h("div", { class: "chips" },
+    h("button", { class: `chip${only ? "" : " on"}`, text: "everything",
+      onclick: () => go("evidence") }),
+    ...data.categories.map((category) =>
+      h("button", {
+        class: `chip${only === category.id ? " on" : ""}`,
+        title: category.note,
+        text: `${category.label} · ${category.unsupported ? `${category.unsupported} unproven` : "all proven"}`,
+        onclick: () => go("evidence", { category: category.id }),
+      })));
+
+  stage.replaceChildren(h("div", { class: "page" },
+    h("h1", { class: "lede", text: data.headline }),
+    h("p", { class: "sub", text: "A claim is never shown stronger than the proof behind it." }),
+    filters,
+    ...shown.map(claimRow)));
+};
+
+function claimRow(claim) {
+  const mark = (tone) => ({ good: "✓", bad: "✗", watch: "!" }[tone] || "·");
+  return h("div", { class: `claim${claim.supported ? "" : " unsupported"}` },
+    h("div", { class: "claim-side" },
+      h("h3", { text: claim.claim }),
+      h("p", { class: "claim-verdict", text: claim.verdict }),
+      claim.subject
+        ? h("p", {}, h("a", {
+            href: `#thing?id=${encodeURIComponent(claim.subject.id)}`,
+            text: claim.subject.label }))
+        : null,
+      claim.fix_command ? commandLine(claim.fix_command) : null),
+    h("ul", { class: "proof" }, claim.proof.map((proof) =>
+      h("li", {},
+        h("span", { class: `mark ${proof.tone}`, text: mark(proof.tone) }),
+        h("span", {}, proof.target
+          ? h("a", { href: `#thing?id=${encodeURIComponent(proof.target.id)}`, text: proof.text })
+          : proof.text,
+          proof.basis ? h("span", { class: "basis", text: ` — ${proof.basis}` }) : null)))));
+}
+
+/* =====================================================================
+   Tests — every case, every run, and the evidence a failure left behind.
+   ===================================================================== */
+
+views.tests = async (params) => {
+  const data = await api("/api/tests");
+  state.snapshot = data.snapshot;
+  paintChrome(data.snapshot);
+  const filter = params.show || (data.failing.length ? "failing" : "all");
+  const framework = params.framework || "";
+
+  let cases = data.cases;
+  if (filter === "failing") cases = cases.filter((c) => c.result === "failing");
+  if (filter === "flaky") cases = cases.filter((c) => c.flips >= 3);
+  if (framework) cases = cases.filter((c) => c.framework === framework);
+
+  const tab = (id, label, count) => h("button", {
+    class: `chip${filter === id ? " on" : ""}`,
+    text: count === undefined ? label : `${label} ${count}`,
+    onclick: () => go("tests", { ...params, show: id }),
+  });
+
+  const parts = [
+    h("h1", { class: "lede", text: data.headline }),
+    h("p", { class: "sub",
+      text: `${data.declared} tests declared across ${data.files} files; ${data.cases.length} have a recorded result.` }),
+    h("div", { class: "chips" },
+      tab("failing", "failing", data.failing.length),
+      tab("flaky", "changed their mind", data.flaky.length),
+      tab("all", "everything", data.cases.length),
+      ...data.frameworks.map((f) => h("button", {
+        class: `chip${framework === f.label ? " on" : ""}`,
+        text: `${f.label} · ${f.files} file${f.files === 1 ? "" : "s"}`,
+        onclick: () => go("tests", { ...params, framework: framework === f.label ? "" : f.label }),
+      }))),
+  ];
+
+  parts.push(h("h2", { class: "section", text: "Cases" }));
+  if (!cases.length) {
+    parts.push(h("p", { class: "empty", text: "Nothing matches that." }));
+  }
+  for (const row of cases.slice(0, 400)) parts.push(caseRow(row));
+  if (cases.length > 400) {
+    parts.push(h("p", { class: "empty", text: `and ${cases.length - 400} more` }));
+  }
+
+  if (data.protocols.length) {
+    parts.push(h("h2", { class: "section", text: "Runs" }));
+    for (const run of data.protocols) parts.push(protocolRow(run));
+  }
+
+  if (data.suites.length) {
+    parts.push(h("h2", { class: "section", text: "Where the tests live" }));
+    parts.push(h("div", { class: "rows" }, data.suites.map((suite) =>
+      h("button", { class: "row", onclick: () => openThing(suite.id) },
+        h("span", { class: "when", text: suite.framework_label }),
+        h("span", { class: "case-name", text: suite.path }),
+        h("span", { class: "session-meta",
+          text: `${suite.declared} declared${suite.covers.length ? `, covers ${suite.covers.length}` : ""}` })))));
+  }
+
+  if (data.uncovered.length) {
+    parts.push(h("h2", { class: "section", text: "Depended on, but no test touches them" }));
+    parts.push(h("div", { class: "chips" }, data.uncovered.map((item) =>
+      h("button", { class: "chip", text: item.label, onclick: () => openThing(item.id) }))));
+  }
+
+  stage.replaceChildren(h("div", { class: "page" }, ...parts));
+};
+
+function caseRow(row) {
+  const detail = [h("p", { class: "case-name", text: row.name })];
+  if (row.error) detail.push(h("p", { class: "case-error", text: row.error }));
+  if (row.note) detail.push(h("p", { class: "case-note", text: row.note }));
+  if (row.attachments.length) {
+    detail.push(h("div", { class: "case-shots" }, row.attachments.map((attachment) =>
+      attachment.subtype === "image"
+        ? h("img", { src: `/api/body?id=${encodeURIComponent(attachment.id)}`,
+                     alt: `${attachment.noun} from ${row.name}`, loading: "lazy" })
+        : h("button", { class: "chip", text: attachment.noun,
+                        onclick: () => openThing(attachment.id) }))));
+  }
+  return h("button", { class: "case", onclick: () => openThing(row.id) },
+    h("span", { class: `case-verdict ${row.tone}`, text: row.result }),
+    h("div", {}, ...detail),
+    h("span", { class: "session-meta",
+      text: [row.duration, row.framework].filter(Boolean).join(" · ") }));
+}
+
+function protocolRow(run) {
+  const width = (n) => `${(n / Math.max(run.total, 1)) * 100}%`;
+  return h("button", { class: "protocol", onclick: () => openThing(run.id) },
+    h("span", { class: "when", text: run.when }),
+    h("div", {},
+      h("p", { class: "item-sub" },
+        h("b", { text: run.verdict }), " ", run.source,
+        run.duration ? ` · ${run.duration}` : ""),
+      h("div", { class: "bar" },
+        h("span", { class: "pass", style: `width:${width(run.passed)}` }),
+        h("span", { class: "fail", style: `width:${width(run.failed)}` }),
+        h("span", { class: "skip", style: `width:${width(run.skipped)}` })),
+      run.named.length
+        ? h("p", { class: "session-meta",
+            text: `named: ${run.named.slice(0, 6).map((c) => c.name).join(", ")}` })
+        : null,
+      run.evidence ? h("p", { class: "session-meta", text: run.evidence }) : null),
+    run.verified_change
+      ? h("span", { class: "chip", text: `verified ${run.verified_change.label}` })
+      : null);
+}
+
+/* =====================================================================
+   Media — the narrated tour and everything else that was captured.
+   ===================================================================== */
+
+views.media = async () => {
+  const data = await api("/api/media");
+  state.snapshot = data.snapshot;
+  paintChrome(data.snapshot);
+  const parts = [h("h1", { class: "lede", text: data.headline })];
+
+  if (data.tour) parts.push(tourPanel(data.tour));
+
+  if (data.items.length) {
+    parts.push(h("h2", { class: "section", text: "Everything captured" }));
+    parts.push(h("div", { class: "media-grid" }, data.items.map(mediaCard)));
+  }
+  stage.replaceChildren(h("div", { class: "library" },
+    shelfRail(await shelvesFor(), "media"), h("div", { class: "page" }, ...parts)));
+};
+
+function tourPanel(tour) {
+  const body = [
+    h("div", { class: "pill-row" },
+      chip(tour.state, tour.tone),
+      h("span", { text: tour.state_note })),
+  ];
+
+  if (tour.drift.length) {
+    body.push(h("div", { class: "drift" },
+      h("p", { text: "The recording still says things the graph has moved on from:" }),
+      ...tour.drift.map((entry) => h("p", {},
+        entry.recorded ? h("del", { text: entry.recorded }) : null,
+        entry.recorded && entry.current ? " → " : null,
+        entry.current ? h("ins", { text: entry.current }) : null)),
+      commandLine(tour.regenerate_command)));
+  }
+
+  body.push(h("h3", { class: "section", text: "Chapters" }));
+  for (const chapter of tour.chapters) {
+    body.push(h("button", { class: "chapter",
+      onclick: () => chapter.image && openThing(chapter.image.id) },
+      chapter.image
+        ? h("img", { src: `/api/body?id=${encodeURIComponent(chapter.image.id)}`,
+                     alt: chapter.title, loading: "lazy" })
+        : h("span", { class: "session-meta", text: "no picture" }),
+      h("div", {},
+        h("h4", { text: chapter.title.replace(/\s*\(`[^`]*`\)/, "") }),
+        commandLine(chapter.command),
+        chapter.narration
+          ? h("p", { class: "chapter-narration speakable", text: chapter.narration })
+          : h("p", { class: "session-meta", text: "the script says nothing about this chapter" }))));
+  }
+
+  return h("section", { class: "tour" },
+    tour.video
+      ? h("video", { controls: "controls", preload: "metadata",
+                     src: `/api/body?id=${encodeURIComponent(tour.video.id)}` })
+      : null,
+    h("div", { class: "tour-body" }, ...body));
+}
+
+function mediaCard(item) {
+  return h("button", { class: "shot", onclick: () => openThing(item.id) },
+    item.subtype === "image"
+      ? h("img", { src: `/api/body?id=${encodeURIComponent(item.id)}`, alt: item.label, loading: "lazy" })
+      : null,
+    h("div", { class: "shot-body" },
+      h("h4", { text: item.label }),
+      h("p", { class: "pill-row" }, chip(item.state, item.tone), h("span", { text: item.when })),
+      h("p", { class: "session-meta", text: item.state_note }),
+      item.rendered_from ? commandLine(item.rendered_from) : null));
+}
+
+/* =====================================================================
+   MRI — the living graph.
+   ===================================================================== */
+
+const MRI_LENSES = [
+  ["anatomy", "Anatomy", "Colour by what kind of thing it is."],
+  ["activity", "Activity", "Only what moved since your last session."],
+  ["depth", "Dependency depth", "How far up the stack it sits."],
+];
+
+views.mri = async (params) => {
+  const data = await api("/api/mri");
+  state.snapshot = data.snapshot;
+  paintChrome(data.snapshot);
+
+  const host = h("div", { class: "mri-stage" });
+  const readout = h("div", { class: "mri-panel mri-readout" });
+  const lensPanel = h("div", { class: "mri-panel mri-lenses" },
+    h("h3", { text: "Lens" }),
+    ...MRI_LENSES.map(([id, label, note]) =>
+      h("button", {
+        class: params.lens === id || (!params.lens && id === "anatomy") ? "on" : "",
+        title: note, text: label,
+        onclick: (event) => {
+          for (const button of lensPanel.querySelectorAll("button")) button.classList.remove("on");
+          event.currentTarget.classList.add("on");
+          mriHandle?.setLens(id);
+        },
+      })),
+    h("h3", { text: "Regions" }),
+    ...data.clusters.map((cluster) =>
+      h("button", {
+        text: `${cluster.label} · ${cluster.count}`,
+        onclick: () => mriHandle?.focusOn(cluster.id),
+      })));
+
+  const hint = h("div", { class: "mri-panel mri-hint" },
+    h("p", { text: "Drag to turn. Scroll to approach — detail resolves as you get closer, nothing is hidden. Click anything to inspect it." }));
+
+  stage.replaceChildren(host);
+  host.append(lensPanel, hint, readout);
+
+  const { mount } = await import("/assets/mri.js");
+  mriHandle?.destroy();
+  mriHandle = mount(host, data, {
+    lens: params.lens || "anatomy",
+    onPick: (node) => showInspector(node.id),
+    // Nothing is ever hidden, so the readout says how much is at full
+    // detail — not how much survived a cull.
+    onFrame: ({ step, inFocus, total }) => {
+      readout.replaceChildren(
+        h("p", {}, h("b", { text: step.name }), " — ",
+          `all ${total} drawn, ${inFocus} in focus`),
+        h("p", { text: data.headline }),
+        h("p", { text: "+ and − to approach, arrows to turn" }));
+    },
+  });
+};
+
+/* =====================================================================
+   The inspector: one component, every surface.
+   ===================================================================== */
+
+const inspector = document.getElementById("inspector");
+const inspectorBody = document.getElementById("inspector-body");
+
+function closeInspector() {
+  inspector.hidden = true;
+  document.body.classList.remove("with-inspector");
+}
+document.getElementById("inspector-close").addEventListener("click", closeInspector);
+
+async function showInspector(id) {
+  document.body.classList.add("with-inspector");
+  inspector.hidden = false;
+  inspectorBody.replaceChildren(h("p", { class: "loading", text: "Reading…" }));
+  let data;
+  try {
+    data = await api(`/api/thing?id=${encodeURIComponent(id)}`);
+  } catch (error) {
+    inspectorBody.replaceChildren(h("p", { class: "empty", text: error.message }));
+    return;
+  }
+  document.getElementById("inspector-glyph").className = `glyph ${data.glyph || "block"}`;
+  document.getElementById("inspector-kind").textContent = data.noun || "";
+  document.getElementById("inspector-title").textContent = data.title || data.label;
+
+  const section = (title, ...children) =>
+    children.filter(Boolean).length
+      ? h("section", { class: "inspector-section" }, h("h3", { text: title }), ...children)
+      : null;
+
+  const parts = [];
+  if (data.facts?.length) {
+    parts.push(section("State", h("ul", { class: "proof" }, data.facts.map((fact) =>
+      h("li", {},
+        h("span", { class: `mark ${fact.tone}`, text: "·" }),
+        h("span", {}, fact.text,
+          fact.reason ? h("span", { class: "basis", text: ` — ${fact.reason}` }) : null))))));
+  }
+  if (data.extras?.audit?.length) {
+    parts.push(section("What happened", h("ul", { class: "proof" },
+      data.extras.audit.map((entry) => h("li", {},
+        h("span", { class: "mark", text: entry.recorded ? "·" : "≈" }),
+        h("span", {},
+          h("b", { text: `${entry.label}: ` }), entry.value,
+          entry.note ? h("span", { class: "basis", text: ` — ${entry.note}` }) : null))))));
+  }
+  if (data.extras?.attachments?.length) {
+    parts.push(section("What the run left behind",
+      h("div", { class: "case-shots" }, data.extras.attachments.map((attachment) =>
+        attachment.subtype === "image"
+          ? h("img", { src: `/api/body?id=${encodeURIComponent(attachment.id)}`, alt: attachment.label })
+          : h("button", { class: "chip", text: attachment.noun,
+                          onclick: () => openThing(attachment.id) })))));
+  }
+  if (data.neighborhood) {
+    const nb = data.neighborhood;
+    const list = (label, items) => items?.length
+      ? h("p", { class: "pill-row" }, h("span", { text: label }),
+          ...items.slice(0, 8).map((ref) =>
+            h("a", { href: `#thing?id=${encodeURIComponent(ref.id)}`, text: ref.label })))
+      : null;
+    parts.push(section("Around it",
+      list("uses", nb.upstream?.map((r) => r.target)),
+      list("used by", nb.downstream?.map((r) => r.target)),
+      list("tests", nb.tests?.map((r) => r.target)),
+      list("documents", nb.documents?.map((r) => r.target))));
+  }
+  if (data.body?.origin) {
+    parts.push(section("Where these bytes came from",
+      h("p", { class: "session-meta", text: data.body.origin })));
+  }
+  parts.push(h("p", {}, h("a", { href: `#thing?id=${encodeURIComponent(id)}`,
+    text: "Open the full page →" })));
+
+  inspectorBody.replaceChildren(...parts.filter(Boolean));
+}
+
+/* =====================================================================
+   Brief me — the current screen, spoken.
+
+   The sentences are the ones say.rs wrote; the browser only reads them
+   aloud. No audio is generated and nothing is written, which is how a
+   read-only tool gets a voice.
+   ===================================================================== */
+
+function stopSpeaking() {
+  window.speechSynthesis?.cancel();
+  speaking = false;
+  document.getElementById("brief-me")?.setAttribute("aria-pressed", "false");
+  for (const node of document.querySelectorAll(".speaking")) node.classList.remove("speaking");
+}
+
+const briefButton = document.getElementById("brief-me");
+
+briefButton.addEventListener("click", () => {
+  if (!window.speechSynthesis) {
+    briefButton.textContent = "no voice in this browser";
+    return;
+  }
+  if (speaking) return stopSpeaking();
+
+  const spoken = Array.from(stage.querySelectorAll(
+    ".lede, .headline, .subhead, .sub, .item-sub, .claim-side h3, .claim-verdict, .chapter-narration, .session-objective"
+  )).filter((node) => node.textContent.trim().length > 12).slice(0, 24);
+
+  if (!spoken.length) return;
+  speaking = true;
+  briefButton.setAttribute("aria-pressed", "true");
+
+  spoken.forEach((node, index) => {
+    const utterance = new SpeechSynthesisUtterance(node.textContent.trim());
+    utterance.rate = 1.02;
+    utterance.onstart = () => node.classList.add("speaking");
+    utterance.onend = () => {
+      node.classList.remove("speaking");
+      if (index === spoken.length - 1) stopSpeaking();
+    };
+    speechSynthesis.speak(utterance);
+  });
+});
+
+/* =====================================================================
+   Theme — the operational screens are readable in either.
+   ===================================================================== */
+
+const themeButton = document.getElementById("theme");
+const savedTheme = localStorage.getItem("eyes-theme");
+if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+themeButton.addEventListener("click", () => {
+  const dark = document.documentElement.dataset.theme === "dark"
+    || (!document.documentElement.dataset.theme
+        && matchMedia("(prefers-color-scheme: dark)").matches);
+  const next = dark ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem("eyes-theme", next);
+});
+
+/* Counts on the rail, so the nav says where the trouble is. */
+async function paintRail() {
+  try {
+    const [now, work, tests, evidence] = await Promise.all([
+      api("/api/now"), api("/api/work"), api("/api/tests"), api("/api/evidence"),
+    ]);
+    const set = (key, value, tone) => {
+      const node = document.querySelector(`[data-count="${key}"]`);
+      if (!node) return;
+      node.hidden = !value;
+      node.textContent = value;
+      if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+    };
+    set("now", now.needs_you.length, now.needs_you.length ? "watch" : null);
+    set("work", work.sessions.filter((s) => s.live).length + work.changes.length,
+      work.changes.length ? "watch" : null);
+    set("tests", tests.failing.length, tests.failing.length ? "bad" : null);
+    set("evidence", evidence.claims.filter((c) => !c.supported).length,
+      evidence.claims.some((c) => !c.supported) ? "watch" : null);
+    const live = document.querySelector("[data-live]");
+    if (live) live.hidden = !work.sessions.some((s) => s.live);
+  } catch {
+    /* The rail is decoration; a failure here must not blank the page. */
+  }
+}
+paintRail();
+setInterval(paintRail, 30000);
+
+/* The first paint happens last: every view must be registered before a
+   route is resolved, or a deep link falls back to Now. */
 render();
