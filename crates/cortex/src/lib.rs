@@ -63,7 +63,7 @@ impl Cortex {
             None => (MemIndex::new(), 0),
         };
         let checkpointed = cursor;
-        let history = store.put_history()?;
+        let history = store.put_history_shared()?;
         // A shrunken or diverged log (rebuilt store) invalidates the
         // checkpoint: cold rebuild, silently — disposability is the contract.
         if cursor > history.len() {
@@ -88,8 +88,8 @@ impl Cortex {
     /// ephemeral Cortex is a no-op.
     pub fn open_ephemeral(store: &Store) -> Result<Cortex, StoreError> {
         let mut index = MemIndex::new();
-        let history = store.put_history()?;
-        for id in &history {
+        let history = store.put_history_shared()?;
+        for id in history.iter() {
             index.on_object(id, &store.get(id)?);
         }
         let cursor = history.len();

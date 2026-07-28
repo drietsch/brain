@@ -300,7 +300,8 @@ fn build(config: &Config) -> Result<Loaded, String> {
             .head()
             .map_err(|e| e.to_string())?
             .map(|id| id.to_string()),
-        cursor: store.put_history().map_err(|e| e.to_string())?.len(),
+        // The shared feed: a length does not need its own copy of the log.
+        cursor: store.put_history_shared().map_err(|e| e.to_string())?.len(),
         objects: store.count_objects().map_err(|e| e.to_string())?,
         changed_at_ms: events_mtime_ms(&config.store_root),
         generated_at_ms: now_ms(),

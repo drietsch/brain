@@ -25,10 +25,11 @@ use brain_core::ids::NodeId;
 use brain_core::object::{hash_object, object_bytes, Object};
 use brain_core::CoreError;
 use serde_json::json;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
@@ -53,8 +54,23 @@ pub enum StoreError {
     CanonEpoch { claimed: NodeId, actual: NodeId },
 }
 
+/// The put feed, parsed once and held behind the log's byte length.
+///
+/// `events.jsonl` is append-only, so its length is a sound cursor: a
+/// different length means lines were added at the end, never that earlier
+/// ones changed. Nothing else in the file can move.
+struct HistoryMemo {
+    len: u64,
+    ids: Arc<Vec<NodeId>>,
+    /// Where each object sits in the feed. Insertion order is semantic —
+    /// two notes written in the same millisecond keep their true order —
+    /// so callers that need ordering ask this instead of walking the log.
+    position: Arc<HashMap<NodeId, usize>>,
+}
+
 pub struct Store {
     root: PathBuf,
+    history: RwLock<Option<HistoryMemo>>,
 }
 
 impl Store {
@@ -62,7 +78,10 @@ impl Store {
     pub fn open(root: impl AsRef<Path>) -> Result<Store, StoreError> {
         let root = root.as_ref().to_path_buf();
         fs::create_dir_all(root.join("objects"))?;
-        Ok(Store { root })
+        Ok(Store {
+            root,
+            history: RwLock::new(None),
+        })
     }
 
     pub fn root(&self) -> &Path {
@@ -206,27 +225,75 @@ impl Store {
     /// for derived indexes: a system of query is rebuilt from this history,
     /// never treated as a second system of record.
     pub fn put_history(&self) -> Result<Vec<NodeId>, StoreError> {
+        Ok(self.put_history_shared()?.as_ref().clone())
+    }
+
+    /// The same feed without copying it.
+    ///
+    /// Parsing the log is not cheap — it was being redone for every caller,
+    /// and `notes()` asked once per subject, so a single `insights` pass
+    /// re-read and re-parsed the whole log 195 times. The log only ever
+    /// grows, so its byte length says exactly when the parse is still good.
+    pub fn put_history_shared(&self) -> Result<Arc<Vec<NodeId>>, StoreError> {
+        Ok(self.history_memo()?.0)
+    }
+
+    /// Where each object sits in the put feed.
+    ///
+    /// Insertion order is semantic: the log is chronological by
+    /// construction, so two observations written in the same millisecond
+    /// keep their true order. Callers that need that order look a position
+    /// up here rather than walking the whole log to find it.
+    pub fn put_position(&self) -> Result<Arc<HashMap<NodeId, usize>>, StoreError> {
+        Ok(self.history_memo()?.1)
+    }
+
+    fn history_memo(&self) -> Result<(Arc<Vec<NodeId>>, Arc<HashMap<NodeId, usize>>), StoreError> {
         let path = self.root.join("events.jsonl");
-        let mut out = Vec::new();
-        if !path.exists() {
-            return Ok(out);
-        }
-        for line in fs::read_to_string(&path)?.lines() {
-            if line.trim().is_empty() {
-                continue;
-            }
-            let v: serde_json::Value = serde_json::from_str(line)?;
-            if v.get("kind").and_then(|k| k.as_str()) == Some("put") {
-                if let Some(id) = v
-                    .get("detail")
-                    .and_then(|d| d.get("id"))
-                    .and_then(|i| i.as_str())
-                {
-                    out.push(NodeId::parse(id)?);
+        let len = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+
+        if let Ok(guard) = self.history.read() {
+            if let Some(memo) = guard.as_ref() {
+                if memo.len == len {
+                    return Ok((memo.ids.clone(), memo.position.clone()));
                 }
             }
         }
-        Ok(out)
+
+        let mut ids = Vec::new();
+        if path.exists() {
+            for line in fs::read_to_string(&path)?.lines() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let v: serde_json::Value = serde_json::from_str(line)?;
+                if v.get("kind").and_then(|k| k.as_str()) == Some("put") {
+                    if let Some(id) = v
+                        .get("detail")
+                        .and_then(|d| d.get("id"))
+                        .and_then(|i| i.as_str())
+                    {
+                        ids.push(NodeId::parse(id)?);
+                    }
+                }
+            }
+        }
+        let position: HashMap<NodeId, usize> = ids
+            .iter()
+            .enumerate()
+            .map(|(at, id)| (*id, at))
+            .collect();
+
+        let ids = Arc::new(ids);
+        let position = Arc::new(position);
+        if let Ok(mut guard) = self.history.write() {
+            *guard = Some(HistoryMemo {
+                len,
+                ids: ids.clone(),
+                position: position.clone(),
+            });
+        }
+        Ok((ids, position))
     }
 
     // ---- event log ----

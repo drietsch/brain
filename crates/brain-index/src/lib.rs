@@ -142,11 +142,11 @@ pub trait Index {
 /// Rebuild an index from the store's put history, in event order.
 /// Returns the number of objects fed.
 pub fn replay(store: &Store, index: &mut dyn Index) -> Result<usize, StoreError> {
-    let ids = store.put_history()?;
+    let ids = store.put_history_shared()?;
     let mut fed = 0;
-    for id in ids {
-        let obj = store.get(&id)?;
-        index.on_object(&id, &obj);
+    for id in ids.iter() {
+        let obj = store.get(id)?;
+        index.on_object(id, &obj);
         fed += 1;
     }
     Ok(fed)

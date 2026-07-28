@@ -819,12 +819,8 @@ pub fn runs(
     index: &MemIndex,
     prefix: &str,
 ) -> Result<Vec<(u64, usize, usize, usize, String)>, StoreError> {
-    let positions: BTreeMap<_, _> = store
-        .put_history()?
-        .into_iter()
-        .enumerate()
-        .map(|(i, id)| (id, i))
-        .collect();
+    // The store already holds this map, parsed once per graph version.
+    let positions = store.put_position()?;
     let mut seen: BTreeSet<StableId> = BTreeSet::new();
     let mut out = Vec::new();
     for node in index.entities_by_kind("test_run") {

@@ -1527,12 +1527,16 @@ pub fn notes(
     store: &Store,
     subject: &StableId,
 ) -> Result<Vec<(u64, String)>, StoreError> {
-    let candidates: BTreeSet<NodeId> = index.observations_of(subject).into_iter().collect();
+    // Sort the subject's own observations by their position in the feed,
+    // rather than walking the feed looking for them. Same order, and it
+    // costs the subject's handful of observations instead of the whole
+    // log — which was being re-read and re-parsed once per subject.
+    let order = store.put_position()?;
+    let mut candidates: Vec<NodeId> = index.observations_of(subject);
+    candidates.sort_by_key(|id| order.get(id).copied().unwrap_or(usize::MAX));
+
     let mut out = Vec::new();
-    for id in store.put_history()? {
-        if !candidates.contains(&id) {
-            continue;
-        }
+    for id in candidates {
         if let Object::Observation {
             property,
             value,
@@ -3443,5 +3447,124 @@ mod tests {
             vec![a],
             "mention of the deleted-but-still-named file stays"
         );
+    }
+}
+
+#[cfg(test)]
+mod note_order_tests {
+    use super::*;
+    use brain_index::replay;
+
+    fn fresh_index(store: &Store) -> MemIndex {
+        let mut index = MemIndex::new();
+        replay(store, &mut index).unwrap();
+        index
+    }
+
+    /// Notes come back in the order they were written, and the log — not
+    /// the clock — is what says so. Two notes written in the same
+    /// millisecond are indistinguishable by timestamp, so sorting by time
+    /// would put them in an arbitrary order; the put feed knows which came
+    /// first. `notes()` looks that position up rather than walking the
+    /// whole log, and this is the invariant that makes the shortcut legal.
+    #[test]
+    fn notes_keep_their_true_order_even_within_one_millisecond() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let subject = StableId::derive(&["file", "src/lib.rs"]);
+        let other = StableId::derive(&["file", "src/other.rs"]);
+
+        // One frozen timestamp for every note: the clock cannot break ties.
+        let at = 1_700_000_000_000u64;
+        for text in ["first", "second", "third", "fourth"] {
+            store
+                .put(&Object::Observation {
+                    subject: subject.clone(),
+                    property: "note".to_string(),
+                    value: text.to_string(),
+                    source: "agent".to_string(),
+                    observed_at_ms: at,
+                })
+                .unwrap();
+            // Interleave another subject's writes, so position in the feed
+            // is not the same as position among this subject's own notes.
+            store
+                .put(&Object::Observation {
+                    subject: other.clone(),
+                    property: "note".to_string(),
+                    value: format!("{text}-elsewhere"),
+                    source: "agent".to_string(),
+                    observed_at_ms: at,
+                })
+                .unwrap();
+        }
+        // A non-note observation on the same subject must not appear.
+        store
+            .put(&Object::Observation {
+                subject: subject.clone(),
+                property: "present".to_string(),
+                value: "true".to_string(),
+                source: "twin".to_string(),
+                observed_at_ms: at,
+            })
+            .unwrap();
+
+        let index = fresh_index(&store);
+        let got: Vec<String> = notes(&index, &store, &subject)
+            .unwrap()
+            .into_iter()
+            .map(|(_, text)| text)
+            .collect();
+        assert_eq!(got, ["first", "second", "third", "fourth"]);
+
+        let elsewhere: Vec<String> = notes(&index, &store, &other)
+            .unwrap()
+            .into_iter()
+            .map(|(_, text)| text)
+            .collect();
+        assert_eq!(
+            elsewhere,
+            [
+                "first-elsewhere",
+                "second-elsewhere",
+                "third-elsewhere",
+                "fourth-elsewhere"
+            ]
+        );
+    }
+
+    /// The put feed is memoised behind the log's byte length. Appending
+    /// must be visible immediately — a stale feed would hide new objects
+    /// from replay, which is how the whole index is built.
+    #[test]
+    fn the_memoised_put_feed_sees_what_was_just_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let subject = StableId::derive(&["file", "a.rs"]);
+
+        assert!(store.put_history().unwrap().is_empty());
+        let first = store
+            .put(&Object::Observation {
+                subject: subject.clone(),
+                property: "note".to_string(),
+                value: "one".to_string(),
+                source: "agent".to_string(),
+                observed_at_ms: 1,
+            })
+            .unwrap();
+        assert_eq!(store.put_history().unwrap(), vec![first]);
+        assert_eq!(store.put_position().unwrap().get(&first), Some(&0));
+
+        let second = store
+            .put(&Object::Observation {
+                subject,
+                property: "note".to_string(),
+                value: "two".to_string(),
+                source: "agent".to_string(),
+                observed_at_ms: 2,
+            })
+            .unwrap();
+        assert_eq!(store.put_history().unwrap(), vec![first, second]);
+        assert_eq!(store.put_position().unwrap().get(&second), Some(&1));
     }
 }
