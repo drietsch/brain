@@ -141,7 +141,12 @@ async function render() {
       (target === "library" && ["concepts", "media"].includes(route.view)) ||
       (home !== null && target === home));
   }
-  stage.classList.toggle("dark", route.view === "map");
+  // The full-bleed dark canvas belongs to the MRI, which draws its own
+  // background and wants no stage padding. Keyed to "map" it stripped the
+  // Map of its padding and put a night backdrop behind it: the heading
+  // ran under the topbar, the lens buttons overflowed, and a light-theme
+  // panel sat on near-black.
+  stage.classList.toggle("dark", route.view === "mri");
   document.body.classList.toggle("in-mri", route.view === "mri");
   if (route.view !== "mri" && mriHandle) { mriHandle.destroy(); mriHandle = null; }
   stopSpeaking();
@@ -1068,12 +1073,12 @@ views.roadmap = async () => {
   ];
 
   for (const phase of data.stages) {
-    parts.push(h("section", { class: "stage" },
-      h("div", { class: "stage-head" },
-        h("h2", { class: "stage-title", text: phase.title }),
+    parts.push(h("section", { class: "road-stage" },
+      h("div", { class: "road-stage-head" },
+        h("h2", { class: "road-stage-title", text: phase.title }),
         phase.state ? chip(phase.state, phase.tone) : null),
-      phase.summary ? h("p", { class: "stage-summary", text: phase.summary }) : null,
-      h("p", { class: "stage-verdict", text: phase.verdict }),
+      phase.summary ? h("p", { class: "road-stage-summary", text: phase.summary }) : null,
+      h("p", { class: "road-stage-verdict", text: phase.verdict }),
       phase.features.length
         ? h("div", { class: "road-features" }, phase.features.map(featureRow))
         : null));

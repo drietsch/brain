@@ -1366,3 +1366,57 @@ fn every_class_the_browser_uses_has_a_rule() {
         "the browser sets these classes and the stylesheet says nothing about them: {missing:?}"
     );
 }
+
+/// A component may not take one of the application frame's class names.
+///
+/// `stage`, `rail`, `topbar` and `page` name the shell every surface
+/// renders into. A rule written for a component that reuses one of those
+/// names does not style the component — it restyles the whole product.
+/// A `.stage` rule added for a roadmap stage set `padding: 0 0 4px` on
+/// `#stage` itself, and every page in Eyes lost its margins at once.
+#[test]
+fn no_component_takes_a_name_the_application_frame_uses() {
+    const CSS: &str = include_str!("../assets/styles.css");
+    const SHELL_END: &str = "end of the shell";
+    let marker = CSS
+        .find(SHELL_END)
+        .expect("the stylesheet marks where the shell ends");
+    // The marker sits inside a comment; start after that comment closes.
+    let boundary = CSS[marker..]
+        .find("*/")
+        .map(|offset| marker + offset + 2)
+        .unwrap_or(marker);
+    // Comments talk *about* these selectors — including the one above.
+    // Strip them, or the rule that documents the hazard trips the check.
+    let mut components = String::new();
+    let mut rest = &CSS[boundary..];
+    while let Some(open) = rest.find("/*") {
+        components.push_str(&rest[..open]);
+        rest = match rest[open..].find("*/") {
+            Some(shut) => &rest[open + shut + 2..],
+            None => "",
+        };
+    }
+    components.push_str(rest);
+
+    let mut stolen: Vec<String> = Vec::new();
+    for reserved in ["stage", "rail", "topbar", "page"] {
+        let needle = format!(".{reserved}");
+        for (index, _) in components.as_str().match_indices(needle.as_str()) {
+            // Only a bare selector matters: `.stage-head` and `.page-note`
+            // are their own names, and `.stage.dark` is the shell's own.
+            let next = components[index + needle.len()..].chars().next();
+            if matches!(next, Some(c) if c.is_alphanumeric() || c == '-' || c == '_') {
+                continue;
+            }
+            let line = components[..index]
+                .lines()
+                .count();
+            stolen.push(format!("{needle} (about {line} lines after the shell)"));
+        }
+    }
+    assert!(
+        stolen.is_empty(),
+        "these rules restyle the application frame rather than a component: {stolen:?}"
+    );
+}
