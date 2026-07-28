@@ -108,6 +108,7 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
             more_touched: touched_all.len().saturating_sub(touched.len()),
             touched,
             produced,
+            features: query::features_of(loaded, &row.sid),
         });
     }
 
@@ -192,6 +193,7 @@ fn changes(loaded: &Loaded) -> Result<Vec<WorkItem>, String> {
                 "indeterminate" => "brain recover".to_string(),
                 _ => format!("brain change show {prefix} {slug}"),
             }),
+            features: query::features_of(loaded, &sid),
         });
     }
     out.sort_by(|a, b| b.at_ms.cmp(&a.at_ms));
@@ -233,6 +235,7 @@ fn plans(loaded: &Loaded) -> Result<Vec<WorkItem>, String> {
                 when: say::ago(now, at_ms),
                 at_ms,
                 fix_command: Some(format!("brain plan done {prefix} {slug}")),
+                features: query::features_of(loaded, &sid),
             });
         }
     }

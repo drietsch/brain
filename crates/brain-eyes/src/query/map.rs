@@ -235,6 +235,20 @@ pub fn build(loaded: &Loaded, lens: &str) -> Result<MapView, String> {
                 tone: tone.to_string(),
                 sentence,
                 facts,
+                // The features this module serves, deduped: a module is a
+                // directory, and a directory can carry more than one.
+                features: {
+                    let mut seen: BTreeSet<String> = BTreeSet::new();
+                    let mut out = Vec::new();
+                    for (_, sid) in &block.files {
+                        for reference in query::features_of(loaded, sid) {
+                            if seen.insert(reference.id.clone()) {
+                                out.push(reference);
+                            }
+                        }
+                    }
+                    out
+                },
             }
         })
         .collect();

@@ -62,6 +62,25 @@ export function strip(cells, onPick) {
   return node;
 }
 
+/**
+ * The features a row serves, as openable tags.
+ *
+ * Empty renders as nothing rather than as "unclaimed": most of a graph
+ * belongs to no feature, and saying so on every row would be noise. The
+ * click is stopped from bubbling so it does not also peek the row.
+ */
+export function featureTag(features, onPick, max = 3) {
+  if (!features || !features.length) return null;
+  return h("span", { class: "feature-tags" }, features.slice(0, max).map((feature) =>
+    h("button", {
+      class: "feature-tag", title: `serves ${feature.label}`,
+      onclick: (event) => { event.stopPropagation(); onPick?.(feature); },
+    }, kindIcon("hexagon"), h("span", { text: feature.label }))),
+    features.length > max
+      ? h("span", { class: "feature-more", text: `+${features.length - max}` })
+      : null);
+}
+
 /** The same strip, labelled — for a dossier header. */
 export function stripWide(cells, onPick) {
   if (!cells || !cells.length) return null;

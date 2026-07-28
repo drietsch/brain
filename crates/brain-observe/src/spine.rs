@@ -424,8 +424,27 @@ pub fn build(store: &Store, index: &MemIndex, prefix: &str) -> Result<Spine, Sto
             });
         }
     }
+    // Nearest claim first, then narrowest. A root feature reaches
+    // everything through its parts, so ordering by slug alone would put
+    // "brain" ahead of the part that actually owns the record. The
+    // feature declaring the fewest files is the most specific answer to
+    // "what is this for".
+    let breadth: BTreeMap<StableId, usize> = spine
+        .reach
+        .values()
+        .map(|reach| (reach.feature.clone(), reach.files.len()))
+        .collect();
     for owners in spine.owners.values_mut() {
-        owners.sort_by(|a, b| a.via.cmp(&b.via).then(a.slug.cmp(&b.slug)));
+        owners.sort_by(|a, b| {
+            a.via
+                .cmp(&b.via)
+                .then(
+                    breadth
+                        .get(&a.feature)
+                        .cmp(&breadth.get(&b.feature)),
+                )
+                .then(a.slug.cmp(&b.slug))
+        });
     }
 
     if spine.asked {

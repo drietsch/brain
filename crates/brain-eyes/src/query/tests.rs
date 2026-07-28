@@ -222,6 +222,7 @@ pub fn case_rows(loaded: &Loaded) -> Result<Vec<CaseRow>, String> {
             note,
             attachments: attachments.get(&sid).cloned().unwrap_or_default(),
             file,
+            features: query::features_of(loaded, &sid),
         });
     }
 

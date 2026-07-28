@@ -6,7 +6,7 @@
  */
 "use strict";
 
-import { h, icon, kindIcon, strip, stripWide, table } from "/assets/list.js";
+import { featureTag, h, icon, kindIcon, strip, stripWide, table } from "/assets/list.js";
 
 const stage = document.getElementById("stage");
 const state = { view: "now", params: {}, snapshot: null, findRows: [], findIndex: 0, thingHome: null };
@@ -293,6 +293,7 @@ views.library = async (params) => {
     facets: [
       { id: "state", get: (row) => row.state },
       { id: "kind", get: (row) => row.noun },
+      { id: "feature", get: (row) => row.features.map((f) => f.label) },
     ],
     sort: [
       { key: "changed", label: "by last change", by: (row) => -row.at_ms },
@@ -307,8 +308,8 @@ views.library = async (params) => {
         cell: (row) => (row.state ? chip(row.state, row.tone) : "") },
       { key: "why", label: "Because", width: "minmax(200px, 3fr)", class: "dim nowrap",
         cell: (row) => row.state_note ?? row.excerpt ?? "" },
-      { key: "where", label: "Where", width: "minmax(140px, 1.4fr)", class: "dim nowrap record",
-        cell: (row) => row.facts.find((f) => f.includes("/")) ?? "" },
+      { key: "serves", label: "Serves", width: "minmax(150px, 1.6fr)", class: "nowrap",
+        cell: (row) => featureTag(row.features, (f) => openThing(f.id), 2) ?? "" },
       { key: "changed", label: "Changed", width: "92px", class: "dim num",
         cell: (row) => row.when ?? "" },
     ],
@@ -509,7 +510,9 @@ views.timeline = async () => {
                     index ? ", " : "",
                     h("button", { class: "row-link", text: item.label, onclick: () => openThing(item.id) }),
                   ]).flat(), episode.more ? ` and ${episode.more} more` : "")
-                : null))))
+                : null,
+              // What that batch of work was on.
+              featureTag(episode.features, (f) => openThing(f.id))))))
       : h("p", { class: "empty", text: "Nothing recorded yet." }));
 };
 
@@ -822,7 +825,9 @@ findInput.addEventListener("input", () => {
       h("button", { class: index === 0 ? "on" : "", onclick: () => { closeFind(); openThing(hit.target.id); } },
         glyph(hit.target.glyph),
         h("span", { text: hit.target.label }),
-        h("span", { class: "why", text: hit.state || hit.because }))));
+        h("span", { class: "why", text: hit.features.length
+          ? `${hit.state || hit.because} · serves ${hit.features.map((f) => f.label).join(", ")}`
+          : hit.state || hit.because }))));
     if (data.note) findResults.append(h("p", { class: "finder-empty", text: data.note }));
   }, 160);
 });
@@ -947,6 +952,11 @@ function sessionCard(session) {
       ...session.produced.map((ref) =>
         h("a", { href: `#thing?id=${encodeURIComponent(ref.id)}`, text: ref.label }))));
   }
+  // What the work was on, derived from the files it edited.
+  if (session.features.length) {
+    body.push(h("p", { class: "pill-row" }, h("span", { text: "worked on" }),
+      featureTag(session.features, (f) => openThing(f.id))));
+  }
   return h("article", { class: `session${session.live ? " live" : ""}` }, ...body);
 }
 
@@ -955,6 +965,9 @@ function workItem(item) {
     h("div", { class: "item-head" }, glyph(item.glyph), h("h3", { text: item.title }),
       chip(item.stage, item.tone)),
     h("p", { class: "item-sub", text: item.note }),
+    item.features.length
+      ? h("p", { class: "pill-row" }, featureTag(item.features, (f) => openThing(f.id)))
+      : null,
     item.fix_command ? commandLine(item.fix_command) : null);
 }
 
@@ -1177,6 +1190,7 @@ views.tests = async (params) => {
         ],
       },
       { id: "framework", get: (row) => (row.group ? row.frameworks : row.framework) },
+      { id: "feature", get: (row) => (row.group ? [] : row.features.map((f) => f.label)) },
       {
         id: "history",
         get: (row) => (!row.group && row.flips >= 3 ? "changed its mind" : null),
@@ -1215,6 +1229,8 @@ views.tests = async (params) => {
             h("button", { class: "chip", text: a.noun,
               onclick: (e) => { e.stopPropagation(); openThing(a.id); } })));
         } },
+      { key: "serves", label: "Serves", width: "minmax(120px, 1.4fr)", class: "nowrap",
+        cell: (row) => (row.group ? "" : featureTag(row.features, (f) => openThing(f.id), 2) ?? "") },
       { key: "duration", label: "Took", width: "76px", class: "dim num",
         cell: (row) => (row.group ? "" : row.duration ?? "") },
     ],

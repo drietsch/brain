@@ -233,6 +233,19 @@ fn describe(
     };
 
     let _ = prefix;
+    // Which features this episode touched, deduped across its items and
+    // capped: an episode naming twenty features names none of them.
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut features = Vec::new();
+    for item in &items {
+        for reference in query::features_of(loaded, &StableId(item.id.clone())) {
+            if seen.insert(reference.id.clone()) {
+                features.push(reference);
+            }
+        }
+    }
+    features.truncate(4);
+
     Ok(Some(Episode {
         at_ms,
         when,
@@ -241,6 +254,7 @@ fn describe(
         facts,
         more: total_changed.saturating_sub(items.len()),
         items,
+        features,
     }))
 }
 

@@ -655,3 +655,17 @@ body.in-mri { --page: #070b10; }
   * { animation-duration: .001ms !important; animation-iteration-count: 1 !important;
       transition-duration: .001ms !important; }
 }
+
+/* ------------------------------------------------- feature attribution
+   Which feature a row serves. The hexagon is the same shape a feature
+   carries everywhere else, so the tag needs no explanation. */
+.feature-tags { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.feature-tag {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 190px;
+  padding: 2px 8px 2px 6px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--paper); color: var(--meta); font-size: 11.5px;
+}
+.feature-tag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feature-tag:hover { border-color: var(--control); color: var(--ink); }
+.feature-tag .icon { width: 11px; height: 11px; flex: none; }
+.feature-more { color: var(--faint); font-size: 11px; }

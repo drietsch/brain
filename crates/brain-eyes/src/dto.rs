@@ -171,6 +171,9 @@ pub struct ShelfItem {
     pub results: Option<TestSummary>,
     /// First lines of the body, for shelves you read rather than scan.
     pub excerpt: Option<String>,
+    /// The features this row serves, derived through the files they
+    /// declare. Empty renders as nothing: most of a graph is unclaimed.
+    pub features: Vec<Ref>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -295,6 +298,9 @@ pub struct CaseRow {
     pub file: Option<Ref>,
     /// Screenshots, recordings and traces the run produced.
     pub attachments: Vec<Attachment>,
+    /// The features this row serves, derived through the files they
+    /// declare. Empty renders as nothing: most of a graph is unclaimed.
+    pub features: Vec<Ref>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -350,6 +356,9 @@ pub struct Session {
     pub more_touched: usize,
     /// Artifacts this session produced, derived from what it edited.
     pub produced: Vec<Ref>,
+    /// The features this row serves, derived through the files they
+    /// declare. Empty renders as nothing: most of a graph is unclaimed.
+    pub features: Vec<Ref>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -373,6 +382,9 @@ pub struct WorkItem {
     pub when: String,
     pub at_ms: u64,
     pub fix_command: Option<String>,
+    /// The features this row serves, derived through the files they
+    /// declare. Empty renders as nothing: most of a graph is unclaimed.
+    pub features: Vec<Ref>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -747,6 +759,9 @@ pub struct MapBlock {
     pub tone: String,
     pub sentence: String,
     pub facts: Vec<String>,
+    /// The features this row serves, derived through the files they
+    /// declare. Empty renders as nothing: most of a graph is unclaimed.
+    pub features: Vec<Ref>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -783,6 +798,9 @@ pub struct Episode {
     pub facts: Vec<String>,
     pub items: Vec<Ref>,
     pub more: usize,
+    /// The features this row serves, derived through the files they
+    /// declare. Empty renders as nothing: most of a graph is unclaimed.
+    pub features: Vec<Ref>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -801,6 +819,9 @@ pub struct FindHit {
     /// Why this matched, in the same voice as everything else.
     pub because: String,
     pub state: Option<String>,
+    /// The features this row serves, derived through the files they
+    /// declare. Empty renders as nothing: most of a graph is unclaimed.
+    pub features: Vec<Ref>,
 }
 
 #[derive(Debug, Clone, Serialize)]

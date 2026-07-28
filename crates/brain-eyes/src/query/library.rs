@@ -361,6 +361,7 @@ fn items_for_kind(
             coverage,
             results: None,
             excerpt,
+            features: query::features_of(loaded, &sid),
         });
     }
     Ok(out)

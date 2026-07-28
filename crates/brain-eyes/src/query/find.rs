@@ -61,6 +61,7 @@ pub fn build(loaded: &Loaded, raw: &str, limit: usize) -> Result<FindView, Strin
                     target: query::make_ref(index, store, &sid),
                     because,
                     state: say::lifecycle(state.as_str(), &why),
+                    features: query::features_of(loaded, &sid),
                 },
             ));
         }
@@ -81,6 +82,7 @@ pub fn build(loaded: &Loaded, raw: &str, limit: usize) -> Result<FindView, Strin
                 target: query::make_ref(index, store, &sid),
                 because: "matches this file's path".to_string(),
                 state: None,
+                features: query::features_of(loaded, &sid),
             },
         ));
     }
