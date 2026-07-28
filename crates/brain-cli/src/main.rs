@@ -3428,6 +3428,10 @@ pub(crate) fn build_index(store: &Store) -> Result<cortex::Cortex, String> {
     let graf = cortex::Cortex::open(store).map_err(|e| e.to_string())?;
     // Best-effort persistence: a failed checkpoint costs only warmth.
     let _ = graf.checkpoint();
+    // The object pack keeps the same bargain one level down: reading the
+    // graph as one file instead of ten thousand. Also disposable, also
+    // best-effort, also cheap once warm — only new objects are copied.
+    let _ = store.compact();
     Ok(graf)
 }
 

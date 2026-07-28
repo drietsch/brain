@@ -89,6 +89,68 @@ pub struct Store {
     /// guarantee any page cache gives, and strictly more than re-hashing
     /// the same bytes 64 times per command bought.
     objects: RwLock<HashMap<NodeId, Arc<Object>>>,
+    /// The pack, loaded lazily on the first miss.
+    pack: RwLock<Option<Arc<Pack>>>,
+}
+
+/// Every object's bytes in one file, so reading the graph is one
+/// sequential read instead of ten thousand.
+///
+/// This is a **derived, disposable read cache** — the same bargain
+/// `cortex` makes for the index. The loose objects under `objects/`
+/// remain the system of record; ADR-011 is explicit that the record
+/// layer must not move. Delete the pack and it rebuilds; it is never
+/// replicated, and nothing authoritative lives here.
+///
+/// Why it exists: the same 2.6 MB takes 979 ms to read as 10,575 files
+/// and 4 ms as one. That is the whole difference, and it is the floor
+/// under every command that has to see the graph.
+///
+/// Layout, repeated until EOF, in put order:
+///
+/// ```text
+/// [32-byte NodeId][u32 LE byte length][canonical bytes]
+/// ```
+///
+/// Self-describing on purpose: the ids are in the record headers, so the
+/// pack can be scanned without consulting the event log and a truncated
+/// tail costs only the records after the tear.
+struct Pack {
+    bytes: Vec<u8>,
+    /// id -> (start, len) of the canonical bytes within `bytes`.
+    at: HashMap<NodeId, (usize, usize)>,
+}
+
+const PACK_HEADER: usize = 32 + 4;
+
+impl Pack {
+    fn load(path: &Path) -> Option<Pack> {
+        let bytes = fs::read(path).ok()?;
+        let mut at = HashMap::new();
+        let mut cursor = 0usize;
+        while cursor + PACK_HEADER <= bytes.len() {
+            let mut raw = [0u8; 32];
+            raw.copy_from_slice(&bytes[cursor..cursor + 32]);
+            let len = u32::from_le_bytes([
+                bytes[cursor + 32],
+                bytes[cursor + 33],
+                bytes[cursor + 34],
+                bytes[cursor + 35],
+            ]) as usize;
+            let start = cursor + PACK_HEADER;
+            if start + len > bytes.len() {
+                break; // torn tail: everything before it is still good
+            }
+            at.insert(NodeId(raw), (start, len));
+            cursor = start + len;
+        }
+        Some(Pack { bytes, at })
+    }
+
+    fn get(&self, id: &NodeId) -> Option<&[u8]> {
+        let (start, len) = self.at.get(id)?;
+        Some(&self.bytes[*start..*start + *len])
+    }
 }
 
 impl Store {
@@ -100,6 +162,7 @@ impl Store {
             root,
             history: RwLock::new(None),
             objects: RwLock::new(HashMap::new()),
+            pack: RwLock::new(None),
         })
     }
 
@@ -156,6 +219,15 @@ impl Store {
                 return Ok(hit.clone());
             }
         }
+        // The pack first: one file already open beats one file per object.
+        // Its bytes are verified exactly as a loose object's are, so a
+        // damaged pack is caught rather than trusted.
+        if let Some(pack) = self.pack() {
+            if let Some(bytes) = pack.get(id) {
+                return self.admit(id, bytes);
+            }
+        }
+
         let path = self.object_path(id);
         let bytes = fs::read(&path).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
@@ -164,18 +236,75 @@ impl Store {
                 StoreError::Io(e)
             }
         })?;
+        self.admit(id, &bytes)
+    }
+
+    /// Verify bytes against the id they claim, parse them, and remember.
+    fn admit(&self, id: &NodeId, bytes: &[u8]) -> Result<Arc<Object>, StoreError> {
         // Integrity check: recompute content identity from stored bytes.
         // Done once, on the way into the cache — the bytes behind an id
         // cannot change, so verifying a second time proves nothing new.
-        let actual = brain_core::canonical::hash_bytes(&bytes);
+        let actual = brain_core::canonical::hash_bytes(bytes);
         if actual != *id {
             return Err(StoreError::Corrupt { id: *id, actual });
         }
-        let object = Arc::new(serde_json::from_slice::<Object>(&bytes)?);
+        let object = Arc::new(serde_json::from_slice::<Object>(bytes)?);
         if let Ok(mut cache) = self.objects.write() {
             cache.insert(*id, object.clone());
         }
         Ok(object)
+    }
+
+    fn pack_path(&self) -> PathBuf {
+        self.root.join("objects.pack")
+    }
+
+    fn pack(&self) -> Option<Arc<Pack>> {
+        if let Ok(guard) = self.pack.read() {
+            if let Some(pack) = guard.as_ref() {
+                return Some(pack.clone());
+            }
+        }
+        let loaded = Arc::new(Pack::load(&self.pack_path())?);
+        if let Ok(mut guard) = self.pack.write() {
+            *guard = Some(loaded.clone());
+        }
+        Some(loaded)
+    }
+
+    /// Append to the pack whatever the loose store has and it does not.
+    ///
+    /// The same bargain `cortex.checkpoint()` makes: best-effort, cheap in
+    /// the steady state (only new objects are copied), and safe to delete
+    /// — the loose objects remain the record. Returns how many were added.
+    pub fn compact(&self) -> Result<usize, StoreError> {
+        let existing: Option<Arc<Pack>> = self.pack();
+        let mut appended = 0usize;
+        let mut out: Vec<u8> = Vec::new();
+        for id in self.put_history_shared()?.iter() {
+            if existing.as_ref().is_some_and(|p| p.at.contains_key(id)) {
+                continue;
+            }
+            let path = self.object_path(id);
+            let Ok(bytes) = fs::read(&path) else { continue };
+            out.extend_from_slice(&id.0);
+            out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+            out.extend_from_slice(&bytes);
+            appended += 1;
+        }
+        if appended == 0 {
+            return Ok(0);
+        }
+        let mut f = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.pack_path())?;
+        f.write_all(&out)?;
+        // Force a reload: the file on disk is now longer than what is held.
+        if let Ok(mut guard) = self.pack.write() {
+            *guard = None;
+        }
+        Ok(appended)
     }
 
     pub fn has(&self, id: &NodeId) -> bool {
@@ -449,6 +578,74 @@ mod tests {
         let first = store.get(&good).unwrap();
         let second = store.get(&good).unwrap();
         assert_eq!(first, second);
+    }
+
+    /// The pack is a read cache, and it is held to the same standard as
+    /// the loose objects it accelerates: bytes are verified against the id
+    /// that claims them. A pack that has been tampered with must be caught,
+    /// never trusted because it is convenient.
+    #[test]
+    fn a_tampered_pack_is_caught_like_a_tampered_object() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let id = store.put(&code(11)).unwrap();
+        assert_eq!(store.compact().unwrap(), 1);
+
+        // Rewrite the payload in place, keeping the header intact.
+        let mut raw = fs::read(dir.path().join("objects.pack")).unwrap();
+        let start = 32 + 4;
+        for (i, b) in br#"{"kind":"tampered"} "#.iter().enumerate() {
+            if start + i < raw.len() {
+                raw[start + i] = *b;
+            }
+        }
+        fs::write(dir.path().join("objects.pack"), &raw).unwrap();
+
+        // A fresh Store, so nothing is answered from the object cache.
+        let cold = Store::open(dir.path()).unwrap();
+        assert!(matches!(cold.get(&id), Err(StoreError::Corrupt { .. })));
+    }
+
+    /// The pack is disposable. Deleting it must cost speed and nothing
+    /// else — the loose objects are still the record.
+    #[test]
+    fn deleting_the_pack_loses_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let ids: Vec<_> = (0..5).map(|n| store.put(&code(n)).unwrap()).collect();
+        assert_eq!(store.compact().unwrap(), 5);
+        assert_eq!(store.compact().unwrap(), 0, "compaction is idempotent");
+
+        fs::remove_file(dir.path().join("objects.pack")).unwrap();
+        let cold = Store::open(dir.path()).unwrap();
+        for (n, id) in ids.iter().enumerate() {
+            assert_eq!(cold.get(id).unwrap(), code(n as i64));
+        }
+
+        // And it rebuilds from the loose objects, to the same answers.
+        assert_eq!(cold.compact().unwrap(), 5);
+        let again = Store::open(dir.path()).unwrap();
+        for (n, id) in ids.iter().enumerate() {
+            assert_eq!(again.get(id).unwrap(), code(n as i64));
+        }
+    }
+
+    /// A pack whose tail was lost to a crash still serves everything
+    /// written before the tear, and the loose store covers the rest.
+    #[test]
+    fn a_torn_pack_serves_what_survived_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let ids: Vec<_> = (0..6).map(|n| store.put(&code(n)).unwrap()).collect();
+        store.compact().unwrap();
+
+        let raw = fs::read(dir.path().join("objects.pack")).unwrap();
+        fs::write(dir.path().join("objects.pack"), &raw[..raw.len() / 2]).unwrap();
+
+        let cold = Store::open(dir.path()).unwrap();
+        for (n, id) in ids.iter().enumerate() {
+            assert_eq!(cold.get(id).unwrap(), code(n as i64), "object {n}");
+        }
     }
 
     #[test]
