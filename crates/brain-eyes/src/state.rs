@@ -121,7 +121,10 @@ impl Loaded {
 
     pub fn findings(&self) -> &[Finding] {
         self.findings.get_or_init(|| {
-            coherence::check(&self.store, &self.index, self.prefix()).unwrap_or_default()
+            // Against the held spine: `check` would otherwise build its own,
+            // once per graph version, for nothing.
+            coherence::check_with(&self.store, &self.index, self.prefix(), self.spine())
+                .unwrap_or_default()
         })
     }
 

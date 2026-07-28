@@ -59,6 +59,9 @@ pub fn build(loaded: &Loaded) -> Result<NowView, String> {
             "incoherent-feature" => ("act", Some(format!("brain done {prefix} {}", finding.label))),
             "dangling-test" => ("watch", Some(format!("brain twin tests {prefix}"))),
             "orphaned-asset" => ("note", Some(format!("brain tidy . --prefix {prefix}"))),
+            // Worth knowing about, but not a contradiction — ranking it
+            // with one would cry wolf.
+            "uncorroborated-claim" => ("note", Some(format!("brain spine {prefix}"))),
             _ => ("watch", None),
         };
         needs_you.push(Concern {

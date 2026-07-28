@@ -327,6 +327,9 @@ pub fn finding(kind: &str, label: &str, detail: &str) -> (String, String) {
         k if k.starts_with("active-but-homeless") => {
             format!("{label} is marked active, but its files are gone")
         }
+        "uncorroborated-claim" => format!(
+            "{label} name evidence that nothing else in the graph mentions"
+        ),
         _ => format!("{label}: {detail}"),
     };
     (sentence, detail.to_string())
@@ -365,6 +368,40 @@ pub fn reach_sentence(declared: usize, reached: usize, files: usize) -> String {
         count(files as u64, "file", "files"),
         count(reached as u64, "more record", "more records")
     )
+}
+
+/// How much of the graph any feature reaches, in one sentence.
+pub fn coverage_sentence(claimed: usize, total: usize) -> String {
+    if total == 0 {
+        return "There is nothing here for a feature to claim yet.".to_string();
+    }
+    if claimed == total {
+        return format!("Every one of the {total} records here belongs to a feature.");
+    }
+    format!("{claimed} of {total} records belong to a feature.")
+}
+
+/// What an unclaimed remainder means for a given kind — or nothing, when
+/// it means nothing. A repository will never have every file under a
+/// feature, and colouring that as a fault would be a lie.
+pub fn coverage_note(kind: &str, claimed: usize, total: usize) -> Option<String> {
+    if claimed == total {
+        return None;
+    }
+    match kind {
+        "source_file" => Some(
+            "for files this is normal — manifests, scaffolding and scripts belong to no feature"
+                .to_string(),
+        ),
+        "test_case" if claimed == 0 => Some(
+            "no test can be reached: this run recorded results without saying where each case lives"
+                .to_string(),
+        ),
+        "decision" | "doc" | "runbook" => {
+            Some("a document nothing claims is a document nobody is answering for".to_string())
+        }
+        _ => None,
+    }
 }
 
 /// Why a record is attributed to a feature, read from the record's side.

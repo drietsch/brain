@@ -216,7 +216,10 @@ export function table(host, spec) {
     const shown = flat.length;
     controls.push(h("span", {
       class: "tally-bar", "data-empty": shown === 0 ? "true" : "false",
-      text: shown === total ? `${total} ${spec.noun ?? "rows"}` : `${shown} of ${total}`,
+      // "1 features" is the kind of sloppiness this product notices.
+      text: shown === total
+        ? `${total} ${total === 1 ? (spec.one ?? (spec.noun ?? "rows").replace(/s$/, "")) : (spec.noun ?? "rows")}`
+        : `${shown} of ${total}`,
     }));
     if (controls.length) parts.push(h("div", { class: "filters" }, controls));
 

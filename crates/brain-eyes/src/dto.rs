@@ -896,4 +896,36 @@ pub struct FeaturesView {
     pub roots: Vec<FeatureNode>,
     /// Every dimension name in use, so the list can be faceted by them.
     pub dimensions: Vec<String>,
+    /// How much of the graph any feature reaches at all.
+    pub coverage: Option<SpineCensus>,
+}
+
+/// How much of each kind of record belongs to a feature.
+///
+/// The proof census on Now asks whether a claim can show its proof. This
+/// asks a different question of a different population: whether a record
+/// is claimed by anything. Keeping them apart is the point — merging them
+/// would count two things as one.
+#[derive(Debug, Clone, Serialize)]
+pub struct SpineCensus {
+    pub claimed: usize,
+    pub total: usize,
+    pub sentence: String,
+    pub rows: Vec<CoverageRow>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CoverageRow {
+    pub kind: String,
+    /// "files", "decisions", "tests" — the plural of the kind.
+    pub label: String,
+    pub glyph: String,
+    pub claimed: usize,
+    pub total: usize,
+    pub tone: String,
+    /// What the gap means for this kind, when it means anything.
+    pub note: Option<String>,
+    /// A few of the unclaimed, openable. Never a bare count.
+    pub unclaimed: Vec<Ref>,
+    pub unclaimed_total: usize,
 }

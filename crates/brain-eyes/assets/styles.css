@@ -669,3 +669,20 @@ body.in-mri { --page: #070b10; }
 .feature-tag:hover { border-color: var(--control); color: var(--ink); }
 .feature-tag .icon { width: 11px; height: 11px; flex: none; }
 .feature-more { color: var(--faint); font-size: 11px; }
+
+/* --------------------------------------------------------- coverage
+   How much of the graph belongs to a feature. Files are never expected
+   to be fully claimed, so their bar is quiet rather than red. */
+.coverage { margin: 0 0 24px; }
+.coverage-line { font: 400 15px/1.5 var(--judgment); color: var(--body); margin: 0 0 12px; max-width: 60ch; }
+.coverage-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.coverage-head {
+  margin: 0 0 5px; display: flex; gap: 8px; justify-content: space-between; align-items: baseline;
+  font: 500 10px/1 var(--record); text-transform: uppercase; letter-spacing: .09em; color: var(--muted);
+}
+.coverage-count { text-transform: none; letter-spacing: 0; color: var(--faint); }
+.coverage-bar { height: 5px; border-radius: 3px; background: var(--line-soft); overflow: hidden; }
+.coverage-bar i { display: block; height: 100%; background: var(--proof); }
+.coverage-bar i[data-tone="watch"] { background: var(--unproven); }
+.coverage-bar i[data-tone="quiet"] { background: var(--control); }
+.coverage-note { margin: 6px 0 0; color: var(--faint); font-size: 11px; }

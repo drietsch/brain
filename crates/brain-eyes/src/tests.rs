@@ -1196,3 +1196,67 @@ fn the_headline_never_claims_all_clear_while_something_needs_you() {
     );
     assert!(proof.sentence.contains("claim"), "{}", proof.sentence);
 }
+
+/// The coverage census asks a different question from the proof census on
+/// Now — whether a record is claimed at all, rather than whether a claim
+/// can show its proof — so its arithmetic has to close on its own.
+#[test]
+fn coverage_counts_every_record_once_and_names_what_nothing_claims() {
+    let f = fixture();
+    let view = f.state.read(crate::query::features::build).unwrap();
+    let coverage = view
+        .coverage
+        .expect("the fixture's feature declares links, so the question was asked");
+
+    assert!(
+        coverage.claimed > 0 && coverage.claimed < coverage.total,
+        "{} of {}",
+        coverage.claimed,
+        coverage.total
+    );
+    assert_eq!(
+        coverage.claimed,
+        coverage.rows.iter().map(|row| row.claimed).sum::<usize>()
+    );
+    assert_eq!(
+        coverage.total,
+        coverage.rows.iter().map(|row| row.total).sum::<usize>()
+    );
+    for row in &coverage.rows {
+        assert!(row.claimed <= row.total, "{}", row.kind);
+        assert_eq!(
+            row.unclaimed_total,
+            row.total - row.claimed,
+            "what is claimed and what is not must add up for {}",
+            row.kind
+        );
+        // A shown list never passes for the whole list.
+        assert!(row.unclaimed.len() <= row.unclaimed_total);
+    }
+}
+
+/// A row that serves a feature says so, and one that serves nothing says
+/// nothing — a graph is mostly unclaimed, and a label on every row would
+/// be noise rather than information.
+#[test]
+fn a_record_names_the_features_it_serves_and_stays_quiet_otherwise() {
+    let f = fixture();
+    let view = f
+        .state
+        .read(|loaded| crate::query::library::build(loaded, "decisions", ""))
+        .unwrap();
+    assert!(!view.items.is_empty(), "the fixture records a decision");
+
+    let named: Vec<&crate::dto::ShelfItem> =
+        view.items.iter().filter(|item| !item.features.is_empty()).collect();
+    assert!(
+        !named.is_empty(),
+        "the fixture's feature is decided by one of these"
+    );
+    for item in named {
+        for reference in &item.features {
+            assert_eq!(reference.kind, "feature");
+            assert!(!reference.label.is_empty());
+        }
+    }
+}

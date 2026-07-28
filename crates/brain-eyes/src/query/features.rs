@@ -64,6 +64,7 @@ pub fn build(loaded: &Loaded) -> Result<FeaturesView, String> {
         note: "A feature with parts is judged by its parts — readiness rolls up from the leaves, and is never set by hand.".to_string(),
         roots,
         dimensions: dimensions.into_iter().collect(),
+        coverage: coverage(loaded),
     })
 }
 
@@ -256,4 +257,54 @@ fn part_cell(prefix: &str, part: &PartReport) -> StripCell {
         id: Some(features::feature_sid(prefix, &part.slug).to_string()),
         records: Vec::new(),
     }
+}
+
+/// How much of the graph any feature reaches at all.
+///
+/// Silent until some feature declares something: on a graph with no
+/// spine, "nothing is claimed" is true, useless, and exactly the noise
+/// absence-is-silence exists to prevent.
+fn coverage(loaded: &Loaded) -> Option<SpineCensus> {
+    let spine = loaded.spine();
+    if !spine.asked() {
+        return None;
+    }
+    let index = &loaded.index;
+    let store = &loaded.store;
+    let rows: Vec<CoverageRow> = spine
+        .census()
+        .iter()
+        .map(|row| {
+            let missing = spine.unclaimed(&row.kind);
+            CoverageRow {
+                label: say::kind_plural(&row.kind),
+                glyph: say::kind_glyph(&row.kind).to_string(),
+                claimed: row.claimed,
+                total: row.total,
+                tone: match () {
+                    // A file belonging to no feature is ordinary; a
+                    // document belonging to none is worth a second look.
+                    _ if row.kind == "source_file" => "quiet".to_string(),
+                    _ if row.claimed == row.total => "good".to_string(),
+                    _ if row.claimed == 0 => "watch".to_string(),
+                    _ => "quiet".to_string(),
+                },
+                note: say::coverage_note(&row.kind, row.claimed, row.total),
+                unclaimed: missing
+                    .iter()
+                    .take(6)
+                    .map(|sid| query::make_ref(index, store, sid))
+                    .collect(),
+                unclaimed_total: missing.len(),
+                kind: row.kind.clone(),
+            }
+        })
+        .collect();
+    let (claimed, total) = spine.claimed_total();
+    Some(SpineCensus {
+        claimed,
+        total,
+        sentence: say::coverage_sentence(claimed, total),
+        rows,
+    })
 }

@@ -30,6 +30,18 @@ impl fmt::Display for Finding {
 
 /// Run every coherence check under a prefix. Deterministic order.
 pub fn check(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Finding>, StoreError> {
+    let spine = crate::spine::build(store, index, prefix)?;
+    check_with(store, index, prefix, &spine)
+}
+
+/// The same, against a spine the caller already built. Eyes holds one per
+/// graph version; building a second here would be pure waste.
+pub fn check_with(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    spine: &crate::spine::Spine,
+) -> Result<Vec<Finding>, StoreError> {
     let mut out = Vec::new();
 
     // Active documents holding live edges to deleted files.
@@ -158,6 +170,50 @@ pub fn check(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Findin
                 });
             }
         }
+    }
+
+    // Declared slots nothing observed corroborates.
+    //
+    // One finding, never one per feature: seventeen rows all reading
+    // "claims something nothing backs up" are one thing to know about,
+    // seventeen times, and ADR-029 calls that worse than not collapsing.
+    //
+    // What is *unclaimed* is deliberately not a finding at all. Coverage
+    // is a census with its own readout on the Features surface; repeating
+    // it here as eleven concerns would turn the home screen into the
+    // spreadsheet this product exists to replace.
+    //
+    // Gated on the spine having been asked anything: on a graph where no
+    // feature declares a thing, silence is the honest answer.
+    if spine.asked() && !spine.uncorroborated().is_empty() {
+        let rows = spine.uncorroborated();
+        let features: BTreeSet<&str> = rows.iter().map(|row| row.slug.as_str()).collect();
+        let examples: Vec<String> = rows
+            .iter()
+            .take(3)
+            .map(|row| {
+                let what = row
+                    .targets
+                    .first()
+                    .map(|sid| sid_label(index, store, sid))
+                    .unwrap_or_default();
+                format!("{} claims {what}", row.slug)
+            })
+            .collect();
+        let rest = rows.len().saturating_sub(examples.len());
+        out.push(Finding {
+            kind: "uncorroborated-claim".to_string(),
+            label: format!(
+                "{} feature{}",
+                features.len(),
+                if features.len() == 1 { "" } else { "s" }
+            ),
+            detail: if rest > 0 {
+                format!("{}, and {rest} more", examples.join("; "))
+            } else {
+                examples.join("; ")
+            },
+        });
     }
 
     out.sort_by(|a, b| a.kind.cmp(&b.kind).then(a.label.cmp(&b.label)));

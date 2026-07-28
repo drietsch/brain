@@ -990,6 +990,42 @@ function commandLine(command) {
    Features — the definition of done, with its evidence resolved.
    ===================================================================== */
 
+/**
+ * How much of the graph belongs to a feature at all.
+ *
+ * A different question from the census on Now, asked of a different
+ * population: that one asks whether a claim can show its proof, this one
+ * whether a record is claimed by anything. Mixing them would count two
+ * things as one.
+ */
+function coverageView(coverage) {
+  if (!coverage) return null;
+  return h("section", { class: "coverage" },
+    h("p", { class: "coverage-line", text: coverage.sentence }),
+    h("div", { class: "coverage-rows" }, coverage.rows.map((row) => {
+      const share = row.total ? Math.round((row.claimed / row.total) * 100) : 0;
+      return h("div", { class: "coverage-row" },
+        h("p", { class: "coverage-head" },
+          h("span", { text: row.label }),
+          h("span", { class: "coverage-count", text: `${row.claimed}/${row.total}` })),
+        h("div", { class: "coverage-bar", title: `${share}%` },
+          h("i", { "data-tone": row.tone, style: `width:${share}%` })),
+        row.note ? h("p", { class: "coverage-note", text: row.note }) : null,
+        // Never a bare count: what is not claimed can be opened.
+        row.unclaimed.length
+          ? h("details", { class: "also" },
+              h("summary", { text: `${row.unclaimed_total} not claimed` }),
+              h("ul", {}, row.unclaimed.map((ref) =>
+                h("li", {}, h("button", { class: "linky", text: ref.label,
+                                          onclick: () => openThing(ref.id) }))),
+                row.unclaimed_total > row.unclaimed.length
+                  ? h("li", { class: "faint",
+                      text: `${row.unclaimed_total - row.unclaimed.length} more are not listed here` })
+                  : null))
+          : null);
+    })));
+}
+
 views.features = async (params) => {
   const data = await api("/api/features");
   state.snapshot = data.snapshot;
@@ -1018,6 +1054,7 @@ views.features = async (params) => {
     h("h1", { class: "lede", text: data.headline }),
     h("p", { class: "sub", text: data.note }),
     legend,
+    coverageView(data.coverage),
     host));
 
   table(host, {
@@ -1025,7 +1062,12 @@ views.features = async (params) => {
     noun: "features",
     keyOf: (row) => row.id,
     childrenOf: (row) => row.parts,
-    expandedByDefault: data.roots.filter((r) => !r.done).map((r) => r.id),
+    // Unfinished roots open themselves. When every root is finished the
+    // page would otherwise be one collapsed line, so open them all — a
+    // tree with a single root is not a list.
+    expandedByDefault: (data.roots.some((r) => !r.done)
+      ? data.roots.filter((r) => !r.done)
+      : data.roots).map((r) => r.id),
     search: (row) => `${row.title} ${row.slug} ${row.status} ${row.verdict}`,
     placeholder: "Filter features…",
     facets: [
