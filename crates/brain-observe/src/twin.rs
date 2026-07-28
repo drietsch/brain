@@ -66,7 +66,7 @@ fn run(
     full: bool,
 ) -> Result<TwinReport, StoreError> {
     let mut index = MemIndex::new();
-    replay(store, &mut index)?;
+    let fed = replay(store, &mut index)?;
     let now = now_ms();
     let mut report = TwinReport::default();
 
@@ -517,9 +517,16 @@ fn run(
         // over time, guarded so an unchanged codebase writes nothing. This is
         // what makes insights *continuous* — trends persist in the graph and
         // travel with replication.
-        let mut post = MemIndex::new();
-        replay(store, &mut post)?;
-        let ins = insights_with(store, &post, prefix)?;
+        // Catch the index up with what this refresh just wrote, instead of
+        // rebuilding it from nothing. `on_object` is idempotent and the log
+        // only grows, so feeding the tail is the same answer for the price
+        // of the delta — a refresh used to replay the whole store twice.
+        let history = store.put_history_shared()?;
+        for id in history[fed.min(history.len())..].iter() {
+            let obj = store.get(id)?;
+            index.on_object(id, &obj);
+        }
+        let ins = insights_with(store, &index, prefix)?;
         let totals = [
             ("files_present", ins.files),
             ("symbols_total", ins.symbols),
@@ -527,7 +534,7 @@ fn run(
         ];
         let mut any_changed = false;
         for (prop, value) in totals {
-            if latest(&post, store, &repo_sid, prop)?.as_deref() != Some(value.to_string().as_str())
+            if latest(&index, store, &repo_sid, prop)?.as_deref() != Some(value.to_string().as_str())
             {
                 any_changed = true;
             }

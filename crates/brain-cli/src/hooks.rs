@@ -10,7 +10,6 @@
 
 use brain_core::ids::StableId;
 use brain_core::object::Object;
-use brain_index::{replay, MemIndex};
 use brain_observe::{testing, twin};
 use brain_store::{now_ms, Store};
 use std::fs;
@@ -135,8 +134,7 @@ fn infer_test_command(dir: &Path) -> Option<String> {
 
 /// Store (guarded) the repo's test command as a graph observation.
 fn set_test_command(store: &Store, prefix: &str, cmd: &str) -> Result<(), String> {
-    let mut index = MemIndex::new();
-    replay(store, &mut index).map_err(|e| e.to_string())?;
+    let index = crate::build_index(store)?;
     let repo_sid = StableId::derive(&["repo", prefix]);
     if twin::latest(&index, store, &repo_sid, "test_command")
         .map_err(|e| e.to_string())?
@@ -311,8 +309,7 @@ fn run_event(
     // refresh, report drift in one line each. Nothing else.
     if event == "post-checkout" || event == "post-merge" {
         twin::refresh(&store, Path::new(dir), prefix).map_err(|e| e.to_string())?;
-        let mut index = MemIndex::new();
-        replay(&store, &mut index).map_err(|e| e.to_string())?;
+        let index = crate::build_index(&store)?;
         let armed =
             brain_observe::projection::reapply_readonly(&store, &index, Path::new(dir), prefix)
                 .map_err(|e| e.to_string())?;
@@ -357,7 +354,11 @@ fn run_event(
         }
     }
 
-    let ins = twin::insights(&store, prefix).map_err(|e| e.to_string())?;
+    // One index and one synthesis for the whole hook. `insights` and
+    // `attend` each used to build their own — three index builds and two
+    // full syntheses per commit, for answers that are identical.
+    let index = crate::build_index(&store)?;
+    let ins = twin::insights_with(&store, &index, prefix).map_err(|e| e.to_string())?;
     // Only warn-severity staleness nags; info is a record aging quietly.
     let warns = ins
         .stale_docs
@@ -385,8 +386,6 @@ fn run_event(
     // The reflex points the eye: one line of top salience, plus the
     // projection contract (re-arm bits, report drift with the fix named).
     {
-        let mut index = MemIndex::new();
-        replay(&store, &mut index).map_err(|e| e.to_string())?;
         brain_observe::projection::reapply_readonly(&store, &index, Path::new(dir), prefix)
             .map_err(|e| e.to_string())?;
         for d in brain_observe::projection::drift(&store, &index, Path::new(dir), prefix)
@@ -399,7 +398,7 @@ fn run_event(
                 d.kind, d.path, d.fix
             );
         }
-        if let Some(top) = brain_observe::attention::attend(&store, &index, prefix)
+        if let Some(top) = brain_observe::attention::attend_with(&store, &index, prefix, &ins)
             .map_err(|e| e.to_string())?
             .first()
         {
@@ -435,8 +434,7 @@ fn gate_check(
     open_store: &impl Fn() -> Result<Store, String>,
 ) -> Result<(), String> {
     let store = open_store()?;
-    let mut index = MemIndex::new();
-    replay(&store, &mut index).map_err(|e| e.to_string())?;
+    let index = crate::build_index(&store)?;
 
     let out = Command::new("git")
         .args(["-C", dir, "diff", "--cached", "--name-only"])
@@ -519,8 +517,7 @@ fn run_configured_tests(
     dir: &str,
     prefix: &str,
 ) -> Result<Option<testing::RunOutcome>, String> {
-    let mut index = MemIndex::new();
-    replay(store, &mut index).map_err(|e| e.to_string())?;
+    let index = crate::build_index(store)?;
     let repo_sid = StableId::derive(&["repo", prefix]);
     let Some(cmd) =
         twin::latest(&index, store, &repo_sid, "test_command").map_err(|e| e.to_string())?
@@ -550,6 +547,7 @@ fn run_configured_tests(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use brain_index::{replay, MemIndex};
 
     fn git_repo() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();

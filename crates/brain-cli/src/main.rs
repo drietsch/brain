@@ -3421,7 +3421,7 @@ fn describe(
 /// event-log delta replay, O(new events) on a warm open. It derefs to
 /// MemIndex, so every query path below is written against the reference
 /// backend. `BRAIN_INDEX=mem` forces a cold, non-persisting rebuild.
-fn build_index(store: &Store) -> Result<cortex::Cortex, String> {
+pub(crate) fn build_index(store: &Store) -> Result<cortex::Cortex, String> {
     if std::env::var("BRAIN_INDEX").as_deref() == Ok("mem") {
         return cortex::Cortex::open_ephemeral(store).map_err(|e| e.to_string());
     }
