@@ -170,7 +170,11 @@ fn strip(
     let prefix = loaded.prefix();
 
     if report.by_parts() {
-        return Ok(report.parts.iter().map(part_cell).collect());
+        return Ok(report
+            .parts
+            .iter()
+            .map(|part| part_cell(prefix, part))
+            .collect());
     }
 
     let mut out = Vec::new();
@@ -182,11 +186,17 @@ fn strip(
                 label,
                 state: "absent".to_string(),
                 id: None,
+                records: Vec::new(),
             });
             continue;
         }
         // A requirement is only *ready* when everything linked to it still
         // stands. Linked-but-unestablished is its own state, not a pass.
+        //
+        // Every linked record is resolved, not merely up to the first bad
+        // one: the cell carries them all, so what the verdict is about can
+        // be opened. A cell that hid half its evidence would be the exact
+        // failure this surface exists to prevent.
         let linked = twin::live_from(index, store, sid, &check.predicate)
             .map_err(|e| e.to_string())?;
         let mut worst = "ready";
@@ -194,34 +204,40 @@ fn strip(
             "{} linked",
             say::count(check.count as u64, "record", "records")
         );
+        let mut records = Vec::new();
         for (_, to) in &linked {
-            let reference = query::make_ref(index, store, to);
-            let (text, _, tone) = super::evidence::resolve_link(loaded, to, &label, &reference)?;
+            let target = query::make_ref(index, store, to);
+            let (text, basis, tone) = super::evidence::resolve_link(loaded, to, &label, &target)?;
             match tone.as_str() {
-                "bad" => {
+                "bad" if worst != "failing" => {
                     worst = "failing";
-                    detail = text;
-                    break;
+                    detail = text.clone();
                 }
                 "watch" if worst == "ready" => {
                     worst = "unproven";
-                    detail = text;
+                    detail = text.clone();
                 }
                 _ => {}
             }
+            records.push(StripRecord {
+                target,
+                text,
+                basis,
+                tone,
+            });
         }
-        let _ = prefix;
         out.push(StripCell {
             label,
             state: worst.to_string(),
             detail,
             id: None,
+            records,
         });
     }
     Ok(out)
 }
 
-fn part_cell(part: &PartReport) -> StripCell {
+fn part_cell(prefix: &str, part: &PartReport) -> StripCell {
     let (state, detail) = if part.done {
         ("ready", format!("{} is ready", part.title))
     } else if part.met == 0 {
@@ -236,6 +252,8 @@ fn part_cell(part: &PartReport) -> StripCell {
         label: part.title.clone(),
         state: state.to_string(),
         detail,
-        id: None,
+        // A part is an entity, so its cell opens it directly.
+        id: Some(features::feature_sid(prefix, &part.slug).to_string()),
+        records: Vec::new(),
     }
 }

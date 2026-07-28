@@ -332,6 +332,66 @@ pub fn finding(kind: &str, label: &str, detail: &str) -> (String, String) {
     (sentence, detail.to_string())
 }
 
+/// The plural of a kind's noun, for a group heading.
+pub fn kind_plural(kind: &str) -> String {
+    let noun = kind_noun(kind);
+    match noun {
+        "function or type" => "functions and types".to_string(),
+        "agent instructions" => noun.to_string(),
+        other if other.ends_with('s') => other.to_string(),
+        other => format!("{other}s"),
+    }
+}
+
+/// What a feature reaches, in one sentence.
+///
+/// The two halves are different kinds of statement and are kept apart: a
+/// feature *declares* its evidence, and *reaches* whatever the twin
+/// already pointed at those files by itself.
+pub fn reach_sentence(declared: usize, reached: usize, files: usize) -> String {
+    if files == 0 {
+        return "It declares no files, so nothing reaches it.".to_string();
+    }
+    if reached == 0 {
+        return format!(
+            "It declares {}. Nothing else in the graph points at {}.",
+            count(declared as u64, "record", "records"),
+            if files == 1 { "it" } else { "them" }
+        );
+    }
+    format!(
+        "It declares {}. Through {}, it reaches {} nobody linked by hand.",
+        count(declared as u64, "record", "records"),
+        count(files as u64, "file", "files"),
+        count(reached as u64, "more record", "more records")
+    )
+}
+
+/// Why a record is attributed to a feature, read from the record's side.
+///
+/// A derived attribution always names the file it came through. Saying
+/// only *that* something belongs to a feature, without saying how it was
+/// reached, would be a claim nobody could check.
+pub fn attribution_because(via: &str, predicate: &str, through: Option<&str>) -> String {
+    match (via, through) {
+        ("declared", _) => format!("it {} this feature", predicate_phrase(predicate, false)),
+        ("part", _) => format!(
+            "it {} one of its parts",
+            predicate_phrase(predicate, false)
+        ),
+        // The case is defined in the test file, and that file covers the
+        // declared one — two hops, and the sentence says both.
+        ("suite", Some(file)) => {
+            format!("it is defined in a file that tests {file}, which this feature is built by")
+        }
+        (_, Some(file)) => format!(
+            "it {} {file}, which this feature is built by",
+            predicate_phrase(predicate, true)
+        ),
+        (_, None) => format!("it {} this feature", predicate_phrase(predicate, false)),
+    }
+}
+
 /// Human phrasing for a definition-of-done predicate.
 pub fn dod_label(predicate: &str) -> &'static str {
     match predicate {

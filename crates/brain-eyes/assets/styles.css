@@ -386,6 +386,32 @@ button.strip:hover i { transform: scale(1.18); }
 .proof li { display: flex; gap: 10px; align-items: baseline; font-size: 12px; }
 .proof .basis { color: var(--faint); font-size: 11px; }
 
+/* A record you can open, set in the record face because that is what it
+   is: a path, a test name, a slug. */
+.linky {
+  padding: 0; background: none; border: 0; color: var(--ink); text-align: left;
+  font: 400 12px/1.5 var(--record); text-decoration: underline;
+  text-decoration-color: var(--line); text-underline-offset: 2px;
+}
+.linky:hover { text-decoration-color: var(--control); }
+
+/* What a strip cell stands for, revealed under the strip rather than in
+   a 7px hit area. */
+.behind:empty { display: none; }
+.behind { margin: 10px 0 0; padding: 12px 14px; background: var(--wash); border-radius: 10px; }
+.behind .page-note { margin: 0 0 8px; }
+
+.reach { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.reach-group { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.reach-head {
+  margin: 0 0 8px; display: flex; gap: 8px; align-items: baseline; justify-content: space-between;
+  font: 500 10px/1 var(--record); text-transform: uppercase; letter-spacing: .09em;
+  color: var(--muted);
+}
+.reach-basis { text-transform: none; letter-spacing: 0; color: var(--faint); }
+.reach ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.reach li { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
+
 .episodes { display: flex; flex-direction: column; }
 .episode {
   display: grid; grid-template-columns: 112px 1fr; gap: 16px; padding: 12px 0;

@@ -652,6 +652,46 @@ pub struct ThingExtras {
     pub session: Option<Session>,
     /// Feature: its parts, its strip, and what is holding it up.
     pub feature: Option<FeatureNode>,
+    /// Feature: everything it reaches through the files it declares.
+    pub reach: Option<FeatureReachView>,
+    /// Any kind: the features this thing serves, and how Eyes knows.
+    pub serves: Vec<Attribution>,
+}
+
+/// What a feature reaches: what it declares, and what the graph already
+/// pointed at those files by itself.
+#[derive(Debug, Clone, Serialize)]
+pub struct FeatureReachView {
+    pub sentence: String,
+    pub groups: Vec<ReachGroup>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ReachGroup {
+    /// "documents", "tests", "agent sessions" — the plural of the kind.
+    pub label: String,
+    pub glyph: String,
+    /// Whether these were declared by the feature or reached through it.
+    pub declared: bool,
+    pub items: Vec<ReachItem>,
+    pub total: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ReachItem {
+    pub target: Ref,
+    /// The declared file this was reached through. Absent only when the
+    /// feature declares it outright — a derived claim that cannot name
+    /// its join is an invention, so it always carries one.
+    pub through: Option<Ref>,
+}
+
+/// A feature this thing serves, and the path that says so.
+#[derive(Debug, Clone, Serialize)]
+pub struct Attribution {
+    pub target: Ref,
+    /// "declared as its tests" · "it changes a file that feature is built by"
+    pub because: String,
 }
 
 /// One line of an action's story. `recorded` distinguishes what the graph
@@ -789,6 +829,20 @@ pub struct StripCell {
     pub detail: String,
     /// The part this cell stands for, when it is a part.
     pub id: Option<String>,
+    /// The records behind this cell, each with what it currently says.
+    /// A requirement is not an entity, so it opens through these rather
+    /// than as itself — and a cell that hides its evidence is the exact
+    /// failure this surface exists to prevent.
+    pub records: Vec<StripRecord>,
+}
+
+/// One record behind a strip cell, resolved to its state right now.
+#[derive(Debug, Clone, Serialize)]
+pub struct StripRecord {
+    pub target: Ref,
+    pub text: String,
+    pub basis: Option<String>,
+    pub tone: String,
 }
 
 /// A feature and everything under it.

@@ -127,7 +127,32 @@ pub fn make_ref(index: &MemIndex, store: &Store, sid: &StableId) -> Ref {
     let mut label = twin::sid_label(index, store, sid);
     if label.starts_with("sid:") {
         let labels = labels_of(index, store, sid);
-        label = ["prefix", "title", "name", "slug", "path"]
+        // An agent session carries no name of its own, and the prefix is
+        // the same for every one of them — so a session labelled by its
+        // prefix reads as the repository. Say who ran, and which run.
+        if kind == "agent_session" {
+            let agent = labels.get("agent").cloned().unwrap_or_default();
+            let run: String = labels
+                .get("session_id")
+                .map(|id| id.chars().take(6).collect())
+                .unwrap_or_default();
+            if !agent.is_empty() {
+                label = if run.is_empty() {
+                    agent
+                } else {
+                    format!("{agent} {run}")
+                };
+                return Ref {
+                    id: sid.to_string(),
+                    label,
+                    kind: kind.clone(),
+                    noun,
+                    glyph: say::kind_glyph(&kind).to_string(),
+                };
+            }
+        }
+        // `prefix` comes last: it identifies the workspace, not the thing.
+        label = ["title", "name", "slug", "path", "prefix"]
             .iter()
             .find_map(|key| labels.get(*key).cloned())
             .unwrap_or_else(|| noun.clone());

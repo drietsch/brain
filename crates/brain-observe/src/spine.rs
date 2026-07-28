@@ -31,8 +31,9 @@ use brain_index::{Index, MemIndex};
 use brain_store::{Store, StoreError};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Predicates that point *at* a file from something that is not a feature.
-/// Each is read backwards, from the file to whatever names it.
+/// Predicates that point *at* a declared source file from something that
+/// is not a feature. Each is read backwards, from the file to whatever
+/// names it.
 const INBOUND: &[&str] = &[
     "covers",      // test file      -> source file
     "defined_in",  // test case      -> source file
@@ -40,6 +41,19 @@ const INBOUND: &[&str] = &[
     "recorded_in", // any artifact   -> the file it lives in
     "touched",     // agent session  -> source file
     "changes",     // governed change-> source file
+];
+
+/// What counts as reaching the file a *declared document* happens to live
+/// in — as opposed to the code the feature declares.
+///
+/// Only work done on that file counts. A second document that merely
+/// mentions this one is not part of the feature: following `mentions`
+/// here attributed the README, the roadmap and the architecture note to
+/// whichever feature declared `docs/twin.md`, which is a smear rather
+/// than an attribution.
+const INBOUND_ARTIFACT: &[&str] = &[
+    "touched", // agent session   -> the document's file
+    "changes", // governed change -> the document's file
 ];
 
 /// Kinds a feature can meaningfully be said to claim.
@@ -123,9 +137,12 @@ pub struct FeatureReach {
     pub title: String,
     /// The definition-of-done targets exactly as declared. The *claim*.
     pub declared: BTreeMap<String, Vec<StableId>>,
-    /// Files this feature or any of its parts declares, plus the files
-    /// its declared documents are recorded in. The join frontier.
+    /// Source files this feature or any of its parts declares. The join
+    /// frontier, and what every derived claim is measured against.
     pub files: BTreeSet<StableId>,
+    /// Files its declared documents are recorded in. A narrower join:
+    /// only work done *on* those files counts (see `INBOUND_ARTIFACT`).
+    pub artifact_files: BTreeSet<StableId>,
     /// Everything reached, by entity kind. The *derivation*.
     pub by_kind: BTreeMap<String, Vec<Reached>>,
 }
@@ -231,6 +248,7 @@ pub fn build(store: &Store, index: &MemIndex, prefix: &str) -> Result<Spine, Sto
             title: row.title.clone(),
             declared: BTreeMap::new(),
             files: BTreeSet::new(),
+            artifact_files: BTreeSet::new(),
             by_kind: BTreeMap::new(),
         };
         for predicate in &dod {
@@ -283,17 +301,17 @@ pub fn build(store: &Store, index: &MemIndex, prefix: &str) -> Result<Spine, Sto
         }
 
         let mut files = BTreeSet::new();
+        let mut artifact_files = BTreeSet::new();
         let mut by_kind: BTreeMap<String, Vec<Reached>> = BTreeMap::new();
         for (via, predicate, target) in claims {
             let kind = kind_of(store, index, &target);
             if kind == "source_file" {
                 files.insert(target.clone());
             } else {
-                // A declared document lives in a file; adding that file to
-                // the frontier means a session that edited the document is
-                // attributed to the feature too.
+                // A declared document lives in a file. That file joins the
+                // feature to whoever edited it — and to nothing else.
                 for (_, file) in live_from(index, store, &target, "recorded_in")? {
-                    files.insert(file);
+                    artifact_files.insert(file);
                 }
             }
             if !kind.is_empty() {
@@ -310,7 +328,11 @@ pub fn build(store: &Store, index: &MemIndex, prefix: &str) -> Result<Spine, Sto
             }
         }
         if let Some(reach) = spine.reach.get_mut(&row.slug) {
+            // A file that is both declared code and a document's home is
+            // code: the wider join wins.
+            artifact_files.retain(|file| !files.contains(file));
             reach.files = files;
+            reach.artifact_files = artifact_files;
             reach.by_kind = by_kind;
         }
     }
@@ -318,13 +340,21 @@ pub fn build(store: &Store, index: &MemIndex, prefix: &str) -> Result<Spine, Sto
     // Pass 3 — the inverse, over each distinct frontier file exactly once.
     // A file serving two features costs one lookup, not two.
     let mut all_files: BTreeSet<StableId> = BTreeSet::new();
+    let mut all_artifact_files: BTreeSet<StableId> = BTreeSet::new();
     for reach in spine.reach.values() {
         all_files.extend(reach.files.iter().cloned());
+        all_artifact_files.extend(reach.artifact_files.iter().cloned());
     }
+    all_artifact_files.retain(|file| !all_files.contains(file));
+
     let mut found: BTreeMap<StableId, Vec<(StableId, String, String, bool)>> = BTreeMap::new();
-    for file in &all_files {
+    for (file, predicates) in all_files
+        .iter()
+        .map(|f| (f, INBOUND))
+        .chain(all_artifact_files.iter().map(|f| (f, INBOUND_ARTIFACT)))
+    {
         let mut hits: Vec<(StableId, String, String, bool)> = Vec::new();
-        for predicate in INBOUND {
+        for predicate in predicates {
             for (_, from) in live_to(index, store, file, predicate)? {
                 let kind = kind_of(store, index, &from);
                 if kind.is_empty() {
@@ -347,7 +377,13 @@ pub fn build(store: &Store, index: &MemIndex, prefix: &str) -> Result<Spine, Sto
     }
 
     for reach in spine.reach.values_mut() {
-        for file in &reach.files {
+        let frontier: Vec<StableId> = reach
+            .files
+            .iter()
+            .chain(reach.artifact_files.iter())
+            .cloned()
+            .collect();
+        for file in &frontier {
             for (sid, kind, predicate, second_hop) in found.get(file).into_iter().flatten() {
                 if sid == &reach.feature {
                     continue;

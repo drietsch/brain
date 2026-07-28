@@ -554,7 +554,23 @@ views.thing = async (params) => {
   const feature = data.extras.feature;
   if (feature) {
     parts.push(h("p", { class: "lede", text: feature.verdict }));
-    parts.push(stripWide(feature.strip));
+    // A cell that stands for a part opens it. A cell that stands for a
+    // requirement is not an entity, so it opens through the records
+    // behind it instead — which is the honest way to make it openable.
+    const behind = h("div", { class: "behind" });
+    parts.push(stripWide(feature.strip, (cell) => {
+      if (cell.id) return openThing(cell.id);
+      behind.replaceChildren(
+        h("p", { class: "page-note", text: `${cell.label} — ${cell.detail}` }),
+        h("ul", { class: "proof" }, (cell.records || []).map((record) =>
+          h("li", {},
+            h("span", { class: `mark ${record.tone}`, text: "·" }),
+            h("button", { class: "linky", text: record.target.label,
+                          onclick: () => openThing(record.target.id) }),
+            h("span", {}, ` — ${record.text}`),
+            record.basis ? h("span", { class: "basis", text: ` (${record.basis})` }) : null))));
+    }));
+    parts.push(behind);
     if (feature.parts.length) {
       parts.push(h("h2", { class: "section", text: "Its parts" }));
       parts.push(h("div", { class: "facts" }, feature.parts.map((part) =>
@@ -573,6 +589,37 @@ views.thing = async (params) => {
       h("div", { class: `fact ${cell.met ? "good" : "watch"}` },
         h("i", { class: `mark ${cell.met ? "good" : "watch"}` }),
         h("span", {}, h("strong", { text: cell.label }), " — ", cell.detail)))));
+  }
+
+  // What this feature reaches: its claim first, then what the graph
+  // already pointed at those files without anyone linking it.
+  const reach = data.extras.reach;
+  if (reach && reach.groups.length) {
+    parts.push(h("h2", { class: "section", text: "What it reaches" }));
+    parts.push(h("p", { class: "sub", text: reach.sentence }));
+    parts.push(h("div", { class: "reach" }, reach.groups.map((group) =>
+      h("div", { class: "reach-group" },
+        h("p", { class: "reach-head" },
+          h("span", { text: group.label }),
+          h("span", { class: "reach-basis",
+                      text: group.declared ? "declared" : "reached through its files" })),
+        h("ul", {}, group.items.map((item) =>
+          h("li", {},
+            h("button", { class: "linky", text: item.target.label,
+                          onclick: () => openThing(item.target.id) }),
+            item.through
+              ? h("span", { class: "basis", text: ` via ${item.through.label}` })
+              : null)))))));
+  }
+
+  // Which features this thing serves — on every kind of page, not just
+  // features. This is the line that makes the spine readable from below.
+  if (data.extras.serves.length) {
+    parts.push(h("h2", { class: "section", text: "What it serves" }));
+    parts.push(h("div", { class: "facts" }, data.extras.serves.map((item) =>
+      h("button", { class: "fact quiet", onclick: () => openThing(item.target.id) },
+        glyph("hexagon"),
+        h("span", {}, h("strong", { text: item.target.label }), " — ", item.because)))));
   }
 
   if (data.facts.length) {

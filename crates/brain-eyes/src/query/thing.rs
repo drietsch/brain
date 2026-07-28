@@ -572,6 +572,7 @@ fn extras(
         }
         "feature" => {
             extras.feature = Some(super::features::node(loaded, slug, 0)?);
+            extras.reach = feature_reach(loaded, slug);
             let report =
                 features::evaluate(store, index, prefix, slug).map_err(|e| e.to_string())?;
             extras.coverage = report
@@ -663,5 +664,82 @@ fn extras(
         }
         _ => {}
     }
+
+    // Which features this serves — for every kind, not just features. This
+    // is the one line that lets any page in the product say what its
+    // subject is part of.
+    for owned in loaded.spine().features_of(sid) {
+        let through = owned
+            .through
+            .as_ref()
+            .map(|file| twin::sid_label(index, store, file));
+        extras.serves.push(Attribution {
+            target: query::make_ref(index, store, &owned.feature),
+            because: say::attribution_because(
+                owned.via.as_str(),
+                &owned.predicate,
+                through.as_deref(),
+            ),
+        });
+    }
     Ok(extras)
+}
+
+/// What a feature reaches: what it declares, then what the twin already
+/// pointed at those files by itself.
+///
+/// The two are shown apart because they are different kinds of statement.
+/// A declared link is a claim someone made; a reached record is something
+/// the graph observed, and it always names the file that carries it.
+fn feature_reach(loaded: &Loaded, slug: &str) -> Option<FeatureReachView> {
+    let spine = loaded.spine();
+    let reach = spine.reach(slug)?;
+    let index = &loaded.index;
+    let store = &loaded.store;
+
+    let mut groups: Vec<ReachGroup> = Vec::new();
+    let mut declared_total = 0usize;
+    let mut reached_total = 0usize;
+    for (kind, rows) in &reach.by_kind {
+        for declared in [true, false] {
+            let items: Vec<ReachItem> = rows
+                .iter()
+                .filter(|row| {
+                    matches!(
+                        row.via,
+                        brain_observe::spine::Via::Declared | brain_observe::spine::Via::Part
+                    ) == declared
+                })
+                .map(|row| ReachItem {
+                    target: query::make_ref(index, store, &row.sid),
+                    through: row
+                        .through
+                        .as_ref()
+                        .map(|file| query::make_ref(index, store, file)),
+                })
+                .collect();
+            if items.is_empty() {
+                continue;
+            }
+            if declared {
+                declared_total += items.len();
+            } else {
+                reached_total += items.len();
+            }
+            groups.push(ReachGroup {
+                label: say::kind_plural(kind),
+                glyph: say::kind_glyph(kind).to_string(),
+                declared,
+                total: items.len(),
+                items,
+            });
+        }
+    }
+    // Declared first: the claim, then what stands behind it.
+    groups.sort_by(|a, b| b.declared.cmp(&a.declared).then(a.label.cmp(&b.label)));
+
+    Some(FeatureReachView {
+        sentence: say::reach_sentence(declared_total, reached_total, reach.files.len()),
+        groups,
+    })
 }
