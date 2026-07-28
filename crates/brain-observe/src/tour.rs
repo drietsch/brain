@@ -151,11 +151,7 @@ pub fn narration_from(ins: &crate::twin::Insights, prefix: &str) -> Vec<(&'stati
         }
     }
     if !ins.features.is_empty() {
-        let done = ins
-            .features
-            .iter()
-            .filter(|(_, _, f)| f.split_once('/').is_some_and(|(a, b)| a == b))
-            .count();
+        let done = ins.features.iter().filter(|f| f.done).count();
         lines.push((
             "features",
             format!(

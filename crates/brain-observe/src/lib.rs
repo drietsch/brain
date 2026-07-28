@@ -38,6 +38,7 @@ pub mod lifecycle;
 pub mod projection;
 pub mod sessions;
 pub mod sleep;
+pub mod spine;
 pub mod symbols;
 pub mod templates;
 pub mod testing;

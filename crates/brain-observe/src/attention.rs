@@ -173,14 +173,17 @@ pub fn attend_with(
     }
 
     // Feature incoherence: claims to be shipped, graph says not done.
-    for (slug, status, fraction) in &ins.features {
-        let done = fraction.split_once('/').is_some_and(|(a, b)| a == b);
-        if status == "shipped" && !done {
+    for feature in &ins.features {
+        if feature.status == "shipped" && !feature.done {
+            let counted = if feature.by_parts { "parts" } else { "DoD" };
             out.push(Attention {
-                label: slug.clone(),
+                label: feature.slug.clone(),
                 kind: "feature".to_string(),
                 score: 4,
-                reasons: vec![format!("status '{status}' but DoD {fraction}")],
+                reasons: vec![format!(
+                    "status '{}' but {counted} {}",
+                    feature.status, feature.fraction
+                )],
             });
         }
     }

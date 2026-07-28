@@ -215,3 +215,16 @@ pub fn excerpt(text: &str, max_chars: usize) -> String {
         trimmed
     }
 }
+
+/// The features this thing serves, as pointers a row can open.
+///
+/// Empty is the ordinary answer and renders as nothing: most of a graph
+/// is not claimed by anything, and saying so on every row would be noise.
+pub fn features_of(loaded: &crate::state::Loaded, sid: &StableId) -> Vec<Ref> {
+    loaded
+        .spine()
+        .features_of(sid)
+        .iter()
+        .map(|owned| make_ref(&loaded.index, &loaded.store, &owned.feature))
+        .collect()
+}

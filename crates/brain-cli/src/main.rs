@@ -85,6 +85,7 @@ fn main() -> ExitCode {
         Some("relation") => cmd_relation(&args[1..]),
         Some("wake") => cmd_wake(&args[1..]),
         Some("attend") => cmd_attend(&args[1..]),
+        Some("spine") => cmd_spine(&args[1..]),
         Some("sleep") => cmd_sleep(&args[1..]),
         Some("related") => cmd_related(&args[1..]),
         Some("eyes") => cmd_eyes(&args[1..]),
@@ -826,9 +827,13 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                 );
             }
             if !ins.features.is_empty() {
-                println!("features (DoD progress):");
-                for (slug, status, fraction) in &ins.features {
-                    println!("  [{status}] {slug}  {fraction}");
+                println!("features (progress):");
+                for feature in &ins.features {
+                    let counted = if feature.by_parts { "parts" } else { "linked" };
+                    println!(
+                        "  [{}] {}  {} {counted}",
+                        feature.status, feature.slug, feature.fraction
+                    );
                 }
             }
             if !ins.nonconforming.is_empty() {
@@ -3019,6 +3024,73 @@ fn cmd_attend(args: &[String]) -> Result<(), String> {
             a.kind,
             a.reasons.join(", ")
         );
+    }
+    Ok(())
+}
+
+/// `brain spine` — what each feature reaches, and what nothing claims.
+fn cmd_spine(args: &[String]) -> Result<(), String> {
+    let prefix = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .ok_or("usage: brain spine <prefix> [--unclaimed <kind>]")?;
+    let want = args
+        .iter()
+        .position(|a| a == "--unclaimed")
+        .and_then(|i| args.get(i + 1));
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let spine = brain_observe::spine::build(&store, &index, prefix).map_err(|e| e.to_string())?;
+
+    if !spine.asked() {
+        println!("no feature under {prefix} declares anything yet");
+        return Ok(());
+    }
+
+    if let Some(kind) = want {
+        let rows = spine.unclaimed(kind);
+        if rows.is_empty() {
+            println!("every {kind} under {prefix} is claimed by a feature");
+        }
+        for sid in rows {
+            println!("  {}", brain_observe::twin::sid_label(&index, &store, sid));
+        }
+        return Ok(());
+    }
+
+    for slug in spine.slugs().map(str::to_string).collect::<Vec<_>>() {
+        let reach = spine.reach(&slug).expect("just listed");
+        let counts: Vec<String> = reach
+            .by_kind
+            .iter()
+            .map(|(kind, rows)| format!("{} {kind}", rows.len()))
+            .collect();
+        println!(
+            "{slug}  {} file(s) declared -> {}",
+            reach.files.len(),
+            if counts.is_empty() {
+                "nothing".to_string()
+            } else {
+                counts.join(", ")
+            }
+        );
+    }
+    let (claimed, total) = spine.claimed_total();
+    println!("\ncoverage: {claimed} of {total} records are claimed by a feature");
+    for row in spine.census() {
+        println!("  {:<16} {}/{}", row.kind, row.claimed, row.total);
+    }
+    if !spine.uncorroborated().is_empty() {
+        println!("\nlinked, but nothing observed corroborates it:");
+        for row in spine.uncorroborated() {
+            println!(
+                "  {} [{}] ×{} — {}",
+                row.slug,
+                row.predicate,
+                row.targets.len(),
+                row.why
+            );
+        }
     }
     Ok(())
 }

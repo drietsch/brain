@@ -139,10 +139,13 @@ pub fn wake_with(
             }
         }
     }
-    for (slug, status, fraction) in &ins.features {
-        let done = fraction.split_once('/').is_some_and(|(a, b)| a == b);
-        if !done {
-            inflight.push(format!("feature {slug} [{status}] DoD {fraction}"));
+    for feature in &ins.features {
+        if !feature.done {
+            let counted = if feature.by_parts { "parts" } else { "DoD" };
+            inflight.push(format!(
+                "feature {} [{}] {counted} {}",
+                feature.slug, feature.status, feature.fraction
+            ));
         }
     }
     if !inflight.is_empty() {

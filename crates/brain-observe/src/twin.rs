@@ -547,6 +547,24 @@ fn run(
 // Insights: a synthesized picture of the software under a twin prefix
 // ---------------------------------------------------------------------------
 
+/// How far along one feature is, counted in whichever terms it is judged.
+///
+/// A feature with parts is judged by its parts (ADR-028), so the fraction
+/// has to come from `DoneReport::score` rather than from the feature's own
+/// links. Reading the score off the link count made every parent report
+/// what it happened to be linked to directly — the root of the spine said
+/// `1/4` while its thirteen parts were all ready.
+#[derive(Debug, Clone)]
+pub struct FeatureProgress {
+    pub slug: String,
+    pub status: String,
+    /// "3/4" of requirements, or "2/13" of parts.
+    pub fraction: String,
+    pub done: bool,
+    /// Whether the fraction counts parts rather than requirements.
+    pub by_parts: bool,
+}
+
 #[derive(Debug, Default)]
 pub struct Insights {
     pub files: usize,
@@ -580,8 +598,8 @@ pub struct Insights {
     pub agent_configs: Vec<(String, String, String)>,
     /// Documents that fail their template's contract: (slug, kind, missing).
     pub nonconforming: Vec<(String, String, String)>,
-    /// Features under the prefix: (slug, status, done-fraction like "3/4").
-    pub features: Vec<(String, String, String)>,
+    /// Features under the prefix, each judged in its own terms.
+    pub features: Vec<FeatureProgress>,
     /// Test files (by role) and total declared test cases across all files.
     pub test_files: usize,
     pub tests_declared: usize,
@@ -850,12 +868,14 @@ pub fn insights_with(
     // Features: done-ness evaluated live against the definition of done.
     for row in crate::features::list(store, index, prefix)? {
         let report = crate::features::evaluate(store, index, prefix, &row.slug)?;
-        let met = report.checks.iter().filter(|c| c.count > 0).count();
-        ins.features.push((
-            row.slug,
-            row.status,
-            format!("{met}/{}", report.checks.len()),
-        ));
+        let (met, total) = report.score();
+        ins.features.push(FeatureProgress {
+            slug: row.slug,
+            status: row.status,
+            fraction: format!("{met}/{total}"),
+            done: report.done,
+            by_parts: report.by_parts(),
+        });
     }
 
     let mut churn: Vec<(String, usize)> = Vec::new();
@@ -2513,7 +2533,28 @@ mod tests {
         assert!(ins
             .features
             .iter()
-            .any(|(s, st, f)| s == "render" && st == "building" && f == "4/4"));
+            .any(|f| f.slug == "render" && f.status == "building" && f.fraction == "4/4"));
+
+        // A parent is judged by its parts (ADR-028), and insights must say
+        // so too. Reading the fraction off the parent's own links made the
+        // root of a spine report what it happened to be linked to directly
+        // while every part under it was ready.
+        crate::features::add(&store, "twin/app", "surface", "Surface", "building").unwrap();
+        let parent = crate::features::feature_sid("twin/app", "surface");
+        crate::features::link(&store, "twin/app", "render", "part_of", &parent).unwrap();
+        let index = fresh_index(&store);
+        let report = crate::features::evaluate(&store, &index, "twin/app", "surface").unwrap();
+        assert!(report.by_parts() && report.done, "its one part is ready");
+        assert_eq!(report.checks.iter().filter(|c| c.count > 0).count(), 0);
+
+        let ins = insights(&store, "twin/app").unwrap();
+        let surface = ins.features.iter().find(|f| f.slug == "surface").unwrap();
+        assert!(surface.by_parts);
+        assert!(surface.done, "the part is ready, so the parent is");
+        assert_eq!(
+            surface.fraction, "1/1",
+            "the fraction counts parts, not the parent's own links"
+        );
     }
 
     #[test]

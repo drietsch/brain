@@ -366,16 +366,31 @@ pub fn predicate_phrase(predicate: &str, outgoing: bool) -> String {
         ("conforms_to", false) => "is the contract for",
         ("concerns", true) => "belongs to",
         ("concerns", false) => "includes",
+        // Read from the other end, a definition-of-done edge says what the
+        // record does for the feature. Without these the fall-through
+        // produced "is implemented by by" on every implementation file.
         ("implemented_by", true) => "is built by",
+        ("implemented_by", false) => "builds",
         ("tested_by", true) => "is tested by",
+        ("tested_by", false) => "tests",
         ("decided_by", true) => "was decided by",
+        ("decided_by", false) => "decides",
         ("documented_in", true) => "is documented in",
+        ("documented_in", false) => "documents",
         ("defined_in", true) => "is defined in",
         ("defined_in", false) => "defines",
         ("changes", true) => "changes",
         ("changes", false) => "was changed by",
         ("verified_by", true) => "was verified by",
+        ("verified_by", false) => "verified",
         ("failed", true) => "failed",
+        ("failed", false) => "failed in",
+        ("skipped", true) => "skipped",
+        ("skipped", false) => "was skipped in",
+        ("includes", true) => "ran",
+        ("includes", false) => "ran in",
+        ("touched", true) => "edited",
+        ("touched", false) => "was edited by",
         ("attached_to", true) => "belongs to",
         ("attached_to", false) => "owns",
         ("part_of", true) => "is part of",
@@ -513,5 +528,31 @@ mod tests {
         assert_eq!(predicate_phrase("imports", false), "is used by");
         assert_eq!(predicate_phrase("covers", false), "is tested by");
         assert_eq!(predicate_phrase("weird_edge", true), "weird edge");
+    }
+
+    /// Every edge a feature or a run writes is read from both ends. The
+    /// generic fall-through produces "is implemented by by", which is what
+    /// an implementation file used to say about the feature claiming it.
+    #[test]
+    fn an_edge_reads_from_both_ends() {
+        for predicate in [
+            "implemented_by",
+            "tested_by",
+            "decided_by",
+            "documented_in",
+            "verified_by",
+            "failed",
+            "skipped",
+            "includes",
+            "touched",
+        ] {
+            for outgoing in [true, false] {
+                let phrase = predicate_phrase(predicate, outgoing);
+                assert!(
+                    !phrase.contains("by by") && !phrase.contains('_'),
+                    "{predicate} (outgoing={outgoing}) reads as {phrase:?}"
+                );
+            }
+        }
     }
 }

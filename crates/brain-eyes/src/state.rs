@@ -89,6 +89,9 @@ pub struct Loaded {
     /// Every claim and its proof. Now reads it for the census, Evidence
     /// reads it whole; computing it twice per page would be waste.
     evidence: OnceLock<crate::dto::EvidenceView>,
+    /// Which feature each thing serves, derived through the files a
+    /// feature declares. Every list surface asks it per row.
+    spine: OnceLock<brain_observe::spine::Spine>,
 }
 
 impl Loaded {
@@ -119,6 +122,14 @@ impl Loaded {
     pub fn findings(&self) -> &[Finding] {
         self.findings.get_or_init(|| {
             coherence::check(&self.store, &self.index, self.prefix()).unwrap_or_default()
+        })
+    }
+
+    /// Which feature everything serves. A pure function of the graph, so
+    /// it is built once per version like every other judgment here.
+    pub fn spine(&self) -> &brain_observe::spine::Spine {
+        self.spine.get_or_init(|| {
+            brain_observe::spine::build(&self.store, &self.index, self.prefix()).unwrap_or_default()
         })
     }
 
@@ -158,6 +169,9 @@ impl Loaded {
         self.events();
         self.insights();
         self.attention();
+        // Before findings: the coherence pass reads the spine, and a
+        // second build per version would be pure waste.
+        self.spine();
         self.findings();
         self.registry();
         self.fitness();
@@ -301,6 +315,7 @@ fn build(config: &Config) -> Result<Loaded, String> {
         fitness: OnceLock::new(),
         mri: OnceLock::new(),
         evidence: OnceLock::new(),
+        spine: OnceLock::new(),
     })
 }
 

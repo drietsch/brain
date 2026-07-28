@@ -125,6 +125,7 @@ pub const COMMANDS: &[Cmd] = &[
     Cmd { group: "Brain functions", name: "wake", args: "<prefix> [--full]", summary: "orientation: last sleep, the delta since, attention, warn-stale, in-flight work, coherence — one command" },
     Cmd { group: "Brain functions", name: "tidy", args: "[dir] [--prefix <p>] [--fix --cap fs] [--rm <path>]", summary: "clean up: drifted/orphaned projections, retired artifacts, legacy assets, concluded prototypes — fixes are governed changes (auditable, revertible); deletion only via explicit --rm" },
     Cmd { group: "Brain functions", name: "attend", args: "<prefix> [--top N]", summary: "attention: what deserves attention now, ranked with reasons" },
+    Cmd { group: "Brain functions", name: "spine", args: "<prefix> [--unclaimed <kind>]", summary: "what each feature reaches through the files it declares, what no feature claims, and which declared slots nothing corroborates" },
     Cmd { group: "Brain functions", name: "sleep", args: "<prefix>", summary: "consolidation: distill activity since last sleep into durable memory" },
     Cmd { group: "Brain functions", name: "related", args: "<name> [--top N]", summary: "association: what is related (co-change, co-mention, shared imports)" },
     Cmd { group: "Brain functions", name: "eyes", args: "[--prefix P] [--bind IP] [--port N] [--root DIR]", summary: "the visual layer for people: judgments as sentences, content you can read, a map of the system \u{2014} read-only, on localhost" },
