@@ -61,6 +61,23 @@ adoption; because nothing authoritative lives in an index, backend risk is
 contained to performance, never correctness. Edge semantics are defined once,
 in `object_edges` — every backend shares them.
 
+The same bargain is struck one level down, for bytes rather than answers.
+`.brain/objects.pack` holds every object's canonical bytes in one file,
+because reading the graph as 10,575 loose files costs 979 ms and as one
+file 4 ms. It is derived, disposable, never replicated, and verified on
+read exactly as a loose object is — the loose objects stay the record.
+Two caches, one rule: **nothing authoritative lives in either.**
+
+That rule is also the answer to "would an embedded graph database make
+this faster?", asked and measured in 2026-07. It would not have: the
+`Index` trait hands back `NodeId`s, so a faster backend answers *which
+nodes* sooner while the cost sat entirely in what happens next — turning
+ids into objects, and doing it again on the next call. Caching parsed
+objects, memoising the put feed and packing the bytes took a commit from
+10.9 s to 0.14 s and `brain wake` from 2.9 s to 0.05 s, with no engine
+adopted. The seam stays open; the question is worth re-asking when the
+graph no longer fits in memory, which at 2.6 MB is a long way off.
+
 ## Authority model
 
 - Possibility is never permission: the existence of a foreign symbol does not

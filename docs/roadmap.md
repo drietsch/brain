@@ -45,6 +45,17 @@ embedding annotations beside hashes for similarity retrieval. The `brain-index` 
 benchmarks embedded graph-database backends (OverGraph, Graph_D) against
 `MemIndex` on real twin data and adopts one only if it wins.
 
+**Asked and answered once already (2026-07, prompted by GrafeoDB).** The
+measurements pointed away from the index: warm index open was 10 ms while
+the query after it took 1.92 s, because the `Index` trait returns
+`NodeId`s and the cost was turning those into objects — repeatedly, and
+one file at a time. Caching parsed objects, memoising the put feed and
+packing object bytes took a commit from 10.9 s to 0.14 s and `brain wake`
+from 2.9 s to 0.05 s. No engine was adopted and the seam is untouched.
+Two things would make the question live again: a graph too large to hold
+in memory, or queries that are genuinely declarative and traversal-heavy
+rather than "latest value for this (subject, property)".
+
 ## Stage 4 — Replication and distribution
 
 ~~Content-addressed sync between stores~~ (done: `brain pull|push`, set-union
