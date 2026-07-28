@@ -684,10 +684,10 @@ fn prose_of(f: &Fixture) -> String {
     for card in &now.attention {
         prose.extend(card.reasons.clone());
     }
-    for stat in &now.stats {
-        prose.push(stat.label.clone());
-        prose.push(stat.value.clone());
-        prose.extend(stat.note.clone());
+    prose.push(now.proof.sentence.clone());
+    for group in &now.proof.groups {
+        prose.push(group.label.clone());
+        prose.extend(group.cells.iter().map(|cell| cell.text.clone()));
     }
     for shelf in ["decisions", "plans", "documents", "features"] {
         let view = f
@@ -1151,4 +1151,48 @@ fn a_part_that_is_not_ready_sinks_its_parent() {
         !claim.proof.iter().any(|p| p.text.starts_with("nothing is linked as")),
         "a parent judged by parts is not failing for having no direct links"
     );
+}
+
+#[test]
+fn the_headline_never_claims_all_clear_while_something_needs_you() {
+    let f = fixture();
+    let now = f.state.read(crate::query::now::build).unwrap();
+
+    // The fixture has a drifted document, so something does need a person.
+    assert!(!now.needs_you.is_empty());
+    assert!(
+        !now.headline.contains("Everything checks out"),
+        "a cheerful lie above a list of problems: {}",
+        now.headline
+    );
+
+    // Identical concerns collapse into one, counted — four rows saying the
+    // same sentence are one thing that happened four times.
+    for concern in &now.needs_you {
+        assert!(concern.repeats >= 1);
+        assert_eq!(
+            concern.also.len(),
+            concern.repeats.saturating_sub(1).min(4),
+            "the count and the unfoldable detail must agree"
+        );
+    }
+
+    // The census reads every claim in the graph, and its arithmetic holds.
+    let proof = &now.proof;
+    assert!(proof.total > 0, "the fixture makes claims");
+    assert_eq!(
+        proof.total,
+        proof.groups.iter().map(|g| g.cells.len()).sum::<usize>()
+    );
+    assert_eq!(
+        proof.proven,
+        proof
+            .groups
+            .iter()
+            .flat_map(|g| &g.cells)
+            .filter(|c| c.state == "ready")
+            .count(),
+        "the headline number is the number of green cells, not a separate count"
+    );
+    assert!(proof.sentence.contains("claim"), "{}", proof.sentence);
 }

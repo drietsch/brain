@@ -86,6 +86,9 @@ pub struct Loaded {
     /// one more: a layout that were recomputed per request would place
     /// things differently each time a tab reloaded.
     mri: OnceLock<crate::dto::MriView>,
+    /// Every claim and its proof. Now reads it for the census, Evidence
+    /// reads it whole; computing it twice per page would be waste.
+    evidence: OnceLock<crate::dto::EvidenceView>,
 }
 
 impl Loaded {
@@ -131,6 +134,15 @@ impl Loaded {
         })
     }
 
+    /// Every claim in the graph with its proof, computed once per version.
+    pub fn evidence(&self) -> Result<crate::dto::EvidenceView, String> {
+        if let Some(view) = self.evidence.get() {
+            return Ok(view.clone());
+        }
+        let view = crate::query::evidence::build(self)?;
+        Ok(self.evidence.get_or_init(|| view).clone())
+    }
+
     /// The laid-out graph, computed once per version.
     pub fn mri(&self) -> Result<crate::dto::MriView, String> {
         if let Some(view) = self.mri.get() {
@@ -150,6 +162,7 @@ impl Loaded {
         self.registry();
         self.fitness();
         let _ = self.mri();
+        let _ = self.evidence();
     }
 }
 
@@ -287,6 +300,7 @@ fn build(config: &Config) -> Result<Loaded, String> {
         registry: OnceLock::new(),
         fitness: OnceLock::new(),
         mri: OnceLock::new(),
+        evidence: OnceLock::new(),
     })
 }
 

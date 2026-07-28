@@ -123,7 +123,7 @@ fn handle(request: Request, state: &Arc<AppState>) {
         "/api/tests" => json_result(request, state.read(query::tests::build)),
         "/api/work" => json_result(request, state.read(query::work::build)),
         "/api/mri" => json_result(request, state.read(|loaded| loaded.mri())),
-        "/api/evidence" => json_result(request, state.read(query::evidence::build)),
+        "/api/evidence" => json_result(request, state.read(|loaded| loaded.evidence())),
         "/api/features" => json_result(request, state.read(query::features::build)),
         "/api/media" => {
             let root = state.config.content_root.clone();

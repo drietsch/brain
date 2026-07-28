@@ -166,8 +166,9 @@ views.now = async () => {
   paintChrome(data.snapshot);
 
   const parts = [
-    h("h1", { class: "headline", text: data.headline }),
-    h("p", { class: "subhead", text: data.subhead }),
+    h("h1", { class: "hero", text: data.headline }),
+    h("p", { class: "hero-sub", text: data.subhead }),
+    census(data.proof),
   ];
 
   if (data.needs_you.length) {
@@ -176,8 +177,22 @@ views.now = async () => {
       const node = h("div", { class: `concern ${concern.severity}` },
         h("i", { class: `mark ${({ act: "bad", watch: "watch" })[concern.severity] ?? "quiet"}` }),
         h("div", {},
-          h("h3", { text: concern.title }),
+          h("h3", {},
+            concern.title,
+            concern.repeats > 1 ? h("span", { class: "repeats", text: `×${concern.repeats}` }) : null),
           h("p", { text: concern.reason }),
+          // A count you cannot unfold is a count you cannot check. The card
+          // itself opens the thing, so unfolding must not also navigate.
+          concern.also.length
+            ? h("details", { class: "also", onclick: (event) => event.stopPropagation() },
+                h("summary", { text: `and ${concern.repeats - 1} more like it` }),
+                h("ul", {},
+                  concern.also.map((line) => h("li", { text: line })),
+                  // Never let a shown list pass for the whole list.
+                  concern.repeats - 1 > concern.also.length
+                    ? h("li", { class: "faint", text: `${concern.repeats - 1 - concern.also.length} more are not listed here` })
+                    : null))
+            : null,
           fixLine(concern.fix_command)));
       if (concern.target) {
         node.style.cursor = "pointer";
@@ -188,18 +203,10 @@ views.now = async () => {
   }
 
   parts.push(h("h2", { class: "section", text: data.since.known ? `Since your last session, ${data.since.when}` : "Recently" }));
-  parts.push(h("div", { class: "since" },
-    h("div", {},
-      h("p", { class: "subhead", style: "margin-bottom:14px", text: data.since.summary }),
-      data.since.episodes.length
-        ? h("div", { class: "episodes" }, data.since.episodes.map(episodeRow))
-        : h("p", { class: "empty", text: "No activity recorded since then." })),
-    h("dl", { class: "stats" }, data.stats.map((stat) =>
-      h("div", { class: "stat" },
-        h("dt", { text: stat.label }),
-        h("dd", { class: stat.tone },
-          stat.value,
-          stat.note ? h("small", { text: stat.note }) : null))))));
+  parts.push(h("p", { class: "sub", text: data.since.summary }));
+  parts.push(data.since.episodes.length
+    ? h("div", { class: "episodes" }, data.since.episodes.map(episodeRow))
+    : h("p", { class: "empty", text: "Nothing has happened since. Work here and it will show up." }));
 
   if (data.attention.length) {
     parts.push(h("h2", { class: "section", text: "Where the pressure is" }));
@@ -210,7 +217,44 @@ views.now = async () => {
   }
 
   stage.replaceChildren(...parts);
+  settleCensus();
 };
+
+/**
+ * The census: every claim the system makes, one mark each.
+ *
+ * The same device as a feature's dimension strip, read at the scale of the
+ * whole graph. It is the product's thesis in one object — everything in
+ * here is a claim, and each one either can or cannot show its proof.
+ */
+function census(proof) {
+  if (!proof || !proof.total) return null;
+  return h("section", { class: "census" },
+    h("p", { class: "census-line", text: proof.sentence }),
+    h("div", { class: "census-groups" }, proof.groups.map((group) =>
+      h("div", { class: "census-group" },
+        h("div", { class: "census-cells" }, group.cells.map((cell) =>
+          h("button", {
+            class: "census-cell", "data-cell": cell.state, title: cell.text,
+            // A mark with no name is unreadable to anyone not looking at it.
+            "aria-label": cell.text,
+            onclick: () => showInspector(cell.id),
+          }))),
+        h("p", { class: "census-label" },
+          h("span", { text: group.label }),
+          h("span", { class: "census-count", text: `${group.proven}/${group.total}` }))))));
+}
+
+/* The one orchestrated moment: the census resolves like an instrument
+   taking a reading, left to right, then settles. It runs once per page
+   and never while a person is reading. */
+function settleCensus() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const cells = stage.querySelectorAll(".census-cell");
+  cells.forEach((cell, index) => {
+    cell.style.animation = `settle .34s ease-out ${Math.min(index * 22, 700)}ms both`;
+  });
+}
 
 function episodeRow(episode) {
   return h("button", { class: "episode", onclick: () => go("timeline") },
@@ -1352,11 +1396,14 @@ async function showInspector(id) {
           ...items.slice(0, 8).map((ref) =>
             h("a", { href: `#thing?id=${encodeURIComponent(ref.id)}`, text: ref.label })))
       : null;
+    // These arrive as references already; treating them as edges is what
+    // left this section blank, and then threw on the first thing that had
+    // a neighbour at all.
     parts.push(section("Around it",
-      list("uses", nb.upstream?.map((r) => r.target)),
-      list("used by", nb.downstream?.map((r) => r.target)),
-      list("tests", nb.tests?.map((r) => r.target)),
-      list("documents", nb.documents?.map((r) => r.target))));
+      list("uses", nb.upstream),
+      list("used by", nb.downstream),
+      list("tests", nb.tests),
+      list("documents", nb.docs?.concat(nb.decisions ?? []))));
   }
   if (data.body?.origin) {
     parts.push(section("Where these bytes came from",
@@ -1441,7 +1488,10 @@ async function paintRail() {
       node.textContent = value;
       if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
     };
-    set("now", now.needs_you.length, now.needs_you.length ? "watch" : null);
+    // Occurrences, not rows: a row that collapsed four identical concerns
+    // still stands for four, and the headline counts it that way.
+    const notes = now.needs_you.reduce((sum, concern) => sum + concern.repeats, 0);
+    set("now", notes, notes ? "watch" : null);
     set("work", work.sessions.filter((s) => s.live).length + work.changes.length,
       work.changes.length ? "watch" : null);
     set("tests", tests.failing.length, tests.failing.length ? "bad" : null);

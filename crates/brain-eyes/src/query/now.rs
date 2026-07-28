@@ -12,7 +12,7 @@ use crate::say;
 use crate::state::Loaded;
 use brain_core::ids::StableId;
 use brain_index::Index;
-use brain_observe::{attention, features, lifecycle, sleep, twin};
+use brain_observe::{attention, sleep, twin};
 
 pub fn build(loaded: &Loaded) -> Result<NowView, String> {
     let store = &loaded.store;
@@ -44,6 +44,8 @@ pub fn build(loaded: &Loaded) -> Result<NowView, String> {
                 .join(" · "),
             fix_command: Some(format!("brain twin tests {prefix}")),
             target: None,
+            repeats: 1,
+            also: Vec::new(),
         });
     }
 
@@ -65,6 +67,8 @@ pub fn build(loaded: &Loaded) -> Result<NowView, String> {
             reason,
             fix_command: fix,
             target: None,
+            repeats: 1,
+            also: Vec::new(),
         });
     }
 
@@ -88,6 +92,8 @@ pub fn build(loaded: &Loaded) -> Result<NowView, String> {
                 doc.kind, doc.slug
             )),
             target: Some(query::make_ref(index, store, &sid)),
+            repeats: 1,
+            also: Vec::new(),
         });
     }
 
@@ -101,12 +107,22 @@ pub fn build(loaded: &Loaded) -> Result<NowView, String> {
         }
         let slug = labels.get("slug").cloned().unwrap_or_default();
         let (stage, note) = say::change_stage(&status);
+        let what = labels.get("title").cloned().unwrap_or_else(|| slug.clone());
+        // Name the file it touches. Four tidy moves share a title and are
+        // told apart only by what they moved — a collapsed count is worth
+        // nothing if unfolding it repeats the same sentence four times.
+        let reason = match labels.get("target") {
+            Some(path) => format!("{what} — {path}: {note}"),
+            None => format!("{what}: {note}"),
+        };
         needs_you.push(Concern {
             severity: "note".to_string(),
             title: format!("a governed change is {stage}"),
-            reason: format!("{}: {note}", labels.get("title").cloned().unwrap_or(slug.clone())),
+            reason,
             fix_command: Some(format!("brain change show {prefix} {slug}")),
             target: Some(query::make_ref(index, store, &sid)),
+            repeats: 1,
+            also: Vec::new(),
         });
     }
 
@@ -127,6 +143,8 @@ pub fn build(loaded: &Loaded) -> Result<NowView, String> {
                 .to_string(),
             fix_command: None,
             target: None,
+            repeats: 1,
+            also: Vec::new(),
         });
     }
 
@@ -136,11 +154,12 @@ pub fn build(loaded: &Loaded) -> Result<NowView, String> {
         _ => 2,
     };
     needs_you.sort_by_key(|c| order(&c.severity));
+    let needs_you = group(needs_you);
 
-    let (headline, subhead) = headline(&needs_you, insights);
+    let proof = census(loaded)?;
+    let (headline, subhead) = headline(&needs_you, insights, &proof);
     let since = since_last_session(loaded, now)?;
     let attention_cards = attention_cards(loaded, ranked);
-    let stats = stats(loaded, insights)?;
 
     Ok(NowView {
         snapshot: loaded.snapshot.clone(),
@@ -149,11 +168,83 @@ pub fn build(loaded: &Loaded) -> Result<NowView, String> {
         needs_you,
         since,
         attention: attention_cards,
-        stats,
+        proof,
     })
 }
 
-fn headline(concerns: &[Concern], insights: &twin::Insights) -> (String, String) {
+/// Four identical concerns are one concern that happened four times.
+///
+/// Tidy archiving four plans produced four rows reading "a governed change
+/// is applied" — the same sentence, four times, which is noise rather than
+/// four things to decide about.
+fn group(concerns: Vec<Concern>) -> Vec<Concern> {
+    let mut out: Vec<Concern> = Vec::new();
+    for concern in concerns {
+        if let Some(existing) = out
+            .iter_mut()
+            .find(|c| c.title == concern.title && c.severity == concern.severity)
+        {
+            existing.repeats += 1;
+            // One example is enough to recognise the kind; the count says
+            // how much of it there is.
+            if existing.also.len() < 4 {
+                existing.also.push(concern.reason.clone());
+            }
+            continue;
+        }
+        out.push(Concern {
+            repeats: 1,
+            also: Vec::new(),
+            ..concern
+        });
+    }
+    out
+}
+
+/// Every claim the graph makes, reduced to one mark each.
+fn census(loaded: &Loaded) -> Result<ProofCensus, String> {
+    let evidence = loaded.evidence()?;
+    let mut groups: Vec<ProofGroup> = Vec::new();
+    for category in &evidence.categories {
+        let cells: Vec<ProofCell> = evidence
+            .claims
+            .iter()
+            .filter(|claim| claim.category == category.id)
+            .map(|claim| ProofCell {
+                id: claim.id.clone(),
+                state: if claim.supported { "ready" } else { "unproven" }.to_string(),
+                text: format!("{} — {}", claim.claim, claim.verdict),
+            })
+            .collect();
+        groups.push(ProofGroup {
+            label: category.label.clone(),
+            proven: category.supported,
+            total: cells.len(),
+            cells,
+        });
+    }
+    let proven = groups.iter().map(|g| g.proven).sum::<usize>();
+    let total = groups.iter().map(|g| g.total).sum::<usize>();
+    let sentence = if total == 0 {
+        "Nothing here claims anything yet.".to_string()
+    } else if proven == total {
+        format!("Every one of the {total} claims can show its proof.")
+    } else {
+        format!("{proven} of {total} claims can show their proof.")
+    };
+    Ok(ProofCensus {
+        proven,
+        total,
+        sentence,
+        groups,
+    })
+}
+
+fn headline(
+    concerns: &[Concern],
+    insights: &twin::Insights,
+    proof: &ProofCensus,
+) -> (String, String) {
     let acts = concerns.iter().filter(|c| c.severity == "act").count();
     let watches = concerns.iter().filter(|c| c.severity == "watch").count();
     if let Some(first) = concerns.iter().find(|c| c.severity == "act") {
@@ -177,8 +268,27 @@ fn headline(concerns: &[Concern], insights: &twin::Insights) -> (String, String)
     }
     let passing = insights
         .last_run
-        .map(|(_, total, passed, _)| format!("{passed}/{total} tests passing"))
+        .map(|(_, total, passed, _)| format!("{passed} of {total} tests passing"))
         .unwrap_or_else(|| "no test run imported yet".to_string());
+
+    // "Everything checks out" while five things sit under Needs you is the
+    // kind of cheerful lie this product exists to refuse.
+    let notes: usize = concerns.iter().map(|c| c.repeats).sum();
+    if notes > 0 {
+        return (
+            format!(
+                "{} worth knowing about.",
+                say::count(notes as u64, "thing is", "things are")
+            ),
+            format!("Nothing is broken: {passing}, and no contradictions."),
+        );
+    }
+    if proof.proven < proof.total {
+        return (
+            proof.sentence.clone(),
+            format!("Nothing is broken: {passing}, and no contradictions."),
+        );
+    }
     (
         "Everything checks out.".to_string(),
         format!("{passing}; no contradictions and no drifting documents."),
@@ -277,101 +387,3 @@ fn attention_cards(loaded: &Loaded, ranked: &[attention::Attention]) -> Vec<Atte
         .collect()
 }
 
-fn stats(loaded: &Loaded, insights: &twin::Insights) -> Result<Vec<Stat>, String> {
-    let store = &loaded.store;
-    let index: &brain_index::MemIndex = &loaded.index;
-    let prefix = loaded.prefix();
-    let mut out = Vec::new();
-
-    if let Some((at, total, passed, failed)) = insights.last_run {
-        out.push(Stat {
-            label: "Tests".to_string(),
-            value: format!("{passed} of {total} passing"),
-            note: Some(format!("last run {}", say::ago(loaded.snapshot.generated_at_ms, at))),
-            tone: if failed == 0 { "good" } else { "bad" }.to_string(),
-        });
-    } else {
-        out.push(Stat {
-            label: "Tests".to_string(),
-            value: "no run imported yet".to_string(),
-            note: Some("nothing has told the graph how the tests went".to_string()),
-            tone: "quiet".to_string(),
-        });
-    }
-
-    // Features that can show everything their contract asks for.
-    let mut complete = 0usize;
-    let rows = features::list(store, index, prefix).map_err(|e| e.to_string())?;
-    for row in &rows {
-        let report =
-            features::evaluate(store, index, prefix, &row.slug).map_err(|e| e.to_string())?;
-        if report.done {
-            complete += 1;
-        }
-    }
-    if !rows.is_empty() {
-        out.push(Stat {
-            label: "Features".to_string(),
-            value: format!("{complete} of {} complete", rows.len()),
-            note: Some("built, tested, decided and documented".to_string()),
-            tone: if complete == rows.len() { "good" } else { "watch" }.to_string(),
-        });
-    }
-
-    let living = living_documents(loaded)?;
-    let warn = insights
-        .stale_docs
-        .iter()
-        .filter(|d| d.severity == twin::Severity::Warn)
-        .count();
-    if living > 0 {
-        out.push(Stat {
-            label: "Documents".to_string(),
-            value: format!("{} of {living} current", living.saturating_sub(warn)),
-            note: Some("documents expected to track the code".to_string()),
-            tone: if warn == 0 { "good" } else { "watch" }.to_string(),
-        });
-    }
-
-    out.push(Stat {
-        label: "Code".to_string(),
-        value: format!(
-            "{} files, {} functions and types",
-            insights.files, insights.symbols
-        ),
-        note: None,
-        tone: "quiet".to_string(),
-    });
-
-    if let (Some(branch), Some(commit)) = (&insights.git_branch, &insights.git_commit) {
-        out.push(Stat {
-            label: "Git".to_string(),
-            value: branch.clone(),
-            note: Some(commit.chars().take(12).collect()),
-            tone: "quiet".to_string(),
-        });
-    }
-    Ok(out)
-}
-
-/// Documents whose kind is expected to track the code (rot policy `warn`),
-/// and that are still active.
-fn living_documents(loaded: &Loaded) -> Result<usize, String> {
-    let store = &loaded.store;
-    let index = &loaded.index;
-    let prefix = loaded.prefix();
-    let mut count = 0usize;
-    for (kind, def) in loaded.registry() {
-        let severity = twin::rot_severity(&def.rot, kind);
-        if severity != Some(twin::Severity::Warn) {
-            continue;
-        }
-        for (sid, _) in query::scoped(index, store, prefix, kind)? {
-            let (state, _) = lifecycle::of(index, store, &sid).map_err(|e| e.to_string())?;
-            if state.is_active() {
-                count += 1;
-            }
-        }
-    }
-    Ok(count)
-}

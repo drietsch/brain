@@ -42,8 +42,12 @@ depends on what.
 | **MRI** | What shape is this system, and what is moving? |
 | **Search** (⌘K) | Take me to X |
 
-**Now** leads with the worst true thing, then the short list that needs a
-person, then what moved since your last `brain sleep`.
+**Now** opens with the **census**: every claim the graph makes, one mark
+each, grouped by kind. It is the dimension strip read at the scale of the
+whole system, and it answers the product's own question in one line —
+*how much of what this thing asserts can it actually show?* Below it: what
+needs a person (identical concerns collapsed and counted), then what moved
+since your last `brain sleep`, then where the pressure is.
 
 **Work** shows the coding-agent sessions that ran in this workspace: what
 each was asked to do, which model, how long, which files it edited, and

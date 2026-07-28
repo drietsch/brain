@@ -55,14 +55,10 @@ pub struct Concern {
     /// The exact command that resolves it — Eyes never writes.
     pub fix_command: Option<String>,
     pub target: Option<Ref>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct Stat {
-    pub label: String,
-    pub value: String,
-    pub note: Option<String>,
-    pub tone: String,
+    /// How many times this same concern occurs. Identical rows collapse.
+    pub repeats: usize,
+    /// The other occurrences' reasons, so a count can be unfolded.
+    pub also: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -84,6 +80,35 @@ pub struct AttentionCard {
     pub reasons: Vec<String>,
 }
 
+/// One claim in the system, reduced to a mark.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProofCell {
+    pub id: String,
+    pub state: String,
+    pub text: String,
+}
+
+/// A group of claims that share a category.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProofGroup {
+    pub label: String,
+    pub proven: usize,
+    pub total: usize,
+    pub cells: Vec<ProofCell>,
+}
+
+/// Every claim the system makes, and how many can show their proof.
+///
+/// The same device as a feature's dimension strip, read at the scale of
+/// the whole graph: everything in here is a claim with a state.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProofCensus {
+    pub proven: usize,
+    pub total: usize,
+    pub sentence: String,
+    pub groups: Vec<ProofGroup>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct NowView {
     pub snapshot: Snapshot,
@@ -93,7 +118,8 @@ pub struct NowView {
     pub needs_you: Vec<Concern>,
     pub since: SinceLastSession,
     pub attention: Vec<AttentionCard>,
-    pub stats: Vec<Stat>,
+    /// The state of every claim in the graph, at a glance.
+    pub proof: ProofCensus,
 }
 
 // ---------------------------------------------------------------------------

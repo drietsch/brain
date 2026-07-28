@@ -70,6 +70,28 @@ Supporting decisions:
    made. Facet counts are computed against the *other* active filters, so
    a count never promises rows a second filter would remove.
 
+7. **Now opens with the census.** The home screen previously led with a
+   serif line and a stack of cards — and, worse, said *"Everything checks
+   out"* while five things sat under *Needs you*. It now opens with the
+   state of **every claim in the graph**, one mark each, grouped by
+   category: the dimension strip read at the scale of the whole system.
+   Identical concerns collapse into one row with a count and an
+   unfoldable detail, because four rows saying the same sentence are one
+   thing that happened four times. Collapsing puts a burden on the rows:
+   each occurrence must name what distinguishes it — a governed change
+   names the file it touched — or the count unfolds into the same
+   sentence repeated, which is worse than not collapsing at all. The
+   count is of occurrences everywhere it appears, including the rail, so
+   the navigation and the headline never disagree.
+
+   The census is also the one place motion is spent: the cells resolve
+   left to right on load, like an instrument taking a reading, and not at
+   all under `prefers-reduced-motion`. Nothing else on the page animates.
+
+   And one thing was removed rather than added. A column of summary
+   statistics used to sit beside the recent activity; the census already
+   answers what it answered, so it is gone.
+
 ## Consequences
 
 - `assets/list.js` is the single list engine: facets, text filter, sort,

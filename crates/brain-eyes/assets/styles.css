@@ -160,6 +160,53 @@ a:hover { text-decoration: underline; }
 .stage.dark { background: var(--night); padding: 0; }
 .loading { color: var(--muted); }
 
+/* ------------------------------------------------------------------ hero
+   Now opens with the state of every claim in the system. The serif is
+   given room here and nowhere else — this is the one place the type is
+   allowed to be the loudest thing on the screen. */
+.hero {
+  font: 400 34px/1.16 var(--judgment); letter-spacing: -.02em;
+  margin: 4px 0 8px; max-width: 22ch; color: var(--ink);
+}
+.hero-sub { color: var(--meta); font-size: 13px; margin: 0 0 22px; max-width: 62ch; }
+
+.census { margin: 0 0 34px; }
+.census-line {
+  font: 400 15px/1.5 var(--judgment); color: var(--body);
+  margin: 0 0 14px; max-width: 60ch;
+}
+.census-groups { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
+.census-group { display: flex; flex-direction: column; gap: 7px; }
+.census-cells { display: flex; gap: 3px; flex-wrap: wrap; max-width: 260px; }
+.census-cell {
+  width: 11px; height: 22px; border-radius: 2px; padding: 0;
+  background: var(--proof); border: 1px solid transparent; box-sizing: border-box;
+}
+.census-cell[data-cell="unproven"] { background: transparent; border: 2px solid var(--unproven); }
+.census-cell:hover { transform: scaleY(1.14); }
+.census-label {
+  margin: 0; display: flex; gap: 8px; align-items: baseline;
+  font: 500 10px/1 var(--record); text-transform: uppercase; letter-spacing: .09em;
+  color: var(--muted);
+}
+.census-count {
+  font-family: var(--record); font-variant-numeric: tabular-nums;
+  text-transform: none; letter-spacing: 0; color: var(--faint);
+}
+@keyframes settle {
+  from { opacity: 0; transform: scaleY(.18); }
+  to { opacity: 1; transform: scaleY(1); }
+}
+
+.repeats {
+  margin-left: 8px; font: 400 11px/1 var(--record); font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.also { margin-top: 7px; }
+.also summary { color: var(--meta); font-size: 11.5px; cursor: pointer; }
+.also ul { margin: 7px 0 0; padding-left: 16px; color: var(--meta); font-size: 11.5px; }
+.also .faint { color: var(--faint); list-style: none; margin-left: -16px; }
+
 /* --------------------------------------------------------------- headings */
 /* Serif: everything the brain concluded. */
 .lede {
@@ -338,6 +385,28 @@ button.strip:hover i { transform: scale(1.18); }
 .proof { margin: 0; padding: 0 0 0 18px; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .proof li { display: flex; gap: 10px; align-items: baseline; font-size: 12px; }
 .proof .basis { color: var(--faint); font-size: 11px; }
+
+.episodes { display: flex; flex-direction: column; }
+.episode {
+  display: grid; grid-template-columns: 112px 1fr; gap: 16px; padding: 12px 0;
+  border-top: 1px solid var(--line-soft); text-align: left; width: 100%;
+}
+.episode:first-child { border-top: 0; }
+.episode time { color: var(--muted); font: 400 11px/1.6 var(--record); }
+.episode strong { font: 400 14px/1.45 var(--judgment); font-weight: 400; color: var(--ink); }
+.episode p { margin: 3px 0 0; color: var(--meta); font-size: 12px; }
+
+.attention { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.attention button {
+  padding: 14px 16px; background: var(--paper); border: 1px solid var(--line);
+  border-radius: 10px; text-align: left;
+}
+.attention button:hover { border-color: var(--control); }
+.attention .who {
+  display: flex; align-items: center; gap: 8px; font: 400 12.5px/1.4 var(--record);
+  color: var(--ink); word-break: break-all;
+}
+.attention ul { margin: 8px 0 0; padding: 0; list-style: none; color: var(--meta); font-size: 11.5px; }
 
 .concerns { display: flex; flex-direction: column; gap: 8px; }
 .concern {
