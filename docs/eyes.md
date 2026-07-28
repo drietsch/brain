@@ -27,12 +27,21 @@ when the recording no longer matches the graph.
 the MRI draws the whole anatomy in three dimensions, stacked by what
 depends on what.
 
+**Everything relates to a feature, and the path is checkable.** A feature
+declares its files; the twin already records that a test covers them, a
+document mentions them, a session edited them, a change targets them. So
+every test, decision, session and governed change says which feature it
+serves and *how it was reached* — "it changes `crates/brain-eyes/src/http.rs`,
+which this feature is built by". Nothing infers a feature or a part from
+a path (ADR-030).
+
 ## The surfaces
 
 | | Question it answers |
 |---|---|
 | **Now** | Should I worry, and what changed since I left? |
 | **Work** | Who is working here, and what is unfinished? |
+| **Roadmap** | What is planned, what is moving, and what is done? |
 | **Features** | What do we claim, and what actually backs it? |
 | **Tests** | What passed, what failed, and what did the failure look like? |
 | **Artifacts** | Show me everything the brain holds, so I can read it |
@@ -54,12 +63,26 @@ each was asked to do, which model, how long, which files it edited, and
 what it produced. This is the graph's only record of a principal
 (ADR-025); import it with `brain sessions import`.
 
+**Roadmap** reads down the spine: each stage, the features planned for
+it, and the work in flight against each one. A stage's state is never
+derived from its features — Stage 1 is a research question, and four
+finished features do not answer it — so the stage says what was recorded
+about it and the features say what they can show. Stages are authored,
+never parsed out of `docs/roadmap.md`.
+
 **Features** shows features and their parts as a tree. A feature with
 parts is judged by its parts — readiness rolls up from the leaves and is
 never set by hand (ADR-028) — and the row says which part is holding it
 up. Every row carries a **dimension strip**: one cell per part, or one per
 requirement for a leaf, at three scales from a seven-pixel row indicator
-to a labelled bar in the dossier.
+to a labelled bar in the dossier. Clicking a labelled cell names the
+records behind it and what each one currently says.
+
+The page opens with the **coverage census**: how much of the graph belongs
+to any feature, per kind, with what nothing claims named rather than
+rounded away. It answers a different question from the census on Now —
+that one asks whether a claim can show its proof, this one whether a
+record is claimed at all.
 
 **Tests** lists every recorded case with its verdict and its history,
 every imported run with what it named, and every file the twin classified
@@ -134,7 +157,8 @@ ADR-023 sets the read-only boundary. ADR-024 says what Eyes is for.
 ADR-025 makes agent sessions first class. ADR-026 amends ADR-024's ban on
 whole-graph drawing with the conditions under which it is honest.
 ADR-027 covers evidence you can look at. ADR-028 gives features parts.
-ADR-029 is the design system: type encodes epistemology. `design-draft/`
+ADR-029 is the design system: type encodes epistemology. ADR-030 makes
+the feature the spine. `design-draft/`
 remains a visual and conceptual reference whose palette, geometry and
 coverage strip this build adopts — a source of ideas, never an
 information architecture to reproduce.

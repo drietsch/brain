@@ -71,6 +71,7 @@ brain docs generate            # regenerate docs: md + screenshots + narrated sc
 cargo run -p brain -- twin insights twin/self   # churn, hubs, growth, notes, decisions
 cargo run -p brain -- wake twin/self            # orientation: last sleep, the delta since, attention, stale, in-flight
 cargo run -p brain -- attend twin/self          # attention: what matters now, ranked with reasons
+cargo run -p brain -- spine twin/self           # what each feature reaches, what nothing claims, what nothing corroborates
 cargo run -p brain -- related twin/self/crates/brain-observe/src/twin.rs  # association, with why
 cargo run -p brain -- sleep twin/self           # consolidation: distill the session into memory
 cargo run -p brain -- plan done twin/self <slug>   # lifecycle: finished plans stop rotting and leave the lists

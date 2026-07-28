@@ -38,15 +38,18 @@ pub fn block(store: &Store, index: &MemIndex, prefix: &str) -> Result<String, St
     out.push_str("| kind | placement | lives at | author via | requires | enforcement |\n");
     out.push_str("|---|---|---|---|---|---|\n");
     for (kind, def) in &registry {
-        if def.capture.is_empty() && def.project_to.is_empty() && def.home.is_empty() {
-            continue;
-        }
+        // A kind with no file anywhere still has to appear. A taught,
+        // graph-only kind that is missing from this table is a kind no
+        // agent knows exists — which is the opposite of what teaching one
+        // is for.
         let home = if !def.project_to.is_empty() {
             def.project_to.clone()
         } else if !def.home.is_empty() {
             def.home.join(", ")
-        } else {
+        } else if !def.capture.is_empty() {
             def.capture.join(", ")
+        } else {
+            "in the graph only".to_string()
         };
         let author = match def.placement.as_str() {
             "graph_first" => format!("`brain artifact new {prefix} {kind} <slug>`"),

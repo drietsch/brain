@@ -6,145 +6,176 @@
 ## Insights (`brain twin insights`)
 ```
 == twin insights: twin/self ==
-last sleep (1862s ago): 9 added, 18 changed file(s); 8 doc update(s); 3 protocol(s); last run 154/154 ok; 1 note(s); 16 memory digest(s); attention: crates/brain-core/src/ids.rs, crates/brain-eyes/src/dto.rs, crates/brain-eyes/src/state.rs
-files: 184 present, 5 deleted   symbols: 1159   relations: 1603
-git: claude/aztechement-detailed-review-upo8tb @ a7d30d22937d
-tests: 0 test file(s), 168 declared; last run 1194s ago: ok (155/155 passed, 0 failed)
+last sleep (7815s ago): 0 added, 10 changed file(s); 2 doc update(s); 3 protocol(s); last run 155/155 ok; 1 note(s); 10 memory digest(s); attention: crates/brain-eyes/src/dto.rs, crates/brain-core/src/ids.rs, crates/brain-eyes/src/state.rs
+files: 188 present, 5 deleted   symbols: 1224   relations: 1684
+git: claude/aztechement-detailed-review-upo8tb @ 0fb275fe6a9d
+tests: 0 test file(s), 178 declared; last run 532s ago: ok (165/165 passed, 0 failed)
 churn (most edited):
-    10 versions  crates/brain-eyes/assets/app.js
-     9 versions  docs/eyes.md
-     8 versions  crates/brain-cli/src/main.rs
-     7 versions  crates/brain-cli/src/manual.rs
-     6 versions  crates/brain-eyes/src/dto.rs
-  … showing 5 of 66 churned files
+    14 versions  crates/brain-eyes/assets/app.js
+    10 versions  crates/brain-eyes/src/dto.rs
+    10 versions  docs/eyes.md
+     9 versions  crates/brain-cli/src/main.rs
+     8 versions  crates/brain-cli/src/manual.rs
+  … showing 5 of 71 churned files
 hubs (most imported):
-    42 importers  crates/brain-core/src/ids.rs
-    33 importers  crates/brain-core/src/object.rs
-    31 importers  crates/brain-store/src/lib.rs
-    29 importers  crates/brain-index/src/lib.rs
-    26 importers  crates/brain-observe/src/twin.rs
+    44 importers  crates/brain-core/src/ids.rs
+    34 importers  crates/brain-core/src/object.rs
+    32 importers  crates/brain-store/src/lib.rs
+    30 importers  crates/brain-index/src/lib.rs
+    28 importers  crates/brain-observe/src/twin.rs
   … showing 5 of 32
 untested hubs (imported, no tests):
-    15 importers  crates/brain-eyes/src/dto.rs
-    15 importers  crates/brain-eyes/src/state.rs
-    13 importers  crates/brain-eyes/src/query/mod.rs
+    16 importers  crates/brain-eyes/src/dto.rs
+    16 importers  crates/brain-eyes/src/state.rs
+    14 importers  crates/brain-eyes/src/query/mod.rs
     12 importers  crates/brain-observe/src/lib.rs
      4 importers  crates/brain-core/src/lib.rs
   … showing 5 of 7
 largest (symbols declared):
     80 symbols  design-draft/support.js
-    77 symbols  crates/brain-cli/src/main.rs
-    65 symbols  crates/brain-observe/src/twin.rs
-    62 symbols  crates/brain-eyes/src/dto.rs
+    78 symbols  crates/brain-cli/src/main.rs
+    73 symbols  crates/brain-eyes/src/dto.rs
+    66 symbols  crates/brain-observe/src/twin.rs
     41 symbols  crates/brain-runtime/src/lib.rs
-  … showing 5 of 66
+  … showing 5 of 68
 external deps (unresolved imports):
-    38 uses  super::*
+    39 uses  super::*
+    23 uses  std::collections
     22 uses  std::fs
-    21 uses  std::collections
     12 uses  std::collections::BTreeMap
      7 uses  serde_json::json
   … showing 5 of 46
-decisions (ADRs, 29 active):
+decisions (ADRs, 30 active):
+  [accepted] adr-030-the-feature-is-the-spine: The feature is the spine
   [accepted] adr-029-type-encodes-epistemology: Type encodes epistemology
   [accepted] adr-028-features-have-parts: Features have parts
   [accepted] adr-025-agent-sessions-are-first-class: Agent sessions are first class
   [accepted] adr-026-the-anatomy-is-drawn-in-full: The anatomy is drawn in full
-  [accepted] adr-027-evidence-you-can-look-at: Evidence you can look at
-  … showing 5 of 29 decisions
+  … showing 5 of 30 decisions
 agent skills:
   [claude] twin: Orient in this codebase via the semantic twin instead of re-reading files — refresh, query structure, read past sessions' notes, record decisions and plans.
 agent config:
   [generic] agents.md (instructions)
   [claude] claude.md (instructions)
-custom artifacts (graph-defined kinds): doc ×7, runbook ×1, asset ×8
-features (DoD progress):
-  [building] eyes  4/4
-  [building] eyes-core  4/4
-  [building] eyes-http  4/4
-  [building] eyes-ux  4/4
-  [active] governed-changes  4/4
-  [active] semantic-twin  4/4
+custom artifacts (graph-defined kinds): doc ×7, runbook ×2, stage ×6, asset ×8
+features (progress):
+  [active] agent-sessions  4/4 linked
+  [active] artifact-registry  4/4 linked
+  [active] brain  13/13 parts
+  [active] brain-functions  4/4 linked
+  [active] evidence-and-assets  4/4 linked
+  [active] eyes  3/3 parts
+  [building] eyes-core  4/4 linked
+  [building] eyes-http  4/4 linked
+  [building] eyes-ux  4/4 linked
+  [active] governed-changes  4/4 linked
+  [active] index-and-cortex  4/4 linked
+  [active] kernel  4/4 linked
+  [active] native-code  4/4 linked
+  [active] semantic-twin  4/4 linked
+  [active] store  4/4 linked
+  [active] tests-in-the-graph  4/4 linked
+  [active] the-cli  4/4 linked
 possibly stale docs (mentioned files changed since):
+  [warn] feature-spine (runbook): crates/brain-observe/src/instructions.rs
+  [warn] readme (doc): AGENTS.md, CLAUDE.md
+  [warn] twin (doc): AGENTS.md, CLAUDE.md
   [info] adr-001-relation-predicate-field (decision): crates/brain-core/src/object.rs, crates/brain-index/src/lib.rs
   [info] adr-002-alpha-normalization-at-store-boundary (decision): crates/brain-cli/src/tasks.rs, crates/brain-core/src/object.rs, crates/brain-store/src/lib.rs, crates/brain-store/src/sync.rs
-  [info] adr-003-templates-in-the-graph (decision): crates/brain-observe/src/docs.rs, crates/brain-observe/src/features.rs, crates/brain-observe/src/templates.rs
-  [info] adr-004-tests-in-the-graph (decision): crates/brain-observe/src/testing.rs
-  [info] adr-005-docs-as-projections (decision): crates/brain-observe/src/twin.rs
-  … showing 5 of 20 stale docs
+  … showing 5 of 24 stale docs
 recent notes:
-  [1894s ago] twin/self: Eyes v4: features have parts (part_of, rollup, cycle-safe), and the interface got a design — type encodes epistemology, one filterable list engine, the dimension strip at three scales
-  [7718s ago] twin/self: Eyes v3: eight surfaces, agent sessions as the first principal, Playwright evidence with screenshots, the narrated tour with content-level drift, and the whole anatomy drawn in 3D
-  [14809s ago] twin/self: Eyes v2: rewrote the human layer around judgments and content. Server: held Store+Cortex with per-version caches (insights/attention/coherence/registry/fitness/event scan) — a page went from ~9 full store scans (5.8s) to under 250ms; all queries now call the existing brain-observe functions instead of re-implementing them. say.rs is the single voice; a test fails the build on jargon. Six surfaces replace eight: Now, Library (kind-aware shelves incl. Concepts and Tests), Map (aggregated modules, dependency layers, three lenses), Thing (body first + judgments + neighbourhood), Timeline (episodes), Find. The 1200-node hairball is gone. ADR-024; parity contract deleted.
-  [21146s ago] twin/self: Eyes artifact model corrected: artifact bodies are now first-class read-only projections. Markdown and structured text render from graph-snapshot content; hash-verified workspace binaries have safe raw previews; source code remains inspectable in separate Code dossiers but is excluded from Artifacts, as are test runs. Artifact inventory is 43 authored deliverables instead of 198 mixed entities. Desktop/mobile browser QA passed with no runtime warnings, and all 123 workspace tests pass.
-  [78489s ago] twin/self: Eyes depth parity completed: all meaningful cockpit surfaces, five Work layouts, universal entity dossiers, semantic MRI projections, snapshot comparison, cached global search, and two-step reachability are graph-backed and browser-verified across desktop and mobile. Unmodeled actors, sessions, approvals, mutation controls, raw content, and simulated prototype states remain explicitly unavailable. All 120 workspace tests pass.
-  … showing 5 of 10 notes
+  [7820s ago] twin/self: Now census finished: removed the unrendered stats block (DTO, query, and its per-feature evaluation) rather than leaving dead computation; the rail counts occurrences so it agrees with the headline; a governed-change concern names the file it touched, because collapsing four identical rows is only honest if unfolding them says four different things; a truncated unfold says how many are not listed. Fixed a real inspector bug the census exposed: 'Around it' mapped Refs as if they were edges (r.target) and threw, and read nb.documents where the server sends nb.docs — that panel had never rendered. Census cells carry aria-labels. 155 workspace tests pass; desktop light and dark verified in-browser with a clean console. Gap found: styles.css has no width breakpoints at all — the v4 rewrite dropped them, so the cockpit is unusable below ~700px. No document claims mobile support, so it is a gap rather than a false claim.
+  [10019s ago] twin/self: Eyes v4: features have parts (part_of, rollup, cycle-safe), and the interface got a design — type encodes epistemology, one filterable list engine, the dimension strip at three scales
+  [15843s ago] twin/self: Eyes v3: eight surfaces, agent sessions as the first principal, Playwright evidence with screenshots, the narrated tour with content-level drift, and the whole anatomy drawn in 3D
+  [22934s ago] twin/self: Eyes v2: rewrote the human layer around judgments and content. Server: held Store+Cortex with per-version caches (insights/attention/coherence/registry/fitness/event scan) — a page went from ~9 full store scans (5.8s) to under 250ms; all queries now call the existing brain-observe functions instead of re-implementing them. say.rs is the single voice; a test fails the build on jargon. Six surfaces replace eight: Now, Library (kind-aware shelves incl. Concepts and Tests), Map (aggregated modules, dependency layers, three lenses), Thing (body first + judgments + neighbourhood), Timeline (episodes), Find. The 1200-node hairball is gone. ADR-024; parity contract deleted.
+  [29271s ago] twin/self: Eyes artifact model corrected: artifact bodies are now first-class read-only projections. Markdown and structured text render from graph-snapshot content; hash-verified workspace binaries have safe raw previews; source code remains inspectable in separate Code dossiers but is excluded from Artifacts, as are test runs. Artifact inventory is 43 authored deliverables instead of 198 mixed entities. Desktop/mobile browser QA passed with no runtime warnings, and all 123 workspace tests pass.
+  … showing 5 of 11 notes
+coherence findings:
+  uncorroborated-claim: 17 features — agent-sessions claims adr-025-agent-sessions-are-first-class; agent-sessions claims docs/twin.md; artifact-registry claims docs/adr/adr-018-placement-policy-and-assets.md, and 24 more
 growth (files/symbols/relations over refreshes):
-  -108387s  121 files  529 symbols  743 relations
-  -104991s  128 files  578 symbols  817 relations
-  -102431s  142 files  664 symbols  960 relations
-  -102418s  144 files  664 symbols  960 relations
-  - 92219s  146 files  744 symbols  1040 relations
-  - 90279s  151 files  813 symbols  1120 relations
-  - 89678s  152 files  813 symbols  1120 relations
-  - 88652s  153 files  813 symbols  1120 relations
-  - 87964s  153 files  826 symbols  1133 relations
-  - 83236s  153 files  840 symbols  1147 relations
-  - 78520s  154 files  908 symbols  1215 relations
-  - 21427s  154 files  926 symbols  1234 relations
-  - 15079s  167 files  944 symbols  1334 relations
-  - 10291s  173 files  1068 symbols  1495 relations
-  -  8190s  178 files  1112 symbols  1546 relations
-  -  8107s  179 files  1112 symbols  1546 relations
-  -  7951s  179 files  1113 symbols  1547 relations
-  -  7201s  179 files  1114 symbols  1548 relations
-  -  2004s  184 files  1153 symbols  1597 relations
-  -  1198s  184 files  1162 symbols  1606 relations
-  -    23s  184 files  1159 symbols  1603 relations
+  -116511s  121 files  529 symbols  743 relations
+  -113116s  128 files  578 symbols  817 relations
+  -110556s  142 files  664 symbols  960 relations
+  -110543s  144 files  664 symbols  960 relations
+  -100344s  146 files  744 symbols  1040 relations
+  - 98404s  151 files  813 symbols  1120 relations
+  - 97803s  152 files  813 symbols  1120 relations
+  - 96776s  153 files  813 symbols  1120 relations
+  - 96089s  153 files  826 symbols  1133 relations
+  - 91361s  153 files  840 symbols  1147 relations
+  - 86645s  154 files  908 symbols  1215 relations
+  - 29552s  154 files  926 symbols  1234 relations
+  - 23204s  167 files  944 symbols  1334 relations
+  - 18416s  173 files  1068 symbols  1495 relations
+  - 16315s  178 files  1112 symbols  1546 relations
+  - 16231s  179 files  1112 symbols  1546 relations
+  - 16076s  179 files  1113 symbols  1547 relations
+  - 15326s  179 files  1114 symbols  1548 relations
+  - 10128s  184 files  1153 symbols  1597 relations
+  -  9323s  184 files  1162 symbols  1606 relations
+  -  8148s  184 files  1159 symbols  1603 relations
+  -  4206s  186 files  1195 symbols  1647 relations
+  -  2880s  186 files  1204 symbols  1656 relations
+  -  2178s  186 files  1205 symbols  1657 relations
+  -  1472s  186 files  1214 symbols  1666 relations
+  -   618s  187 files  1224 symbols  1684 relations
+  -   441s  188 files  1224 symbols  1684 relations
 ```
 
 ## Feature matrix — definition of done (`brain feature matrix`)
 ```
-feature           implemented  tested  decided  documented_in  done
-eyes                   ✓         ✓        ✓           ✓        ✓
-eyes-core              ✓         ✓        ✓           ✓        ✓
-eyes-http              ✓         ✓        ✓           ✓        ✓
-eyes-ux                ✓         ✓        ✓           ✓        ✓
-governed-changes       ✓         ✓        ✓           ✓        ✓
-semantic-twin          ✓         ✓        ✓           ✓        ✓
+feature              implemented  tested  decided  documented_in  done
+agent-sessions            ✓         ✓        ✓           ✓        ✓
+artifact-registry         ✓         ✓        ✓           ✓        ✓
+brain                     ✗         ✗        ✗           ✓        ✓
+brain-functions           ✓         ✓        ✓           ✓        ✓
+evidence-and-assets       ✓         ✓        ✓           ✓        ✓
+eyes                      ✓         ✓        ✓           ✓        ✓
+eyes-core                 ✓         ✓        ✓           ✓        ✓
+eyes-http                 ✓         ✓        ✓           ✓        ✓
+eyes-ux                   ✓         ✓        ✓           ✓        ✓
+governed-changes          ✓         ✓        ✓           ✓        ✓
+index-and-cortex          ✓         ✓        ✓           ✓        ✓
+kernel                    ✓         ✓        ✓           ✓        ✓
+native-code               ✓         ✓        ✓           ✓        ✓
+semantic-twin             ✓         ✓        ✓           ✓        ✓
+store                     ✓         ✓        ✓           ✓        ✓
+tests-in-the-graph        ✓         ✓        ✓           ✓        ✓
+the-cli                   ✓         ✓        ✓           ✓        ✓
 ```
 
 ## Decisions (`brain adr list`)
 ```
-[accepted] adr-014-relation-currency-via-edge-tombstones: Relation currency via edge tombstones  (104992s ago, 2 mention(s))
-[accepted] adr-016-wake-and-the-sleep-window: Wake, and the sleep watermark as the universal recency window  (104992s ago, 3 mention(s))
-[accepted] adr-010-governed-mode: Governed mode: changes to twinned software go through the effect boundary  (108387s ago, 1 mention(s))
-[accepted] adr-026-the-anatomy-is-drawn-in-full: The anatomy is drawn in full  (8191s ago, 0 mention(s))
-[accepted] adr-027-evidence-you-can-look-at: Evidence you can look at  (8191s ago, 0 mention(s))
-[accepted] adr-003-templates-in-the-graph: Deliverable templates live in the graph  (108387s ago, 3 mention(s))
-[accepted] adr-013-lifecycle-as-derived-judgment: Artifact lifecycle is a derived judgment, not a stored fact  (104992s ago, 2 mention(s))
-[accepted] adr-005-docs-as-projections: Documentation is a projection of the graph  (108387s ago, 1 mention(s))
-[accepted] adr-002-alpha-normalization-at-store-boundary: Alpha-normalization happens at the store boundary  (108387s ago, 4 mention(s))
-[accepted] adr-021-tidy-through-governed-changes: Tidy acts only through governed changes  (102432s ago, 1 mention(s))
-[accepted] adr-019-read-only-projection-contract: The read-only projection contract  (102432s ago, 1 mention(s))
-[accepted] adr-018-placement-policy-and-assets: Placement policy: where each artifact kind's truth lives  (102432s ago, 2 mention(s))
-[accepted] adr-020-opt-in-enforcement-gates: Opt-in enforcement gates, and exit code 3  (102432s ago, 0 mention(s))
-[accepted] adr-028-features-have-parts: Features have parts  (2004s ago, 0 mention(s))
-[accepted] adr-006-monolithic-binary: brain ships as one monolithic binary, installed with one command  (108387s ago, 5 mention(s))
-[accepted] adr-029-type-encodes-epistemology: Type encodes epistemology  (24s ago, 1 mention(s))
-[accepted] adr-023-eyes-read-only-human-projection: Eyes is a read-only human projection of the graph  (21428s ago, 0 mention(s))
-[accepted] adr-017-artifact-kind-registry: The artifact-kind registry: built-ins are pre-taught defaults  (102432s ago, 3 mention(s))
-[accepted] adr-022-template-fitness: Template fitness: contracts are measured, evolution is approved  (102432s ago, 1 mention(s))
-[accepted] adr-011-cortex: cortex: our own persistent graph-query engine  (108387s ago, 0 mention(s))
-[accepted] adr-009-functional-brain-not-structural: A functional brain, not a structural one  (108387s ago, 3 mention(s))
-[accepted] adr-008-capture-rules-in-the-graph: Capture rules live in the graph  (108387s ago, 3 mention(s))
-[accepted] adr-024-eyes-shows-judgments-and-content: Eyes shows judgments and content, not the graph  (14925s ago, 0 mention(s))
-[accepted] adr-015-staleness-severity-and-acknowledgement: Staleness carries severity and can be acknowledged  (104992s ago, 2 mention(s))
-[accepted] adr-004-tests-in-the-graph: Tests and test protocols are graph citizens  (108387s ago, 1 mention(s))
-[accepted] adr-012-backfill-history-with-historical-timestamps: Backfilled history carries historical timestamps  (108387s ago, 1 mention(s))
-[accepted] adr-025-agent-sessions-are-first-class: Agent sessions are first class  (8191s ago, 0 mention(s))
-[accepted] adr-007-git-triggers-the-brain: Every git commit and push triggers the brain  (108387s ago, 2 mention(s))
-[accepted] adr-001-relation-predicate-field: Relation's edge label is a field named `predicate`, not `kind`  (108387s ago, 3 mention(s))
+[accepted] adr-014-relation-currency-via-edge-tombstones: Relation currency via edge tombstones  (113117s ago, 2 mention(s))
+[accepted] adr-016-wake-and-the-sleep-window: Wake, and the sleep watermark as the universal recency window  (113117s ago, 3 mention(s))
+[accepted] adr-010-governed-mode: Governed mode: changes to twinned software go through the effect boundary  (116513s ago, 1 mention(s))
+[accepted] adr-026-the-anatomy-is-drawn-in-full: The anatomy is drawn in full  (16316s ago, 0 mention(s))
+[accepted] adr-027-evidence-you-can-look-at: Evidence you can look at  (16316s ago, 0 mention(s))
+[accepted] adr-003-templates-in-the-graph: Deliverable templates live in the graph  (116513s ago, 3 mention(s))
+[accepted] adr-013-lifecycle-as-derived-judgment: Artifact lifecycle is a derived judgment, not a stored fact  (113117s ago, 2 mention(s))
+[accepted] adr-005-docs-as-projections: Documentation is a projection of the graph  (116513s ago, 1 mention(s))
+[accepted] adr-002-alpha-normalization-at-store-boundary: Alpha-normalization happens at the store boundary  (116513s ago, 4 mention(s))
+[accepted] adr-021-tidy-through-governed-changes: Tidy acts only through governed changes  (110557s ago, 1 mention(s))
+[accepted] adr-019-read-only-projection-contract: The read-only projection contract  (110557s ago, 1 mention(s))
+[accepted] adr-018-placement-policy-and-assets: Placement policy: where each artifact kind's truth lives  (110557s ago, 2 mention(s))
+[accepted] adr-020-opt-in-enforcement-gates: Opt-in enforcement gates, and exit code 3  (110557s ago, 0 mention(s))
+[accepted] adr-028-features-have-parts: Features have parts  (10129s ago, 0 mention(s))
+[accepted] adr-006-monolithic-binary: brain ships as one monolithic binary, installed with one command  (116513s ago, 5 mention(s))
+[accepted] adr-029-type-encodes-epistemology: Type encodes epistemology  (8149s ago, 1 mention(s))
+[accepted] adr-023-eyes-read-only-human-projection: Eyes is a read-only human projection of the graph  (29553s ago, 0 mention(s))
+[accepted] adr-017-artifact-kind-registry: The artifact-kind registry: built-ins are pre-taught defaults  (110557s ago, 3 mention(s))
+[accepted] adr-022-template-fitness: Template fitness: contracts are measured, evolution is approved  (110557s ago, 1 mention(s))
+[accepted] adr-011-cortex: cortex: our own persistent graph-query engine  (116513s ago, 0 mention(s))
+[accepted] adr-009-functional-brain-not-structural: A functional brain, not a structural one  (116513s ago, 3 mention(s))
+[accepted] adr-030-the-feature-is-the-spine: The feature is the spine  (442s ago, 4 mention(s))
+[accepted] adr-008-capture-rules-in-the-graph: Capture rules live in the graph  (116513s ago, 3 mention(s))
+[accepted] adr-024-eyes-shows-judgments-and-content: Eyes shows judgments and content, not the graph  (23050s ago, 0 mention(s))
+[accepted] adr-015-staleness-severity-and-acknowledgement: Staleness carries severity and can be acknowledged  (113117s ago, 2 mention(s))
+[accepted] adr-004-tests-in-the-graph: Tests and test protocols are graph citizens  (116513s ago, 1 mention(s))
+[accepted] adr-012-backfill-history-with-historical-timestamps: Backfilled history carries historical timestamps  (116513s ago, 1 mention(s))
+[accepted] adr-025-agent-sessions-are-first-class: Agent sessions are first class  (16316s ago, 0 mention(s))
+[accepted] adr-007-git-triggers-the-brain: Every git commit and push triggers the brain  (116513s ago, 2 mention(s))
+[accepted] adr-001-relation-predicate-field: Relation's edge label is a field named `predicate`, not `kind`  (116513s ago, 3 mention(s))
 ```
 
 ## Tests (`brain twin tests`)
@@ -158,8 +189,8 @@ crates/brain-core/src/canonical.rs  [rust] 4 test(s), inline tests
 crates/brain-core/src/ids.rs  [rust] 3 test(s), inline tests
 crates/brain-core/src/object.rs  [rust] 6 test(s), inline tests
 crates/brain-eyes/src/lib.rs  [rust] 13 test(s), inline tests
-crates/brain-eyes/src/say.rs  [rust] 4 test(s), inline tests
-crates/brain-eyes/src/tests.rs  [rust] 27 test(s), inline tests
+crates/brain-eyes/src/say.rs  [rust] 5 test(s), inline tests
+crates/brain-eyes/src/tests.rs  [rust] 30 test(s), inline tests
 crates/brain-index/src/lib.rs  [rust] 4 test(s), inline tests
 crates/brain-observe/src/agents.rs  [rust] 3 test(s), inline tests
 crates/brain-observe/src/assets.rs  [rust] 1 test(s), inline tests
@@ -177,6 +208,7 @@ crates/brain-observe/src/lifecycle.rs  [rust] 1 test(s), inline tests
 crates/brain-observe/src/projection.rs  [rust] 1 test(s), inline tests
 crates/brain-observe/src/sessions.rs  [rust] 5 test(s), inline tests
 crates/brain-observe/src/sleep.rs  [rust] 1 test(s), inline tests
+crates/brain-observe/src/spine.rs  [rust] 6 test(s), inline tests
 crates/brain-observe/src/symbols.rs  [rust] 5 test(s), inline tests
 crates/brain-observe/src/templates.rs  [rust] 7 test(s), inline tests
 crates/brain-observe/src/testing.rs  [rust] 5 test(s), inline tests
@@ -193,36 +225,51 @@ crates/cortex/src/lib.rs  [rust] 4 test(s), inline tests
 
 ## Test protocols (`brain testrun list`)
 ```
-[  1195s ago] ok: 155/155 passed, 0 failed (cargo)
-[  1789s ago] ok: 154/154 passed, 0 failed (cargo)
-[  1903s ago] ok: 154/154 passed, 0 failed (cargo)
-[  7499s ago] ok: 148/148 passed, 0 failed (cargo)
-[  7616s ago] ok: 148/148 passed, 0 failed (cargo)
-[  7725s ago] ok: 148/148 passed, 0 failed (cargo)
-[  8117s ago] ok: 148/148 passed, 0 failed (cargo)
-[ 14720s ago] ok: 132/132 passed, 0 failed (cargo)
-[ 14952s ago] ok: 132/132 passed, 0 failed (cargo)
-[100307s ago] ok: 110/110 passed, 0 failed (cargo)
-[102288s ago] ok: 110/110 passed, 0 failed (cargo)
-[104951s ago] ok: 100/100 passed, 0 failed (cargo)
+[   534s ago] ok: 165/165 passed, 0 failed (cargo)
+[  1387s ago] ok: 164/164 passed, 0 failed (cargo)
+[  2095s ago] ok: 162/162 passed, 0 failed (cargo)
+[  2761s ago] ok: 162/162 passed, 0 failed (cargo)
+[  4125s ago] ok: 162/162 passed, 0 failed (cargo)
+[  7654s ago] ok: 155/155 passed, 0 failed (cargo)
+[  7997s ago] ok: 155/155 passed, 0 failed (cargo)
+[  9320s ago] ok: 155/155 passed, 0 failed (cargo)
+[  9914s ago] ok: 154/154 passed, 0 failed (cargo)
+[ 10028s ago] ok: 154/154 passed, 0 failed (cargo)
+[ 15625s ago] ok: 148/148 passed, 0 failed (cargo)
+[ 15741s ago] ok: 148/148 passed, 0 failed (cargo)
+[ 15851s ago] ok: 148/148 passed, 0 failed (cargo)
+[ 16242s ago] ok: 148/148 passed, 0 failed (cargo)
+[ 22845s ago] ok: 132/132 passed, 0 failed (cargo)
+[ 23077s ago] ok: 132/132 passed, 0 failed (cargo)
+[108432s ago] ok: 110/110 passed, 0 failed (cargo)
+[110413s ago] ok: 110/110 passed, 0 failed (cargo)
+[113076s ago] ok: 100/100 passed, 0 failed (cargo)
 ```
 
 ## Attention (`brain attend`)
 ```
- 1. [ 89] crates/brain-eyes/src/dto.rs (file)  — churn 6 (2 recent), hub 15, untested hub
- 2. [ 84] crates/brain-core/src/ids.rs (file)  — hub 42
- 3. [ 82] crates/brain-eyes/src/state.rs (file)  — churn 3 (1 recent), hub 15, untested hub
- 4. [ 69] crates/brain-eyes/src/query/mod.rs (file)  — churn 4 (0 recent), hub 13, untested hub
- 5. [ 68] crates/brain-core/src/object.rs (file)  — churn 2 (0 recent), hub 33
- 6. [ 65] crates/brain-observe/src/lib.rs (file)  — churn 5 (0 recent), hub 12, untested hub
- 7. [ 64] crates/brain-store/src/lib.rs (file)  — churn 2 (0 recent), hub 31
- 8. [ 61] crates/brain-index/src/lib.rs (file)  — churn 3 (0 recent), hub 29
- 9. [ 58] crates/brain-observe/src/twin.rs (file)  — churn 6 (0 recent), hub 26
-10. [ 29] crates/brain-eyes/src/say.rs (file)  — churn 3 (0 recent), hub 13
+ 1. [106] crates/brain-eyes/src/dto.rs (file)  — churn 10 (4 recent), hub 16, untested hub
+ 2. [ 93] crates/brain-eyes/src/state.rs (file)  — churn 5 (2 recent), hub 16, untested hub
+ 3. [ 89] crates/brain-eyes/src/query/mod.rs (file)  — churn 7 (3 recent), hub 14, untested hub
+ 4. [ 88] crates/brain-core/src/ids.rs (file)  — hub 44
+ 5. [ 70] crates/brain-core/src/object.rs (file)  — churn 2 (0 recent), hub 34
+ 6. [ 70] crates/brain-observe/src/lib.rs (file)  — churn 6 (1 recent), hub 12, untested hub
+ 7. [ 67] crates/brain-observe/src/twin.rs (file)  — churn 7 (1 recent), hub 28
+ 8. [ 66] crates/brain-store/src/lib.rs (file)  — churn 2 (0 recent), hub 32
+ 9. [ 63] crates/brain-index/src/lib.rs (file)  — churn 3 (0 recent), hub 30
+10. [ 51] crates/brain-eyes/src/say.rs (file)  — churn 7 (4 recent), hub 14
 ```
 
 ## Doc staleness (`brain twin stale`)
 ```
+[warn] feature-spine (runbook) — changed since doc updated or acknowledged:
+  crates/brain-observe/src/instructions.rs
+[warn] readme (doc) — changed since doc updated or acknowledged:
+  AGENTS.md
+  CLAUDE.md
+[warn] twin (doc) — changed since doc updated or acknowledged:
+  AGENTS.md
+  CLAUDE.md
 [info] adr-001-relation-predicate-field (decision) — changed since doc updated or acknowledged:
   crates/brain-core/src/object.rs
   crates/brain-index/src/lib.rs
@@ -283,7 +330,9 @@ crates/cortex/src/lib.rs  [rust] 4 test(s), inline tests
   crates/brain-observe/src/tidy.rs
 [info] adr-022-template-fitness (decision) — changed since doc updated or acknowledged:
   crates/brain-observe/src/fitness.rs
-(0 warn, 20 info; reviewed-and-still-accurate? `brain adr|plan|artifact ack`)
+[info] adr-029-type-encodes-epistemology (decision) — changed since doc updated or acknowledged:
+  crates/brain-eyes/src/tests.rs
+(3 warn, 21 info; reviewed-and-still-accurate? `brain adr|plan|artifact ack`)
 ```
 
 ![insights](img/insights.png)
