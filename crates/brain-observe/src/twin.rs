@@ -3540,6 +3540,53 @@ mod note_order_tests {
         );
     }
 
+    /// Reading the graph must stay cheap, and cheap here means two things
+    /// that are easy to lose by accident: a pass touches each object's
+    /// bytes about once, and a second pass touches none at all.
+    ///
+    /// Before the caches, one `insights` made 19,825 reads over 4,517
+    /// distinct objects and re-read the event log 195 times. Those numbers
+    /// were folklore until something asserted them.
+    #[test]
+    fn reading_the_graph_touches_each_object_about_once() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        std::fs::write(dir.path().join("src/lib.rs"), "pub fn a() {}\n").unwrap();
+        std::fs::write(dir.path().join("src/other.rs"), "pub fn b() {}\n").unwrap();
+        std::fs::write(dir.path().join("README.md"), "# P\n\nSee src/lib.rs.\n").unwrap();
+        let store = Store::open(dir.path().join(".brain")).unwrap();
+        crate::templates::seed(&store).unwrap();
+        refresh(&store, dir.path(), "twin/app").unwrap();
+
+        // A fresh store: nothing is cached, so this is the honest cost.
+        let store = Store::open(dir.path().join(".brain")).unwrap();
+        let index = fresh_index(&store);
+        let distinct = store.reads().from_disk;
+        let before = store.reads();
+        insights_with(&store, &index, "twin/app").unwrap();
+        let first = store.reads();
+
+        let served = first.served - before.served;
+        let read = first.from_disk - before.from_disk;
+        assert!(served > 0, "insights reads something");
+        assert!(
+            read <= distinct,
+            "a pass should not need more object bytes than the graph has              ({read} byte-reads, {distinct} objects in the graph)"
+        );
+
+        // And again: everything it needs is already in hand.
+        insights_with(&store, &index, "twin/app").unwrap();
+        let second = store.reads();
+        assert_eq!(
+            second.from_disk, first.from_disk,
+            "a second pass must not go to bytes at all"
+        );
+        assert!(
+            second.served > first.served,
+            "it did do the work again — it just did not pay for it twice"
+        );
+    }
+
     /// The put feed is memoised behind the log's byte length. Appending
     /// must be visible immediately — a stale feed would hide new objects
     /// from replay, which is how the whole index is built.

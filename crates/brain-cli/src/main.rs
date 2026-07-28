@@ -2787,6 +2787,11 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
     );
     println!("query mix (edges + full insights):      {query_time:?}  (cold store)");
     println!("the same query again (warm objects):    {requery_time:?}");
+    let reads = query_store.reads();
+    println!(
+        "reads to answer it: {} served, {} went to bytes",
+        reads.served, reads.from_disk
+    );
     println!(
         "answers: identical across backends ({} files in insights)",
         ins.files

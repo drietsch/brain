@@ -23,11 +23,16 @@ risky dependency anywhere. We take its lessons and implement our own.
 observation — **brain already has a WAL** (the store's event log), so
 cortex needs no write path. It is:
 
-- a **checkpoint** (`.brain/index.graf`, JSON snapshot of MemIndex state
+- a **checkpoint** (`.brain/cortex.json`, JSON snapshot of MemIndex state
   plus an event-log cursor) written temp+rename;
 - **delta replay** on open: only events after the cursor are folded in —
-  warm start is O(new events), measured 15x faster than cold replay on
-  this repo's 3,780-object store;
+  warm start is O(new events). Measured 15x faster than cold replay on
+  this repo's 3,780-object store when this was written, and 98x at
+  10,575 objects: the gap widened with the object count, because cold
+  replay opened one file per object. Once the object pack removed that
+  (`crates/brain-store`), cold replay fell to ~25 ms and the checkpoint's
+  advantage narrowed to ~5x — the ratio tracks what cold costs, not what
+  warm saves;
 - **recursive traversal** (`Cortex::reach`): BFS over relation edges, both
   directions, cycle-safe — transitive imports and true blast radius
   (`brain twin rdeps --transitive`), which a flat index cannot express;

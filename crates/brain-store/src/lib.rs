@@ -29,6 +29,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
@@ -91,6 +92,21 @@ pub struct Store {
     objects: RwLock<HashMap<NodeId, Arc<Object>>>,
     /// The pack, loaded lazily on the first miss.
     pack: RwLock<Option<Arc<Pack>>>,
+    /// Reads served, and reads that had to touch a file. The gap between
+    /// them is what the caches are worth, and a test asserts a budget so
+    /// a regression shows up as a failure rather than as a feeling.
+    reads: AtomicUsize,
+    misses: AtomicUsize,
+}
+
+/// What the store did to answer, since it was opened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Reads {
+    /// Calls to `get`.
+    pub served: usize,
+    /// Of those, the ones that read bytes rather than answering from
+    /// memory — from the pack or a loose file.
+    pub from_disk: usize,
 }
 
 /// Every object's bytes in one file, so reading the graph is one
@@ -163,6 +179,8 @@ impl Store {
             history: RwLock::new(None),
             objects: RwLock::new(HashMap::new()),
             pack: RwLock::new(None),
+            reads: AtomicUsize::new(0),
+            misses: AtomicUsize::new(0),
         })
     }
 
@@ -214,6 +232,7 @@ impl Store {
     /// Prefer this on hot paths: `get` clones, and most callers only read
     /// a field or two before dropping the result.
     pub fn get_shared(&self, id: &NodeId) -> Result<Arc<Object>, StoreError> {
+        self.reads.fetch_add(1, Ordering::Relaxed);
         if let Ok(cache) = self.objects.read() {
             if let Some(hit) = cache.get(id) {
                 return Ok(hit.clone());
@@ -241,6 +260,7 @@ impl Store {
 
     /// Verify bytes against the id they claim, parse them, and remember.
     fn admit(&self, id: &NodeId, bytes: &[u8]) -> Result<Arc<Object>, StoreError> {
+        self.misses.fetch_add(1, Ordering::Relaxed);
         // Integrity check: recompute content identity from stored bytes.
         // Done once, on the way into the cache — the bytes behind an id
         // cannot change, so verifying a second time proves nothing new.
@@ -305,6 +325,15 @@ impl Store {
             *guard = None;
         }
         Ok(appended)
+    }
+
+    /// How many reads this store served, and how many it had to go to
+    /// bytes for.
+    pub fn reads(&self) -> Reads {
+        Reads {
+            served: self.reads.load(Ordering::Relaxed),
+            from_disk: self.misses.load(Ordering::Relaxed),
+        }
     }
 
     pub fn has(&self, id: &NodeId) -> bool {

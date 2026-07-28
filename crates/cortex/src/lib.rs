@@ -7,8 +7,9 @@
 //! index state plus delta-replay from a cursor into `put_history()`:
 //!
 //! - warm open is O(new events since the last checkpoint), not O(graph);
-//! - the `.graf` file is derived, disposable, and rebuildable — corrupt
-//!   or missing means a silent cold rebuild, never an error;
+//! - the checkpoint file (`.brain/cortex.json`) is derived, disposable,
+//!   and rebuildable — corrupt or missing means a silent cold rebuild,
+//!   never an error;
 //! - it is local by design and never replicates: truth travels as
 //!   objects, indexes are grown where they are needed.
 //!

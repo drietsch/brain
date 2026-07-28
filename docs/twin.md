@@ -490,11 +490,14 @@ docs/adr/adr-010-governed-mode.md.
 Every query above runs on **cortex** (`crates/cortex`), brain's own
 persistent graph-query engine — learned from minigraf, then simplified by
 one observation: brain's event log already is a WAL, so cortex is just
-a checkpoint (`.brain/index.graf`) plus delta-replay from a cursor:
+a checkpoint (`.brain/cortex.json`) plus delta-replay from a cursor:
 
-- warm opens are O(new events) — measured ~15x faster than a cold replay
-  on this repo's store — and the checkpoint is derived, disposable, and
-  rebuilt silently if corrupt or stale;
+- warm opens are O(new events) — and the checkpoint is derived,
+  disposable, and rebuilt silently if corrupt or stale. It is one of two
+  such caches: `.brain/objects.pack` does the same for object bytes,
+  because reading 2.6 MB as 10,575 files costs 979 ms and as one file
+  4 ms. Both are disposable; the loose objects and the event log remain
+  the only systems of record;
 - recursive traversal powers `--transitive` on imports/rdeps (the true
   blast radius) — `brain twin rdeps <file> --transitive`;
 - bi-temporal reads power `brain twin at <prefix> <when>` — the twin as
