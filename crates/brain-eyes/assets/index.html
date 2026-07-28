@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Eyes</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <button class="wordmark" data-go="now">Eyes</button>
+    <span class="project" id="project">…</span>
+    <button class="finder" id="open-find">
+      <span>Find anything</span><kbd>⌘K</kbd>
+    </button>
+    <span class="freshness" id="freshness">reading the graph…</span>
+    <span class="readonly" title="Eyes never writes. It shows you the command instead.">read only</span>
+  </header>
+
+  <nav class="rail" aria-label="Sections">
+    <button data-go="now" class="on">
+      <span class="rail-mark" aria-hidden="true">◍</span><span>Now</span>
+    </button>
+    <button data-go="library">
+      <span class="rail-mark" aria-hidden="true">▤</span><span>Library</span>
+    </button>
+    <button data-go="map">
+      <span class="rail-mark" aria-hidden="true">▦</span><span>Map</span>
+    </button>
+    <button data-go="timeline">
+      <span class="rail-mark" aria-hidden="true">⋮</span><span>Timeline</span>
+    </button>
+  </nav>
+
+  <main id="stage" class="stage" tabindex="-1">
+    <p class="loading">Reading the graph…</p>
+  </main>
+
+  <div class="finder-overlay" id="find-overlay" hidden>
+    <div class="finder-panel" role="dialog" aria-label="Find">
+      <input id="find-input" type="search" placeholder="Find a file, decision, plan, feature…"
+             autocomplete="off" spellcheck="false">
+      <div class="finder-results" id="find-results"></div>
+    </div>
+  </div>
+</body>
+</html>

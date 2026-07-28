@@ -172,7 +172,9 @@ pub fn template_sid(slug: &str) -> StableId {
 /// required plus the scaffold). Every captured artifact records the
 /// `contract_b3` that judged it, so template fitness can compare versions.
 pub fn contract_b3(requires: &str, content: &str) -> String {
-    blake3::hash(format!("{requires}\n---\n{content}").as_bytes()).to_hex().to_string()
+    blake3::hash(format!("{requires}\n---\n{content}").as_bytes())
+        .to_hex()
+        .to_string()
 }
 
 /// Write the default templates into the graph. Upgrade rule per property:
@@ -266,11 +268,15 @@ pub fn by_kind(
     let mut out = BTreeMap::new();
     let mut seen: BTreeSet<StableId> = BTreeSet::new();
     for node in index.entities_by_kind("template") {
-        let Ok(Object::Entity { id, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, .. }) = store.get(&node) else {
+            continue;
+        };
         if !seen.insert(id.clone()) {
             continue;
         }
-        let Some(applies) = latest(index, store, &id, "applies_to")? else { continue };
+        let Some(applies) = latest(index, store, &id, "applies_to")? else {
+            continue;
+        };
         let requires: Vec<String> = latest(index, store, &id, "requires")?
             .unwrap_or_default()
             .split(',')
@@ -288,7 +294,11 @@ pub fn by_kind(
 /// schema fighting the forgiving-parser philosophy.
 pub fn check(content: &str, requires: &[String]) -> Vec<String> {
     let fm = crate::agents::frontmatter(content);
-    requires.iter().filter(|r| !field_present(content, &fm, r)).cloned().collect()
+    requires
+        .iter()
+        .filter(|r| !field_present(content, &fm, r))
+        .cloned()
+        .collect()
 }
 
 fn field_present(content: &str, fm: &BTreeMap<String, String>, field: &str) -> bool {
@@ -330,12 +340,18 @@ pub fn capture_rules(store: &Store, index: &MemIndex) -> Result<Vec<CaptureRule>
     let mut out = Vec::new();
     let mut seen: BTreeSet<StableId> = BTreeSet::new();
     for node in index.entities_by_kind("template") {
-        let Ok(Object::Entity { id, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, .. }) = store.get(&node) else {
+            continue;
+        };
         if !seen.insert(id.clone()) {
             continue;
         }
-        let Some(kind) = latest(index, store, &id, "applies_to")? else { continue };
-        let Some(capture) = latest(index, store, &id, "capture")? else { continue };
+        let Some(kind) = latest(index, store, &id, "applies_to")? else {
+            continue;
+        };
+        let Some(capture) = latest(index, store, &id, "capture")? else {
+            continue;
+        };
         let patterns: Vec<String> = capture
             .split(',')
             .map(str::trim)
@@ -346,7 +362,11 @@ pub fn capture_rules(store: &Store, index: &MemIndex) -> Result<Vec<CaptureRule>
             continue;
         }
         let fields = parse_fields(&latest(index, store, &id, "fields")?.unwrap_or_default());
-        out.push(CaptureRule { kind, patterns, fields });
+        out.push(CaptureRule {
+            kind,
+            patterns,
+            fields,
+        });
     }
     Ok(out)
 }
@@ -425,7 +445,11 @@ pub fn glob_match(pattern: &str, path: &str) -> bool {
             (Some(b'*'), _) if p.get(1) == Some(&b'*') => {
                 // `**`: swallow any run (including slashes); a following
                 // `/` may match zero directories.
-                let rest = if p.get(2) == Some(&b'/') { &p[3..] } else { &p[2..] };
+                let rest = if p.get(2) == Some(&b'/') {
+                    &p[3..]
+                } else {
+                    &p[2..]
+                };
                 (0..=s.len()).any(|i| inner(rest, &s[i..]))
             }
             (Some(b'*'), _) => {
@@ -460,7 +484,11 @@ mod tests {
         replay(&store, &mut index).unwrap();
         let map = by_kind(&store, &index).unwrap();
         assert_eq!(map.get("decision").unwrap().1, vec!["title", "status"]);
-        assert!(map.get("feature").unwrap().1.contains(&"tested_by".to_string()));
+        assert!(map
+            .get("feature")
+            .unwrap()
+            .1
+            .contains(&"tested_by".to_string()));
         assert!(store.resolve("brain/templates/adr").unwrap().is_some());
     }
 
@@ -471,13 +499,24 @@ mod tests {
         seed(&store).unwrap();
         // A store tightens its ADR contract: supersedes becomes required.
         let sid = template_sid("adr");
-        observe_src(&store, &sid, "requires", "title,status,supersedes", "agent", now_ms())
-            .unwrap();
+        observe_src(
+            &store,
+            &sid,
+            "requires",
+            "title,status,supersedes",
+            "agent",
+            now_ms(),
+        )
+        .unwrap();
         seed(&store).unwrap();
         let mut index = MemIndex::new();
         replay(&store, &mut index).unwrap();
         let map = by_kind(&store, &index).unwrap();
-        assert_eq!(map.get("decision").unwrap().1.len(), 3, "local override wins");
+        assert_eq!(
+            map.get("decision").unwrap().1.len(),
+            3,
+            "local override wins"
+        );
     }
 
     #[test]
@@ -489,21 +528,40 @@ mod tests {
         // Simulate an older binary's seeded value: source "seed", stale text.
         let sid = template_sid("plan");
         std::thread::sleep(std::time::Duration::from_millis(2));
-        observe_src(&store, &sid, "content", "# {{title}}\n\nOld scaffold.\n", "seed", now_ms())
-            .unwrap();
+        observe_src(
+            &store,
+            &sid,
+            "content",
+            "# {{title}}\n\nOld scaffold.\n",
+            "seed",
+            now_ms(),
+        )
+        .unwrap();
         seed(&store).unwrap();
         let mut index = MemIndex::new();
         replay(&store, &mut index).unwrap();
         let content = latest(&index, &store, &sid, "content").unwrap().unwrap();
-        assert!(content.contains("## Verification"), "seeded value upgraded: {content}");
+        assert!(
+            content.contains("## Verification"),
+            "seeded value upgraded: {content}"
+        );
         // The contract hash tracks the upgrade.
-        let stamped = latest(&index, &store, &sid, "contract_b3").unwrap().unwrap();
+        let stamped = latest(&index, &store, &sid, "contract_b3")
+            .unwrap()
+            .unwrap();
         assert_eq!(stamped, contract_b3("title", &content));
 
         // A local (agent) edit is never superseded by re-seeding.
         std::thread::sleep(std::time::Duration::from_millis(2));
-        observe_src(&store, &sid, "content", "# {{title}}\n\nOurs.\n", "agent", now_ms())
-            .unwrap();
+        observe_src(
+            &store,
+            &sid,
+            "content",
+            "# {{title}}\n\nOurs.\n",
+            "agent",
+            now_ms(),
+        )
+        .unwrap();
         seed(&store).unwrap();
         let mut index = MemIndex::new();
         replay(&store, &mut index).unwrap();
@@ -517,9 +575,15 @@ mod tests {
     #[test]
     fn glob_matches_segments_and_double_star() {
         assert!(glob_match("docs/runbooks/*.md", "docs/runbooks/deploy.md"));
-        assert!(!glob_match("docs/runbooks/*.md", "docs/runbooks/sub/deploy.md"));
+        assert!(!glob_match(
+            "docs/runbooks/*.md",
+            "docs/runbooks/sub/deploy.md"
+        ));
         assert!(glob_match("runbooks/**/*.md", "runbooks/a/b/deploy.md"));
-        assert!(glob_match("runbooks/**/*.md", "runbooks/deploy.md"), "** may match zero dirs");
+        assert!(
+            glob_match("runbooks/**/*.md", "runbooks/deploy.md"),
+            "** may match zero dirs"
+        );
         assert!(glob_match("**/*.rfc", "any/depth/x.rfc"));
         assert!(glob_match("incident-????.md", "incident-0042.md"));
         assert!(!glob_match("incident-????.md", "incident-42.md"));
@@ -528,7 +592,9 @@ mod tests {
 
     #[test]
     fn capture_fields_extract_per_dsl() {
-        let fields = parse_fields("title=heading, service=line, owner=frontmatter, id=slug, sev=line:Severity");
+        let fields = parse_fields(
+            "title=heading, service=line, owner=frontmatter, id=slug, sev=line:Severity",
+        );
         assert_eq!(fields.len(), 5);
         let rule = CaptureRule {
             kind: "runbook".into(),
@@ -545,7 +611,10 @@ mod tests {
         assert_eq!(get("id"), Some("deploy"));
         assert_eq!(get("sev"), Some("high"));
         // Missing fields are absent, not errors — conformance flags gaps.
-        assert!(rule.extract("no structure here\n", "x").iter().all(|(p, _)| p == "id"));
+        assert!(rule
+            .extract("no structure here\n", "x")
+            .iter()
+            .all(|(p, _)| p == "id"));
     }
 
     #[test]
@@ -566,7 +635,15 @@ mod tests {
         let now = now_ms();
         observe_src(&store, &sid, "applies_to", "runbook", "agent", now).unwrap();
         observe_src(&store, &sid, "capture", "docs/runbooks/*.md", "agent", now).unwrap();
-        observe_src(&store, &sid, "fields", "title=heading, service=line", "agent", now).unwrap();
+        observe_src(
+            &store,
+            &sid,
+            "fields",
+            "title=heading, service=line",
+            "agent",
+            now,
+        )
+        .unwrap();
         observe_src(&store, &sid, "requires", "title,service", "agent", now).unwrap();
 
         let mut index = MemIndex::new();
@@ -577,12 +654,19 @@ mod tests {
         // wins over the seeded default.
         assert!(rules.len() >= 4, "{rules:?}");
         let runbook = rules.iter().find(|r| r.kind == "runbook").unwrap();
-        assert_eq!(runbook.patterns, vec!["docs/runbooks/*.md".to_string()], "local edit wins");
+        assert_eq!(
+            runbook.patterns,
+            vec!["docs/runbooks/*.md".to_string()],
+            "local edit wins"
+        );
         assert!(runbook.matches("docs/runbooks/deploy.md"));
         let doc = rules.iter().find(|r| r.kind == "doc").unwrap();
         assert!(doc.matches("README.md"));
         assert!(doc.matches("docs/architecture.md"));
-        assert!(!doc.matches("docs/adr/adr-001-x.md"), "* stays in one segment");
+        assert!(
+            !doc.matches("docs/adr/adr-001-x.md"),
+            "* stays in one segment"
+        );
         assert!(!doc.matches("docs/generated/tour.md"));
     }
 
@@ -590,11 +674,20 @@ mod tests {
     fn conformance_checks_are_shallow_and_honest() {
         let req = |s: &[&str]| s.iter().map(|x| x.to_string()).collect::<Vec<_>>();
         assert!(check("# Title\n\nStatus: accepted\n", &req(&["title", "status"])).is_empty());
-        assert_eq!(check("prose only\n", &req(&["title", "status"])), vec!["title", "status"]);
+        assert_eq!(
+            check("prose only\n", &req(&["title", "status"])),
+            vec!["title", "status"]
+        );
         assert_eq!(check("# T\n\nStatus:\n", &req(&["status"])), vec!["status"]);
         assert!(check("# T\n\n## Status\n\naccepted\n", &req(&["status"])).is_empty());
-        assert!(check("---\nname: x\ndescription: y\n---\n", &req(&["name", "description"]))
-            .is_empty());
-        assert_eq!(instantiate("# {{title}}\n", "Do the thing"), "# Do the thing\n");
+        assert!(check(
+            "---\nname: x\ndescription: y\n---\n",
+            &req(&["name", "description"])
+        )
+        .is_empty());
+        assert_eq!(
+            instantiate("# {{title}}\n", "Do the thing"),
+            "# Do the thing\n"
+        );
     }
 }

@@ -94,7 +94,14 @@ pub fn backfill(
                     if !ingestible(&ev.path) {
                         continue;
                     }
-                    ensure_entity(store, prefix, &ev.path, &ns, &mut known_entities, &mut bindings)?;
+                    ensure_entity(
+                        store,
+                        prefix,
+                        &ev.path,
+                        &ns,
+                        &mut known_entities,
+                        &mut bindings,
+                    )?;
                     let sid = StableId::derive(&["file", &ev.path]);
                     observe(store, &sid, "present", "false", commit.at_ms)?;
                     deleted.insert(ev.path.clone());
@@ -105,7 +112,12 @@ pub fn backfill(
                     // a renamed_to edge so the identity trail survives.
                     if ingestible(&ev.path) {
                         ensure_entity(
-                            store, prefix, &ev.path, &ns, &mut known_entities, &mut bindings,
+                            store,
+                            prefix,
+                            &ev.path,
+                            &ns,
+                            &mut known_entities,
+                            &mut bindings,
                         )?;
                         let old = StableId::derive(&["file", &ev.path]);
                         observe(store, &old, "present", "false", commit.at_ms)?;
@@ -123,15 +135,33 @@ pub fn backfill(
                             })?;
                         }
                         record_version(
-                            store, root, prefix, &commit.hash, new_path, commit.at_ms, &ns,
-                            &mut known_entities, &mut bindings, &mut deleted, &mut report,
+                            store,
+                            root,
+                            prefix,
+                            &commit.hash,
+                            new_path,
+                            commit.at_ms,
+                            &ns,
+                            &mut known_entities,
+                            &mut bindings,
+                            &mut deleted,
+                            &mut report,
                         )?;
                     }
                 }
                 _ => {
                     record_version(
-                        store, root, prefix, &commit.hash, &ev.path, commit.at_ms, &ns,
-                        &mut known_entities, &mut bindings, &mut deleted, &mut report,
+                        store,
+                        root,
+                        prefix,
+                        &commit.hash,
+                        &ev.path,
+                        commit.at_ms,
+                        &ns,
+                        &mut known_entities,
+                        &mut bindings,
+                        &mut deleted,
+                        &mut report,
                     )?;
                 }
             }
@@ -165,7 +195,12 @@ fn record_version(
     let out = Command::new("git")
         .args(["-C"])
         .arg(root)
-        .args(["-c", "core.quotepath=false", "show", &format!("{commit}:{path}")])
+        .args([
+            "-c",
+            "core.quotepath=false",
+            "show",
+            &format!("{commit}:{path}"),
+        ])
         .output()?;
     if !out.status.success() {
         return Ok(()); // vanished from git's view (submodule, mode change)
@@ -274,8 +309,12 @@ fn read_history(root: &Path) -> Result<Vec<CommitEntry>, StoreError> {
             continue;
         }
         let mut parts = line.split('\t');
-        let (Some(status), Some(path)) = (parts.next(), parts.next()) else { continue };
-        let Some(current) = commits.last_mut() else { continue };
+        let (Some(status), Some(path)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        let Some(current) = commits.last_mut() else {
+            continue;
+        };
         let s = status.chars().next().unwrap_or(' ');
         if !matches!(s, 'A' | 'M' | 'D' | 'R' | 'C' | 'T') {
             continue;
@@ -353,17 +392,25 @@ mod tests {
         let at_c3 = files_at(&store, &index, "twin/old", 3_000_000_000).unwrap();
         assert!(!at_c3.iter().any(|(r, _)| r == "b.rs"), "b deleted at c3");
         let at_c4 = files_at(&store, &index, "twin/old", 4_000_000_000).unwrap();
-        assert!(at_c4.iter().any(|(r, _)| r == "b.rs"), "b resurrected at c4");
+        assert!(
+            at_c4.iter().any(|(r, _)| r == "b.rs"),
+            "b resurrected at c4"
+        );
 
         // Churn counts real history.
         let a_versions = index
             .observations_of(&a)
             .iter()
             .filter_map(|id| store.get(id).ok())
-            .filter(|o| matches!(o, Object::Observation { property, .. } if property == "content_b3"))
+            .filter(
+                |o| matches!(o, Object::Observation { property, .. } if property == "content_b3"),
+            )
             .count();
         assert_eq!(a_versions, 2);
-        assert_eq!(latest(&index, &store, &b, "present").unwrap().as_deref(), Some("true"));
+        assert_eq!(
+            latest(&index, &store, &b, "present").unwrap().as_deref(),
+            Some("true")
+        );
 
         // Idempotent: a second backfill writes nothing at all.
         let before = store.count_objects().unwrap();
@@ -385,7 +432,9 @@ mod tests {
             .observations_of(&repo_sid)
             .iter()
             .filter_map(|id| store.get(id).ok())
-            .filter(|o| matches!(o, Object::Observation { property, .. } if property == "git_commit"))
+            .filter(
+                |o| matches!(o, Object::Observation { property, .. } if property == "git_commit"),
+            )
             .count();
         assert!(commits_observed >= 4);
     }

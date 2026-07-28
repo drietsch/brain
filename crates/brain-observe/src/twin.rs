@@ -82,9 +82,12 @@ fn run(
     let mut extra = crate::ExtraIngest::default();
     let repo_sid_early = StableId::derive(&["repo", prefix]);
     if let Some(v) = latest(&index, store, &repo_sid_early, "ingest_extensions")? {
-        extra
-            .repo_exts
-            .extend(v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string));
+        extra.repo_exts.extend(
+            v.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string),
+        );
     }
     for def in registry.values() {
         if !def.extensions.is_empty() {
@@ -118,8 +121,10 @@ fn run(
 
     // Entity kinds governed by a seeded template: captured documents of
     // these kinds need a conformance pass even when otherwise unchanged.
-    let tmpl_kinds: BTreeSet<String> =
-        crate::templates::by_kind(store, &index)?.keys().cloned().collect();
+    let tmpl_kinds: BTreeSet<String> = crate::templates::by_kind(store, &index)?
+        .keys()
+        .cloned()
+        .collect();
 
     for rel in &files {
         let content = fs::read(root.join(rel))?;
@@ -130,7 +135,10 @@ fn run(
         let changed = match &prior {
             None => {
                 report.added.push(rel.clone());
-                added_by_hash.entry(hash.clone()).or_default().push(rel.clone());
+                added_by_hash
+                    .entry(hash.clone())
+                    .or_default()
+                    .push(rel.clone());
                 true
             }
             Some(v) if *v != hash => {
@@ -157,8 +165,8 @@ fn run(
         let structure = symbols::analyze(rel, &text);
         // Backfill: an unchanged file twinned before structure extraction
         // existed (no `language` observation yet) still gets its structure.
-        let structure_missing = !structure.language.is_empty()
-            && latest(&index, store, &sid, "language")?.is_none();
+        let structure_missing =
+            !structure.language.is_empty() && latest(&index, store, &sid, "language")?.is_none();
         // A projection whose bytes match its render contract is a view of
         // an artifact that already owns the semantics — never re-capture
         // it as a second document.
@@ -166,7 +174,11 @@ fn run(
             latest(&index, store, &sid, "expected_b3")?.as_deref() == Some(hash.as_str());
         // Same backfill rule for decision/plan documents twinned before doc
         // capture existed (no `content` observation on the doc entity yet).
-        let doc_meta = if is_projection { None } else { docs::parse_doc(rel, &text) };
+        let doc_meta = if is_projection {
+            None
+        } else {
+            docs::parse_doc(rel, &text)
+        };
         let doc_missing = match &doc_meta {
             Some(m) => {
                 let dsid = doc_sid(prefix, m);
@@ -178,8 +190,11 @@ fn run(
             None => false,
         };
         // And for skills / agent configuration.
-        let agent_meta =
-            if is_projection { None } else { agents::parse_agent_doc(rel, &text) };
+        let agent_meta = if is_projection {
+            None
+        } else {
+            agents::parse_agent_doc(rel, &text)
+        };
         let agent_missing = match &agent_meta {
             Some(a) => {
                 let asid = agent_doc_sid(prefix, a);
@@ -192,8 +207,8 @@ fn run(
         };
         // And for test classification (files twinned before it existed).
         let test_info = testing::classify(rel, structure.language, &text);
-        let test_missing = test_info.is_some()
-            && latest(&index, store, &sid, "test_framework")?.is_none();
+        let test_missing =
+            test_info.is_some() && latest(&index, store, &sid, "test_framework")?.is_none();
         // Registry rules capture paths the built-in detectors didn't
         // claim; built-ins keep precedence, most-specific pattern wins.
         let rule = if doc_meta.is_none() && agent_meta.is_none() && !is_projection {
@@ -259,7 +274,15 @@ fn run(
             {
                 observe(store, &sym_sid, "line", &sym.line.to_string(), now)?;
             }
-            if relate(store, &index, &mut written_relations, &sid, "contains", &sym_sid, now)? {
+            if relate(
+                store,
+                &index,
+                &mut written_relations,
+                &sid,
+                "contains",
+                &sym_sid,
+                now,
+            )? {
                 report.relations += 1;
             }
         }
@@ -280,12 +303,28 @@ fn run(
                     module_sid
                 }
             };
-            if relate(store, &index, &mut written_relations, &sid, "imports", &target, now)? {
+            if relate(
+                store,
+                &index,
+                &mut written_relations,
+                &sid,
+                "imports",
+                &target,
+                now,
+            )? {
                 report.relations += 1;
             }
             // A test file covers the twinned files it imports.
             if resolved.is_some() && test_info.as_ref().is_some_and(|t| t.is_test_file) {
-                if relate(store, &index, &mut written_relations, &sid, "covers", &target, now)? {
+                if relate(
+                    store,
+                    &index,
+                    &mut written_relations,
+                    &sid,
+                    "covers",
+                    &target,
+                    now,
+                )? {
                     report.relations += 1;
                 }
             }
@@ -594,7 +633,7 @@ pub struct StaleDoc {
 /// compiled defaults: none|info|warn) with code fallbacks — decisions and
 /// plans are records once written (info); skills, agent config, and
 /// taught kinds describe the present (warn).
-pub(crate) fn rot_severity(rot: &str, kind: &str) -> Option<Severity> {
+pub fn rot_severity(rot: &str, kind: &str) -> Option<Severity> {
     match rot {
         "none" => None,
         "info" => Some(Severity::Info),
@@ -629,8 +668,13 @@ pub fn insights_with(
     let mut file_sids: Vec<(String, StableId)> = Vec::new();
 
     for (name, node) in &ns {
-        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
-        if let Ok(Object::Entity { id, entity_kind, .. }) = store.get(node) {
+        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
+            continue;
+        };
+        if let Ok(Object::Entity {
+            id, entity_kind, ..
+        }) = store.get(node)
+        {
             if entity_kind == "source_file" {
                 file_sids.push((rel.to_string(), id));
             }
@@ -644,7 +688,9 @@ pub fn insights_with(
     for kind in ["decision", "plan"] {
         let mut seen: BTreeSet<StableId> = BTreeSet::new();
         for node in index.entities_by_kind(kind) {
-            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                continue;
+            };
             if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone())
             {
                 continue;
@@ -668,7 +714,10 @@ pub fn insights_with(
         }
     }
     decisions.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-    ins.decisions = decisions.into_iter().map(|(_, s, t, st)| (s, t, st)).collect();
+    ins.decisions = decisions
+        .into_iter()
+        .map(|(_, s, t, st)| (s, t, st))
+        .collect();
     plans.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     ins.plans = plans.into_iter().map(|(_, s, t)| (s, t)).collect();
 
@@ -677,7 +726,9 @@ pub fn insights_with(
         let mut seen: BTreeSet<StableId> = BTreeSet::new();
         let mut rows: Vec<(String, String, String)> = Vec::new();
         for node in index.entities_by_kind(kind) {
-            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                continue;
+            };
             if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone())
             {
                 continue;
@@ -715,13 +766,18 @@ pub fn insights_with(
     for kind in &doc_kinds {
         let kind = kind.as_str();
         let rot = rot_severity(
-            kind_registry.get(kind).map(|d| d.rot.as_str()).unwrap_or(""),
+            kind_registry
+                .get(kind)
+                .map(|d| d.rot.as_str())
+                .unwrap_or(""),
             kind,
         );
         let mut count = 0usize;
         let mut seen: BTreeSet<StableId> = BTreeSet::new();
         for node in index.entities_by_kind(kind) {
-            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                continue;
+            };
             if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone())
             {
                 continue;
@@ -733,7 +789,8 @@ pub fn insights_with(
             count += 1;
             if latest(index, store, &id, "conforms")?.as_deref() == Some("false") {
                 let missing = latest(index, store, &id, "missing")?.unwrap_or_default();
-                ins.nonconforming.push((slug.clone(), kind.to_string(), missing));
+                ins.nonconforming
+                    .push((slug.clone(), kind.to_string(), missing));
             }
             let Some(severity) = rot else { continue };
             if let Some((doc_at, _)) = latest_at(index, store, &id, "content")? {
@@ -768,22 +825,37 @@ pub fn insights_with(
     // Assets rot too: a declared `depicts` target that changed after the
     // asset's bytes were captured. Same shape, same surfaces.
     let asset_rot = rot_severity(
-        kind_registry.get("asset").map(|d| d.rot.as_str()).unwrap_or(""),
+        kind_registry
+            .get("asset")
+            .map(|d| d.rot.as_str())
+            .unwrap_or(""),
         "asset",
     );
     if let Some(severity) = asset_rot {
         for (slug, changed) in crate::assets::stale(store, index, prefix)? {
-            ins.stale_docs.push(StaleDoc { slug, kind: "asset".to_string(), severity, changed });
+            ins.stale_docs.push(StaleDoc {
+                slug,
+                kind: "asset".to_string(),
+                severity,
+                changed,
+            });
         }
     }
-    ins.stale_docs
-        .sort_by(|a, b| a.severity.cmp(&b.severity).then_with(|| a.slug.cmp(&b.slug)));
+    ins.stale_docs.sort_by(|a, b| {
+        a.severity
+            .cmp(&b.severity)
+            .then_with(|| a.slug.cmp(&b.slug))
+    });
 
     // Features: done-ness evaluated live against the definition of done.
     for row in crate::features::list(store, index, prefix)? {
         let report = crate::features::evaluate(store, index, prefix, &row.slug)?;
         let met = report.checks.iter().filter(|c| c.count > 0).count();
-        ins.features.push((row.slug, row.status, format!("{met}/{}", report.checks.len())));
+        ins.features.push((
+            row.slug,
+            row.status,
+            format!("{met}/{}", report.checks.len()),
+        ));
     }
 
     let mut churn: Vec<(String, usize)> = Vec::new();
@@ -803,7 +875,9 @@ pub fn insights_with(
             .observations_of(sid)
             .iter()
             .filter_map(|id| store.get(id).ok())
-            .filter(|o| matches!(o, Object::Observation { property, .. } if property == "content_b3"))
+            .filter(
+                |o| matches!(o, Object::Observation { property, .. } if property == "content_b3"),
+            )
             .count();
         // Generated projections churn by design; their edits are noise.
         let generated = latest(index, store, sid, "generated")?.as_deref() == Some("true");
@@ -847,7 +921,12 @@ pub fn insights_with(
         for (_, to) in live_from(index, store, sid, "imports")? {
             ins.relations += 1;
             for node in index.entity_nodes(&to) {
-                if let Ok(Object::Entity { entity_kind, labels, .. }) = store.get(&node) {
+                if let Ok(Object::Entity {
+                    entity_kind,
+                    labels,
+                    ..
+                }) = store.get(&node)
+                {
                     if entity_kind == "module" {
                         let name = labels.get("name").cloned().unwrap_or_default();
                         *modules.entry(name).or_default() += 1;
@@ -897,8 +976,16 @@ pub fn insights_with(
     // Growth series: pair up the repo entity's totals observations by time.
     let mut points: BTreeMap<u64, (usize, usize, usize)> = BTreeMap::new();
     for id in index.observations_of(&repo_sid) {
-        if let Object::Observation { property, value, observed_at_ms, .. } = store.get(&id)? {
-            let Ok(n) = value.parse::<usize>() else { continue };
+        if let Object::Observation {
+            property,
+            value,
+            observed_at_ms,
+            ..
+        } = store.get(&id)?
+        {
+            let Ok(n) = value.parse::<usize>() else {
+                continue;
+            };
             let point = points.entry(observed_at_ms).or_insert((0, 0, 0));
             match property.as_str() {
                 "files_present" => point.0 = n,
@@ -965,7 +1052,13 @@ pub(crate) fn relate(
             if &t == to {
                 written.insert(key);
                 if !brain_index::edge_active(index, store, from, kind, to)? {
-                    observe(store, &brain_index::edge_sid(from, kind, to), "active", "true", at)?;
+                    observe(
+                        store,
+                        &brain_index::edge_sid(from, kind, to),
+                        "active",
+                        "true",
+                        at,
+                    )?;
                     return Ok(true);
                 }
                 return Ok(false);
@@ -1006,7 +1099,14 @@ pub(crate) fn retract_edge(
     if !exists || !brain_index::edge_active(index, store, from, kind, to)? {
         return Ok(false);
     }
-    observe_src(store, &brain_index::edge_sid(from, kind, to), "active", "false", source, at)?;
+    observe_src(
+        store,
+        &brain_index::edge_sid(from, kind, to),
+        "active",
+        "false",
+        source,
+        at,
+    )?;
     Ok(true)
 }
 
@@ -1039,7 +1139,14 @@ pub fn add_ingest_extensions(
         return Ok(None);
     }
     let csv = set.into_iter().collect::<Vec<_>>().join(",");
-    observe_src(store, &repo_sid, "ingest_extensions", &csv, "agent", now_ms())?;
+    observe_src(
+        store,
+        &repo_sid,
+        "ingest_extensions",
+        &csv,
+        "agent",
+        now_ms(),
+    )?;
     Ok(Some(csv))
 }
 
@@ -1163,8 +1270,13 @@ pub fn latest_with_source(
 ) -> Result<Option<(u64, String, String)>, StoreError> {
     let mut best: Option<(u64, String, String)> = None;
     for id in index.observations_of(subject) {
-        if let Object::Observation { property: p, value, source, observed_at_ms, .. } =
-            store.get(&id)?
+        if let Object::Observation {
+            property: p,
+            value,
+            source,
+            observed_at_ms,
+            ..
+        } = store.get(&id)?
         {
             if p == property && best.as_ref().is_none_or(|(b, _, _)| observed_at_ms >= *b) {
                 best = Some((observed_at_ms, value, source));
@@ -1185,7 +1297,13 @@ pub fn latest_at_before(
 ) -> Result<Option<(u64, String)>, StoreError> {
     let mut best: Option<(u64, String)> = None;
     for id in index.observations_of(subject) {
-        if let Object::Observation { property: p, value, observed_at_ms, .. } = store.get(&id)? {
+        if let Object::Observation {
+            property: p,
+            value,
+            observed_at_ms,
+            ..
+        } = store.get(&id)?
+        {
             if p == property
                 && observed_at_ms <= t
                 && best.as_ref().is_none_or(|(b, _)| observed_at_ms >= *b)
@@ -1207,15 +1325,26 @@ pub fn files_at(
 ) -> Result<Vec<(String, String)>, StoreError> {
     let mut out = Vec::new();
     for (name, node) in store.namespace()? {
-        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
-        let Ok(Object::Entity { id: sid, entity_kind, .. }) = store.get(&node) else { continue };
+        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
+            continue;
+        };
+        let Ok(Object::Entity {
+            id: sid,
+            entity_kind,
+            ..
+        }) = store.get(&node)
+        else {
+            continue;
+        };
         if entity_kind != "source_file" {
             continue;
         }
         let Some((_, hash)) = latest_at_before(index, store, &sid, "content_b3", t)? else {
             continue; // did not exist yet at t
         };
-        if latest_at_before(index, store, &sid, "present", t)?.map(|(_, v)| v).as_deref()
+        if latest_at_before(index, store, &sid, "present", t)?
+            .map(|(_, v)| v)
+            .as_deref()
             == Some("false")
         {
             continue; // was deleted at t
@@ -1268,7 +1397,9 @@ fn resolve_import(from_rel: &str, import: &str, files: &BTreeSet<String>) -> Opt
         {
             let hyphen = first.replace('_', "-");
             for f in files {
-                let Some(src_root) = f.strip_suffix("lib.rs") else { continue };
+                let Some(src_root) = f.strip_suffix("lib.rs") else {
+                    continue;
+                };
                 let dir = src_root
                     .strip_suffix("/src/")
                     .map(|d| d.rsplit('/').next().unwrap_or(d))
@@ -1277,9 +1408,10 @@ fn resolve_import(from_rel: &str, import: &str, files: &BTreeSet<String>) -> Opt
                     continue;
                 }
                 if let Some(second) = second {
-                    for cand in
-                        [format!("{src_root}{second}.rs"), format!("{src_root}{second}/mod.rs")]
-                    {
+                    for cand in [
+                        format!("{src_root}{second}.rs"),
+                        format!("{src_root}{second}/mod.rs"),
+                    ] {
                         if files.contains(&cand) {
                             return Some(cand);
                         }
@@ -1381,7 +1513,13 @@ pub fn notes(
         if !candidates.contains(&id) {
             continue;
         }
-        if let Object::Observation { property, value, observed_at_ms, .. } = store.get(&id)? {
+        if let Object::Observation {
+            property,
+            value,
+            observed_at_ms,
+            ..
+        } = store.get(&id)?
+        {
             if property == "note" {
                 out.push((observed_at_ms, value));
             }
@@ -1464,18 +1602,39 @@ fn record_entity_doc(
         }
     }
 
-    let mut outcome =
-        DocOutcome { sid: sid.clone(), wrote, relations: 0, retracted: 0, mentions: Vec::new() };
+    let mut outcome = DocOutcome {
+        sid: sid.clone(),
+        wrote,
+        relations: 0,
+        retracted: 0,
+        mentions: Vec::new(),
+    };
 
     let repo_sid = StableId::derive(&["repo", prefix]);
-    if relate(store, index, written_relations, &sid, "concerns", &repo_sid, now)? {
+    if relate(
+        store,
+        index,
+        written_relations,
+        &sid,
+        "concerns",
+        &repo_sid,
+        now,
+    )? {
         outcome.relations += 1;
     }
     // Auto-detected documents keep their file entity too: the document is
     // the semantic thing, the file is where it happens to be recorded.
     if let Some(rel) = rel_path {
         let file_sid = StableId::derive(&["file", rel]);
-        if relate(store, index, written_relations, &sid, "recorded_in", &file_sid, now)? {
+        if relate(
+            store,
+            index,
+            written_relations,
+            &sid,
+            "recorded_in",
+            &file_sid,
+            now,
+        )? {
             outcome.relations += 1;
         }
     }
@@ -1485,7 +1644,15 @@ fn record_entity_doc(
             continue;
         }
         let file_sid = StableId::derive(&["file", cand]);
-        if relate(store, index, written_relations, &sid, "mentions", &file_sid, now)? {
+        if relate(
+            store,
+            index,
+            written_relations,
+            &sid,
+            "mentions",
+            &file_sid,
+            now,
+        )? {
             outcome.relations += 1;
         }
         outcome.mentions.push(cand.clone());
@@ -1508,7 +1675,15 @@ fn record_entity_doc(
             observe_src(store, &sid, "missing", &missing_val, source, now)?;
             outcome.wrote = true;
         }
-        if relate(store, index, written_relations, &sid, "conforms_to", tmpl_sid, now)? {
+        if relate(
+            store,
+            index,
+            written_relations,
+            &sid,
+            "conforms_to",
+            tmpl_sid,
+            now,
+        )? {
             outcome.relations += 1;
         }
         // Version-precise conformance: record WHICH contract judged this
@@ -1585,7 +1760,15 @@ pub fn record_doc(
     )?;
     if let Some(other) = &meta.supersedes {
         let other_sid = StableId::derive(&["decision", prefix, other]);
-        if relate(store, index, written_relations, &outcome.sid, "supersedes", &other_sid, now)? {
+        if relate(
+            store,
+            index,
+            written_relations,
+            &outcome.sid,
+            "supersedes",
+            &other_sid,
+            now,
+        )? {
             outcome.relations += 1;
             outcome.wrote = true;
         }
@@ -1622,7 +1805,11 @@ pub fn record_agent_doc(
         prefix,
         doc.kind.as_str(),
         &doc.slug,
-        &[("name", &doc.name), ("agent", &doc.agent), ("role", &doc.role)],
+        &[
+            ("name", &doc.name),
+            ("agent", &doc.agent),
+            ("role", &doc.role),
+        ],
         &props,
         content,
         source,
@@ -1652,8 +1839,10 @@ pub fn author_artifact(
     let candidates = twinned_paths(store, prefix)?;
     let mut written = BTreeSet::new();
     let registry = crate::kinds::registry(store, &index)?;
-    let mut props: Vec<(String, String)> =
-        vec![("content".to_string(), content.to_string()), ("title".to_string(), title.to_string())];
+    let mut props: Vec<(String, String)> = vec![
+        ("content".to_string(), content.to_string()),
+        ("title".to_string(), title.to_string()),
+    ];
     if let Some(def) = registry.get(kind) {
         if let Some(rule) = def.rule() {
             for (p, v) in rule.extract(content, slug) {
@@ -1663,8 +1852,10 @@ pub fn author_artifact(
             }
         }
     }
-    let prop_refs: Vec<(&str, &str)> =
-        props.iter().map(|(p, v)| (p.as_str(), v.as_str())).collect();
+    let prop_refs: Vec<(&str, &str)> = props
+        .iter()
+        .map(|(p, v)| (p.as_str(), v.as_str()))
+        .collect();
     record_entity_doc(
         store,
         &index,
@@ -1696,7 +1887,16 @@ pub fn add_doc(
     let candidates = twinned_paths(store, prefix)?;
     let mut written = BTreeSet::new();
     record_doc(
-        store, &index, prefix, meta, content, source, None, &candidates, &mut written, now_ms(),
+        store,
+        &index,
+        prefix,
+        meta,
+        content,
+        source,
+        None,
+        &candidates,
+        &mut written,
+        now_ms(),
     )
 }
 
@@ -1714,7 +1914,16 @@ pub fn add_agent_doc(
     let candidates = twinned_paths(store, prefix)?;
     let mut written = BTreeSet::new();
     record_agent_doc(
-        store, &index, prefix, doc, content, source, None, &candidates, &mut written, now_ms(),
+        store,
+        &index,
+        prefix,
+        doc,
+        content,
+        source,
+        None,
+        &candidates,
+        &mut written,
+        now_ms(),
     )
 }
 
@@ -1753,7 +1962,11 @@ mod tests {
             "<?php\nnamespace App;\nuse App\\Db;\nclass Model {\npublic function load() {}\n}\n",
         )
         .unwrap();
-        fs::write(src.path().join("run.py"), "import os\ndef main():\n    pass\n").unwrap();
+        fs::write(
+            src.path().join("run.py"),
+            "import os\ndef main():\n    pass\n",
+        )
+        .unwrap();
         let store_dir = tempfile::tempdir().unwrap();
         (src, store_dir)
     }
@@ -1771,7 +1984,11 @@ mod tests {
 
         let r1 = refresh(&store, src.path(), "twin/app").unwrap();
         assert_eq!(r1.added.len(), 6);
-        assert!(r1.symbols >= 8, "symbols across four languages: {}", r1.symbols);
+        assert!(
+            r1.symbols >= 8,
+            "symbols across four languages: {}",
+            r1.symbols
+        );
         assert!(r1.relations >= 8, "contains + imports: {}", r1.relations);
 
         // Rust intra-crate import resolved to the file, not a module stub.
@@ -1823,7 +2040,11 @@ mod tests {
         let store = Store::open(store_dir.path()).unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
 
-        fs::write(src.path().join("run.py"), "import sys\ndef main():\n    pass\n").unwrap();
+        fs::write(
+            src.path().join("run.py"),
+            "import sys\ndef main():\n    pass\n",
+        )
+        .unwrap();
         fs::remove_file(src.path().join("web/util.js")).unwrap();
         fs::write(src.path().join("new.rs"), "pub fn fresh() {}\n").unwrap();
 
@@ -1833,7 +2054,11 @@ mod tests {
         assert_eq!(s.changed, vec!["run.py".to_string()]);
         assert_eq!(s.deleted, vec!["web/util.js".to_string()]);
         assert_eq!(s.added, vec!["new.rs".to_string()]);
-        assert_eq!(store.count_objects().unwrap(), before, "status is read-only");
+        assert_eq!(
+            store.count_objects().unwrap(),
+            before,
+            "status is read-only"
+        );
 
         // refresh: records it.
         let r = refresh(&store, src.path(), "twin/app").unwrap();
@@ -1879,7 +2104,11 @@ mod tests {
         assert_eq!(ins.series.len(), 1, "first totals point recorded");
 
         // Edit a file twice across refreshes: churn appears, series grows.
-        fs::write(src.path().join("run.py"), "import os\ndef main():\n    return 1\n").unwrap();
+        fs::write(
+            src.path().join("run.py"),
+            "import os\ndef main():\n    return 1\n",
+        )
+        .unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         fs::write(
             src.path().join("run.py"),
@@ -1906,7 +2135,10 @@ mod tests {
         let sid = StableId::derive(&["file", "run.py"]);
         add_note(&store, &sid, "agent: rewrote main twice while iterating").unwrap();
         let ins = insights(&store, "twin/app").unwrap();
-        assert!(ins.notes.iter().any(|(_, e, t)| e == "run.py" && t.contains("rewrote")));
+        assert!(ins
+            .notes
+            .iter()
+            .any(|(_, e, t)| e == "run.py" && t.contains("rewrote")));
     }
 
     #[test]
@@ -1932,12 +2164,18 @@ mod tests {
         let index = fresh_index(&store);
         let adr = StableId::derive(&["decision", "twin/app", "adr-001-storage"]);
         let plan = StableId::derive(&["plan", "twin/app", "plan-v1"]);
-        assert_eq!(latest(&index, &store, &adr, "status").unwrap().as_deref(), Some("proposed"));
+        assert_eq!(
+            latest(&index, &store, &adr, "status").unwrap().as_deref(),
+            Some("proposed")
+        );
         assert_eq!(
             latest(&index, &store, &adr, "title").unwrap().as_deref(),
             Some("Use content addressing")
         );
-        assert!(latest(&index, &store, &plan, "content").unwrap().unwrap().contains("Refactor"));
+        assert!(latest(&index, &store, &plan, "content")
+            .unwrap()
+            .unwrap()
+            .contains("Refactor"));
 
         // Linked: mentions -> the file it names, concerns -> repo,
         // recorded_in -> the markdown file entity.
@@ -1972,7 +2210,10 @@ mod tests {
         .unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         let index = fresh_index(&store);
-        assert_eq!(latest(&index, &store, &adr, "status").unwrap().as_deref(), Some("accepted"));
+        assert_eq!(
+            latest(&index, &store, &adr, "status").unwrap().as_deref(),
+            Some("accepted")
+        );
         let statuses = index
             .observations_of(&adr)
             .iter()
@@ -2001,7 +2242,10 @@ mod tests {
             .iter()
             .any(|(s, _, st)| s == "adr-002-sync" && st == "proposed"));
         assert!(ins.plans.iter().any(|(s, _)| s == "plan-v1"));
-        assert!(!ins.decided.contains("src/main.rs"), "its rationale was superseded");
+        assert!(
+            !ins.decided.contains("src/main.rs"),
+            "its rationale was superseded"
+        );
         assert!(!ins.decided.contains("run.py"));
         let (lc, why) = crate::lifecycle::of(&index, &store, &adr).unwrap();
         assert_eq!(lc, crate::lifecycle::Lifecycle::Superseded);
@@ -2019,8 +2263,11 @@ mod tests {
             "---\nname: deploy\ndescription: Ship src/main.rs safely\n---\n\n# Deploy\n",
         )
         .unwrap();
-        fs::write(src.path().join("CLAUDE.md"), "# Project rules\n\nStart at src/main.rs.\n")
-            .unwrap();
+        fs::write(
+            src.path().join("CLAUDE.md"),
+            "# Project rules\n\nStart at src/main.rs.\n",
+        )
+        .unwrap();
         fs::write(
             src.path().join(".claude/agents/reviewer.md"),
             "---\nname: reviewer\ndescription: Reviews diffs\n---\nReview carefully.\n",
@@ -2034,10 +2281,15 @@ mod tests {
         let index = fresh_index(&store);
         let skill = StableId::derive(&["skill", "twin/app", "deploy"]);
         assert_eq!(
-            latest(&index, &store, &skill, "description").unwrap().as_deref(),
+            latest(&index, &store, &skill, "description")
+                .unwrap()
+                .as_deref(),
             Some("Ship src/main.rs safely")
         );
-        assert_eq!(latest(&index, &store, &skill, "agent").unwrap().as_deref(), Some("claude"));
+        assert_eq!(
+            latest(&index, &store, &skill, "agent").unwrap().as_deref(),
+            Some("claude")
+        );
         // The skill mentions src/main.rs (from its description in content).
         let main_sid = StableId::derive(&["file", "src/main.rs"]);
         let mentioned: Vec<_> = index
@@ -2052,13 +2304,23 @@ mod tests {
 
         let claude_md = StableId::derive(&["agent_config", "twin/app", "claude.md"]);
         assert_eq!(
-            latest(&index, &store, &claude_md, "role").unwrap().as_deref(),
+            latest(&index, &store, &claude_md, "role")
+                .unwrap()
+                .as_deref(),
             Some("instructions")
         );
         let reviewer = StableId::derive(&["agent_config", "twin/app", "reviewer"]);
-        assert_eq!(latest(&index, &store, &reviewer, "role").unwrap().as_deref(), Some("subagent"));
+        assert_eq!(
+            latest(&index, &store, &reviewer, "role")
+                .unwrap()
+                .as_deref(),
+            Some("subagent")
+        );
         let cursor = StableId::derive(&["agent_config", "twin/app", ".cursorrules"]);
-        assert_eq!(latest(&index, &store, &cursor, "agent").unwrap().as_deref(), Some("cursor"));
+        assert_eq!(
+            latest(&index, &store, &cursor, "agent").unwrap().as_deref(),
+            Some("cursor")
+        );
 
         // Idempotence still holds with agent docs present.
         let before = store.count_objects().unwrap();
@@ -2068,9 +2330,18 @@ mod tests {
 
         // Insights surface them.
         let ins = insights(&store, "twin/app").unwrap();
-        assert!(ins.skills.iter().any(|(s, a, d)| s == "deploy" && a == "claude" && d.contains("Ship")));
-        assert!(ins.agent_configs.iter().any(|(s, _, r)| s == "claude.md" && r == "instructions"));
-        assert!(ins.agent_configs.iter().any(|(s, _, r)| s == "reviewer" && r == "subagent"));
+        assert!(ins
+            .skills
+            .iter()
+            .any(|(s, a, d)| s == "deploy" && a == "claude" && d.contains("Ship")));
+        assert!(ins
+            .agent_configs
+            .iter()
+            .any(|(s, _, r)| s == "claude.md" && r == "instructions"));
+        assert!(ins
+            .agent_configs
+            .iter()
+            .any(|(s, _, r)| s == "reviewer" && r == "subagent"));
 
         // Explicit add for an out-of-repo skill (user-level ~/.claude).
         let content = "---\nname: triage\ndescription: Sort issues\n---\nSteps.\n";
@@ -2078,7 +2349,10 @@ mod tests {
         let out = add_agent_doc(&store, "twin/app", &doc, content, "claude-code").unwrap();
         assert!(out.wrote);
         let again = add_agent_doc(&store, "twin/app", &doc, content, "claude-code").unwrap();
-        assert!(!again.wrote, "explicit re-add of unchanged skill writes nothing");
+        assert!(
+            !again.wrote,
+            "explicit re-add of unchanged skill writes nothing"
+        );
         let ins = insights(&store, "twin/app").unwrap();
         assert!(ins.skills.iter().any(|(s, _, _)| s == "triage"));
     }
@@ -2094,7 +2368,10 @@ mod tests {
         let meta = docs::parse_content(docs::DocKind::Plan, "session-plan", content, None, None);
         let out = add_doc(&store, "twin/app", &meta, content, "claude-code").unwrap();
         assert!(out.wrote);
-        assert_eq!(out.mentions, vec!["run.py".to_string(), "src/main.rs".to_string()]);
+        assert_eq!(
+            out.mentions,
+            vec!["run.py".to_string(), "src/main.rs".to_string()]
+        );
 
         // Re-adding the identical document writes nothing.
         let before = store.count_objects().unwrap();
@@ -2109,7 +2386,10 @@ mod tests {
             Object::Observation { source, .. } if source == "claude-code"
         )));
         let ins = insights(&store, "twin/app").unwrap();
-        assert!(ins.plans.iter().any(|(s, t)| s == "session-plan" && t == "The session plan"));
+        assert!(ins
+            .plans
+            .iter()
+            .any(|(s, t)| s == "session-plan" && t == "The session plan"));
     }
 
     #[test]
@@ -2124,15 +2404,28 @@ mod tests {
             "# Good decision\n\nStatus: accepted\n\nBecause src/main.rs needed it.\n",
         )
         .unwrap();
-        fs::write(src.path().join("docs/adr/adr-002-bare.md"), "prose without contract\n")
-            .unwrap();
+        fs::write(
+            src.path().join("docs/adr/adr-002-bare.md"),
+            "prose without contract\n",
+        )
+        .unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
 
         let index = fresh_index(&store);
         let good = StableId::derive(&["decision", "twin/app", "adr-001-good"]);
         let bare = StableId::derive(&["decision", "twin/app", "adr-002-bare"]);
-        assert_eq!(latest(&index, &store, &good, "conforms").unwrap().as_deref(), Some("true"));
-        assert_eq!(latest(&index, &store, &bare, "conforms").unwrap().as_deref(), Some("false"));
+        assert_eq!(
+            latest(&index, &store, &good, "conforms")
+                .unwrap()
+                .as_deref(),
+            Some("true")
+        );
+        assert_eq!(
+            latest(&index, &store, &bare, "conforms")
+                .unwrap()
+                .as_deref(),
+            Some("false")
+        );
         assert_eq!(
             latest(&index, &store, &bare, "missing").unwrap().as_deref(),
             Some("title,status")
@@ -2141,9 +2434,10 @@ mod tests {
 
         // Insights surface the violation; fixing the file clears it.
         let ins = insights(&store, "twin/app").unwrap();
-        assert!(ins.nonconforming.iter().any(|(s, k, m)| {
-            s == "adr-002-bare" && k == "decision" && m.contains("status")
-        }));
+        assert!(ins
+            .nonconforming
+            .iter()
+            .any(|(s, k, m)| { s == "adr-002-bare" && k == "decision" && m.contains("status") }));
         fs::write(
             src.path().join("docs/adr/adr-002-bare.md"),
             "# Now titled\n\nStatus: proposed\n\nprose with contract\n",
@@ -2151,7 +2445,12 @@ mod tests {
         .unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         let index = fresh_index(&store);
-        assert_eq!(latest(&index, &store, &bare, "conforms").unwrap().as_deref(), Some("true"));
+        assert_eq!(
+            latest(&index, &store, &bare, "conforms")
+                .unwrap()
+                .as_deref(),
+            Some("true")
+        );
         let ins = insights(&store, "twin/app").unwrap();
         assert!(ins.nonconforming.is_empty());
 
@@ -2165,28 +2464,40 @@ mod tests {
             crate::features::add(&store, "twin/app", "render", "Rendering", "building").unwrap();
         assert!(wrote);
         let index = fresh_index(&store);
-        let (main_sid, kind) = crate::features::resolve_target(&store, &index, "twin/app", "src/main.rs")
-            .unwrap()
-            .unwrap();
+        let (main_sid, kind) =
+            crate::features::resolve_target(&store, &index, "twin/app", "src/main.rs")
+                .unwrap()
+                .unwrap();
         assert_eq!(kind, "file");
         crate::features::link(&store, "twin/app", "render", "implemented_by", &main_sid).unwrap();
-        let (adr_sid, kind) = crate::features::resolve_target(&store, &index, "twin/app", "adr-001-good")
-            .unwrap()
-            .unwrap();
+        let (adr_sid, kind) =
+            crate::features::resolve_target(&store, &index, "twin/app", "adr-001-good")
+                .unwrap()
+                .unwrap();
         assert_eq!(kind, "decision");
         crate::features::link(&store, "twin/app", "render", "decided_by", &adr_sid).unwrap();
 
         let index = fresh_index(&store);
         let report = crate::features::evaluate(&store, &index, "twin/app", "render").unwrap();
         assert!(!report.done, "2 of 4 DoD predicates met");
-        assert_eq!(report.checks.len(), 4, "DoD comes from the seeded feature template");
+        assert_eq!(
+            report.checks.len(),
+            4,
+            "DoD comes from the seeded feature template"
+        );
         assert_eq!(report.checks.iter().filter(|c| c.count > 0).count(), 2);
-        assert!(crate::features::record_done(&store, &index, "twin/app", "render", &report)
-            .unwrap());
+        assert!(
+            crate::features::record_done(&store, &index, "twin/app", "render", &report).unwrap()
+        );
         let index = fresh_index(&store);
-        assert!(!crate::features::record_done(&store, &index, "twin/app", "render", &report)
-            .unwrap(), "unchanged done state writes nothing");
-        assert_eq!(latest(&index, &store, &fsid, "done").unwrap().as_deref(), Some("false"));
+        assert!(
+            !crate::features::record_done(&store, &index, "twin/app", "render", &report).unwrap(),
+            "unchanged done state writes nothing"
+        );
+        assert_eq!(
+            latest(&index, &store, &fsid, "done").unwrap().as_deref(),
+            Some("false")
+        );
 
         // Complete the DoD: the feature flips to done.
         let test_sid = StableId::derive(&["file", "run.py"]);
@@ -2199,7 +2510,10 @@ mod tests {
 
         // Insights render the matrix fraction.
         let ins = insights(&store, "twin/app").unwrap();
-        assert!(ins.features.iter().any(|(s, st, f)| s == "render" && st == "building" && f == "4/4"));
+        assert!(ins
+            .features
+            .iter()
+            .any(|(s, st, f)| s == "render" && st == "building" && f == "4/4"));
     }
 
     #[test]
@@ -2222,13 +2536,33 @@ mod tests {
         let spec = StableId::derive(&["file", "web/app.test.js"]);
         let app = StableId::derive(&["file", "web/app.js"]);
         let calc = StableId::derive(&["file", "src/calc.rs"]);
-        assert_eq!(latest(&index, &store, &spec, "test_framework").unwrap().as_deref(), Some("jest"));
-        assert_eq!(latest(&index, &store, &spec, "tests_declared").unwrap().as_deref(), Some("2"));
-        assert_eq!(latest(&index, &store, &spec, "file_role").unwrap().as_deref(), Some("test"));
+        assert_eq!(
+            latest(&index, &store, &spec, "test_framework")
+                .unwrap()
+                .as_deref(),
+            Some("jest")
+        );
+        assert_eq!(
+            latest(&index, &store, &spec, "tests_declared")
+                .unwrap()
+                .as_deref(),
+            Some("2")
+        );
+        assert_eq!(
+            latest(&index, &store, &spec, "file_role")
+                .unwrap()
+                .as_deref(),
+            Some("test")
+        );
         // The spec covers the file it imports; inline Rust tests classify
         // the file without marking it role=test.
         assert_eq!(index.relations_to(&app, "covers").len(), 1);
-        assert_eq!(latest(&index, &store, &calc, "test_framework").unwrap().as_deref(), Some("rust"));
+        assert_eq!(
+            latest(&index, &store, &calc, "test_framework")
+                .unwrap()
+                .as_deref(),
+            Some("rust")
+        );
         assert_eq!(latest(&index, &store, &calc, "file_role").unwrap(), None);
 
         // Refresh stays idempotent with test classification present.
@@ -2272,12 +2606,14 @@ mod tests {
 
         // Protocol 2: the failure is fixed — a pass->fail->pass timeline.
         let run2 = "test calc::tests::t_add ... ok\ntest web::render ... ok\n";
-        let out = testing::record_run(&store, "twin/app", &testing::parse_report(run2), run2)
-            .unwrap();
+        let out =
+            testing::record_run(&store, "twin/app", &testing::parse_report(run2), run2).unwrap();
         assert!(out.wrote);
         assert_eq!(out.transitions, 1, "fail -> pass is a recorded transition");
         let index = fresh_index(&store);
-        assert!(testing::failing_cases(&store, &index, "twin/app").unwrap().is_empty());
+        assert!(testing::failing_cases(&store, &index, "twin/app")
+            .unwrap()
+            .is_empty());
         assert_eq!(testing::runs(&store, &index, "twin/app").unwrap().len(), 2);
 
         // A JUnit (Playwright-style) run links cases to their spec file.
@@ -2312,7 +2648,10 @@ mod tests {
         .unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         let ins = insights(&store, "twin/app").unwrap();
-        assert!(ins.stale_docs.is_empty(), "freshly captured doc is not stale");
+        assert!(
+            ins.stale_docs.is_empty(),
+            "freshly captured doc is not stale"
+        );
 
         // The mentioned file changes after the doc was recorded.
         std::thread::sleep(std::time::Duration::from_millis(5));
@@ -2327,7 +2666,11 @@ mod tests {
         let d = &ins.stale_docs[0];
         assert_eq!(d.slug, "adr-001-main");
         assert_eq!(d.kind, "decision");
-        assert_eq!(d.severity, Severity::Info, "decisions are records: info by default");
+        assert_eq!(
+            d.severity,
+            Severity::Info,
+            "decisions are records: info by default"
+        );
         assert_eq!(d.changed, vec!["src/main.rs".to_string()]);
 
         // Acknowledging resets the clock without touching the file.
@@ -2335,7 +2678,10 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(5));
         ack(&store, &adr, "checked against current code").unwrap();
         let ins = insights(&store, "twin/app").unwrap();
-        assert!(ins.stale_docs.is_empty(), "acknowledged doc is fresh, file untouched");
+        assert!(
+            ins.stale_docs.is_empty(),
+            "acknowledged doc is fresh, file untouched"
+        );
 
         // A later change makes it stale again; updating the doc clears it.
         std::thread::sleep(std::time::Duration::from_millis(5));
@@ -2377,7 +2723,11 @@ mod tests {
             .unwrap();
         }
         std::thread::sleep(std::time::Duration::from_millis(5));
-        fs::write(src.path().join("src/main.rs"), "pub fn main() { /* rewritten */ }\n").unwrap();
+        fs::write(
+            src.path().join("src/main.rs"),
+            "pub fn main() { /* rewritten */ }\n",
+        )
+        .unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         let ins = insights(&store, "twin/app").unwrap();
         assert!(
@@ -2430,7 +2780,11 @@ mod tests {
             "# Deploy safely\n\nService: checkout\n\nRestart src/main.rs afterwards.\n",
         )
         .unwrap();
-        fs::write(src.path().join("docs/runbooks/rollback.md"), "just some prose\n").unwrap();
+        fs::write(
+            src.path().join("docs/runbooks/rollback.md"),
+            "just some prose\n",
+        )
+        .unwrap();
 
         let r = refresh(&store, src.path(), "twin/app").unwrap();
         assert_eq!(r.docs.len(), 2, "both runbooks captured: {:?}", r.docs);
@@ -2442,11 +2796,18 @@ mod tests {
             Some("Deploy safely")
         );
         assert_eq!(
-            latest(&index, &store, &deploy, "service").unwrap().as_deref(),
+            latest(&index, &store, &deploy, "service")
+                .unwrap()
+                .as_deref(),
             Some("checkout"),
             "extracted field became an observation"
         );
-        assert_eq!(latest(&index, &store, &deploy, "conforms").unwrap().as_deref(), Some("true"));
+        assert_eq!(
+            latest(&index, &store, &deploy, "conforms")
+                .unwrap()
+                .as_deref(),
+            Some("true")
+        );
         // Mentions and concerns come from the shared core.
         let main_sid = StableId::derive(&["file", "src/main.rs"]);
         let mentioned: Vec<_> = index
@@ -2463,14 +2824,20 @@ mod tests {
         // The prose-only runbook fails its contract — recorded, not rejected.
         let rollback = StableId::derive(&["runbook", "twin/app", "rollback"]);
         assert_eq!(
-            latest(&index, &store, &rollback, "conforms").unwrap().as_deref(),
+            latest(&index, &store, &rollback, "conforms")
+                .unwrap()
+                .as_deref(),
             Some("false")
         );
         let ins = insights(&store, "twin/app").unwrap();
-        assert!(ins.nonconforming.iter().any(|(s, k, m)| {
-            s == "rollback" && k == "runbook" && m.contains("service")
-        }));
-        assert!(ins.custom_artifacts.iter().any(|(k, n)| k == "runbook" && *n == 2));
+        assert!(ins
+            .nonconforming
+            .iter()
+            .any(|(s, k, m)| { s == "rollback" && k == "runbook" && m.contains("service") }));
+        assert!(ins
+            .custom_artifacts
+            .iter()
+            .any(|(k, n)| k == "runbook" && *n == 2));
 
         // Idempotence holds for rule-captured artifacts too.
         let before = store.count_objects().unwrap();
@@ -2500,8 +2867,16 @@ mod tests {
         let src = tempfile::tempdir().unwrap();
         fs::create_dir_all(src.path().join("crates/core-lib/src")).unwrap();
         fs::create_dir_all(src.path().join("crates/app/src")).unwrap();
-        fs::write(src.path().join("crates/core-lib/src/lib.rs"), "pub mod ids;\n").unwrap();
-        fs::write(src.path().join("crates/core-lib/src/ids.rs"), "pub struct Id;\n").unwrap();
+        fs::write(
+            src.path().join("crates/core-lib/src/lib.rs"),
+            "pub mod ids;\n",
+        )
+        .unwrap();
+        fs::write(
+            src.path().join("crates/core-lib/src/ids.rs"),
+            "pub struct Id;\n",
+        )
+        .unwrap();
         fs::write(
             src.path().join("crates/app/src/lib.rs"),
             "use core_lib::ids::Id;\nuse core_lib::helper;\npub fn go() {}\n",
@@ -2532,7 +2907,11 @@ mod tests {
         // reprocessing everything writes no duplicate facts.
         let before = store.count_objects().unwrap();
         refresh_full(&store, src.path(), "twin/ws").unwrap();
-        assert_eq!(store.count_objects().unwrap(), before, "full reprocess, zero growth");
+        assert_eq!(
+            store.count_objects().unwrap(),
+            before,
+            "full reprocess, zero growth"
+        );
     }
 
     #[test]
@@ -2542,19 +2921,27 @@ mod tests {
         refresh(&store, src.path(), "twin/app").unwrap();
         let index = fresh_index(&store);
         let py = StableId::derive(&["file", "run.py"]);
-        let (t1, old_hash) =
-            latest_at(&index, &store, &py, "content_b3").unwrap().expect("first hash");
+        let (t1, old_hash) = latest_at(&index, &store, &py, "content_b3")
+            .unwrap()
+            .expect("first hash");
 
         // Later: run.py changes, new.rs appears.
         std::thread::sleep(std::time::Duration::from_millis(5));
-        fs::write(src.path().join("run.py"), "import os\ndef main():\n    return 9\n").unwrap();
+        fs::write(
+            src.path().join("run.py"),
+            "import os\ndef main():\n    return 9\n",
+        )
+        .unwrap();
         fs::write(src.path().join("new.rs"), "pub fn fresh() {}\n").unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
 
         let index = fresh_index(&store);
         // As of t1: the old hash, and new.rs does not exist yet.
         let then = files_at(&store, &index, "twin/app", t1).unwrap();
-        let at_t1 = then.iter().find(|(r, _)| r == "run.py").expect("run.py existed");
+        let at_t1 = then
+            .iter()
+            .find(|(r, _)| r == "run.py")
+            .expect("run.py existed");
         assert_eq!(at_t1.1, old_hash);
         assert!(!then.iter().any(|(r, _)| r == "new.rs"));
         // Now: the new hash, and new.rs is present.
@@ -2599,7 +2986,10 @@ mod tests {
         let util = StableId::derive(&["file", "src/util.rs"]);
         {
             let index = fresh_index(&store);
-            assert_eq!(live_from(&index, &store, &main, "contains").unwrap().len(), 2);
+            assert_eq!(
+                live_from(&index, &store, &main, "contains").unwrap().len(),
+                2
+            );
             assert_eq!(live_to(&index, &store, &util, "imports").unwrap().len(), 1);
         }
 
@@ -2607,31 +2997,55 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(3));
         fs::write(src.path().join("src/main.rs"), "pub fn main() {}\n").unwrap();
         let r = refresh(&store, src.path(), "twin/app").unwrap();
-        assert!(r.retracted >= 2, "symbol + import retracted: {}", r.retracted);
+        assert!(
+            r.retracted >= 2,
+            "symbol + import retracted: {}",
+            r.retracted
+        );
         let index = fresh_index(&store);
-        assert_eq!(live_from(&index, &store, &main, "contains").unwrap().len(), 1);
-        assert!(live_to(&index, &store, &util, "imports").unwrap().is_empty());
+        assert_eq!(
+            live_from(&index, &store, &main, "contains").unwrap().len(),
+            1
+        );
+        assert!(live_to(&index, &store, &util, "imports")
+            .unwrap()
+            .is_empty());
         // The relation objects themselves remain — history is never destroyed.
         assert_eq!(index.relations_from(&main, "contains").len(), 2);
         // Insights count live structure only.
         let ins = insights_with(&store, &index, "twin/app").unwrap();
         assert_eq!(ins.symbols, 2, "main() + helper(), extra() gone");
-        assert!(ins.hubs.is_empty(), "util.rs stopped being a hub: {:?}", ins.hubs);
+        assert!(
+            ins.hubs.is_empty(),
+            "util.rs stopped being a hub: {:?}",
+            ins.hubs
+        );
 
         // Idempotence: retraction is a transition, not a repeated write.
         let before = store.count_objects().unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
-        assert_eq!(store.count_objects().unwrap(), before, "no growth on re-refresh");
+        assert_eq!(
+            store.count_objects().unwrap(),
+            before,
+            "no growth on re-refresh"
+        );
 
         // Re-adding the import restores the edge via the existing relation
         // object: one active=true observation, no duplicate relation.
         std::thread::sleep(std::time::Duration::from_millis(3));
-        fs::write(src.path().join("src/main.rs"), "use crate::util;\npub fn main() {}\n")
-            .unwrap();
+        fs::write(
+            src.path().join("src/main.rs"),
+            "use crate::util;\npub fn main() {}\n",
+        )
+        .unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         let index = fresh_index(&store);
         assert_eq!(live_to(&index, &store, &util, "imports").unwrap().len(), 1);
-        assert_eq!(index.relations_to(&util, "imports").len(), 1, "no duplicate relation");
+        assert_eq!(
+            index.relations_to(&util, "imports").len(),
+            1,
+            "no duplicate relation"
+        );
         let before = store.count_objects().unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         assert_eq!(store.count_objects().unwrap(), before);
@@ -2641,7 +3055,11 @@ mod tests {
     fn deleted_files_lose_their_edges_including_pre_tombstone_deletions() {
         let src = tempfile::tempdir().unwrap();
         fs::create_dir_all(src.path().join("src")).unwrap();
-        fs::write(src.path().join("src/gone.rs"), "use crate::keep;\npub fn g() {}\n").unwrap();
+        fs::write(
+            src.path().join("src/gone.rs"),
+            "use crate::keep;\npub fn g() {}\n",
+        )
+        .unwrap();
         fs::write(src.path().join("src/keep.rs"), "pub fn k() {}\n").unwrap();
         let store_dir = tempfile::tempdir().unwrap();
         let store = Store::open(store_dir.path()).unwrap();
@@ -2651,12 +3069,20 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(3));
         let r = refresh(&store, src.path(), "twin/app").unwrap();
         assert_eq!(r.deleted, vec!["src/gone.rs".to_string()]);
-        assert!(r.retracted >= 2, "contains + imports retracted: {}", r.retracted);
+        assert!(
+            r.retracted >= 2,
+            "contains + imports retracted: {}",
+            r.retracted
+        );
         let gone = StableId::derive(&["file", "src/gone.rs"]);
         let keep = StableId::derive(&["file", "src/keep.rs"]);
         let index = fresh_index(&store);
-        assert!(live_from(&index, &store, &gone, "contains").unwrap().is_empty());
-        assert!(live_to(&index, &store, &keep, "imports").unwrap().is_empty());
+        assert!(live_from(&index, &store, &gone, "contains")
+            .unwrap()
+            .is_empty());
+        assert!(live_to(&index, &store, &keep, "imports")
+            .unwrap()
+            .is_empty());
 
         // Healing: a live edge from an already-deleted file (as a store from
         // before tombstones would have) is retracted by the next refresh.
@@ -2674,7 +3100,9 @@ mod tests {
         assert!(r.deleted.is_empty(), "already recorded as deleted");
         assert_eq!(r.retracted, 1, "the ghost edge is healed away");
         let index = fresh_index(&store);
-        assert!(live_from(&index, &store, &gone, "contains").unwrap().is_empty());
+        assert!(live_from(&index, &store, &gone, "contains")
+            .unwrap()
+            .is_empty());
         let before = store.count_objects().unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         assert_eq!(store.count_objects().unwrap(), before);
@@ -2707,13 +3135,24 @@ mod tests {
 
         refresh(&store, src.path(), "twin/app").unwrap();
         let ns = store.namespace().unwrap();
-        assert!(ns.contains_key("twin/app/runs/ledger.jsonl"), "in-glob jsonl ingested");
-        assert!(!ns.contains_key("twin/app/stray/dump.jsonl"), "stray jsonl invisible");
-        assert!(!ns.contains_key("twin/app/notes.cfg"), "untaught extension invisible");
+        assert!(
+            ns.contains_key("twin/app/runs/ledger.jsonl"),
+            "in-glob jsonl ingested"
+        );
+        assert!(
+            !ns.contains_key("twin/app/stray/dump.jsonl"),
+            "stray jsonl invisible"
+        );
+        assert!(
+            !ns.contains_key("twin/app/notes.cfg"),
+            "untaught extension invisible"
+        );
         // And it is captured as an artifact of the taught kind.
         let index = fresh_index(&store);
         let entity = StableId::derive(&["run_log", "twin/app", "ledger"]);
-        assert!(latest(&index, &store, &entity, "content").unwrap().is_some());
+        assert!(latest(&index, &store, &entity, "content")
+            .unwrap()
+            .is_some());
 
         // Repo-level extensions apply everywhere (explicit opt-in).
         add_ingest_extensions(&store, "twin/app", &["cfg".to_string()]).unwrap();
@@ -2727,10 +3166,16 @@ mod tests {
         let src = tempfile::tempdir().unwrap();
         fs::create_dir_all(src.path().join("docs/adr")).unwrap();
         fs::create_dir_all(src.path().join("docs/runbooks")).unwrap();
-        fs::write(src.path().join("README.md"), "# The Project\n\nStart at src/main.rs.\n")
-            .unwrap();
-        fs::write(src.path().join("docs/architecture.md"), "# Architecture\n\nLayers.\n")
-            .unwrap();
+        fs::write(
+            src.path().join("README.md"),
+            "# The Project\n\nStart at src/main.rs.\n",
+        )
+        .unwrap();
+        fs::write(
+            src.path().join("docs/architecture.md"),
+            "# Architecture\n\nLayers.\n",
+        )
+        .unwrap();
         fs::write(
             src.path().join("docs/adr/adr-001-x.md"),
             "# X\n\nStatus: accepted\n",
@@ -2747,7 +3192,11 @@ mod tests {
         let store = Store::open(store_dir.path()).unwrap();
         // NO seed: compiled defaults alone must already capture.
         let r = refresh(&store, src.path(), "twin/app").unwrap();
-        assert!(r.docs.len() >= 4, "README, architecture, adr, runbook: {:?}", r.docs);
+        assert!(
+            r.docs.len() >= 4,
+            "README, architecture, adr, runbook: {:?}",
+            r.docs
+        );
 
         let index = fresh_index(&store);
         // README/docs/*.md become `doc` entities; the ADR path convention
@@ -2757,21 +3206,35 @@ mod tests {
             latest(&index, &store, &readme, "title").unwrap().as_deref(),
             Some("The Project")
         );
-        assert_eq!(live_from(&index, &store, &readme, "mentions").unwrap().len(), 1);
+        assert_eq!(
+            live_from(&index, &store, &readme, "mentions")
+                .unwrap()
+                .len(),
+            1
+        );
         let arch = StableId::derive(&["doc", "twin/app", "architecture"]);
         assert!(latest(&index, &store, &arch, "content").unwrap().is_some());
         let adr_as_doc = StableId::derive(&["doc", "twin/app", "adr-001-x"]);
-        assert!(index.entity_nodes(&adr_as_doc).is_empty(), "builtin keeps the ADR");
+        assert!(
+            index.entity_nodes(&adr_as_doc).is_empty(),
+            "builtin keeps the ADR"
+        );
         let runbook = StableId::derive(&["runbook", "twin/app", "release"]);
         assert_eq!(
-            latest(&index, &store, &runbook, "service").unwrap().as_deref(),
+            latest(&index, &store, &runbook, "service")
+                .unwrap()
+                .as_deref(),
             Some("brain")
         );
 
         // README churn makes it stale at warn severity (narrative docs
         // describe the present).
         std::thread::sleep(std::time::Duration::from_millis(3));
-        fs::write(src.path().join("src/main.rs"), "pub fn main() { /* v2 */ }\n").unwrap();
+        fs::write(
+            src.path().join("src/main.rs"),
+            "pub fn main() { /* v2 */ }\n",
+        )
+        .unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         let ins = insights(&store, "twin/app").unwrap();
         assert!(
@@ -2787,7 +3250,9 @@ mod tests {
         crate::templates::seed(&store).unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         let index = fresh_index(&store);
-        let stamped = latest(&index, &store, &readme, "template_b3").unwrap().unwrap();
+        let stamped = latest(&index, &store, &readme, "template_b3")
+            .unwrap()
+            .unwrap();
         let tmpl = crate::templates::template_sid("doc");
         assert_eq!(
             Some(stamped),
@@ -2805,7 +3270,11 @@ mod tests {
     fn same_run_moves_leave_a_renamed_to_trail() {
         let src = tempfile::tempdir().unwrap();
         fs::create_dir_all(src.path().join("src")).unwrap();
-        fs::write(src.path().join("src/old.rs"), "pub fn stable_content() {}\n").unwrap();
+        fs::write(
+            src.path().join("src/old.rs"),
+            "pub fn stable_content() {}\n",
+        )
+        .unwrap();
         fs::write(src.path().join("src/twin_a.rs"), "pub fn dup() {}\n").unwrap();
         let store_dir = tempfile::tempdir().unwrap();
         let store = Store::open(store_dir.path()).unwrap();
@@ -2818,14 +3287,21 @@ mod tests {
         let index = fresh_index(&store);
         let old = StableId::derive(&["file", "src/old.rs"]);
         let new = StableId::derive(&["file", "src/new.rs"]);
-        assert_eq!(latest(&index, &store, &old, "present").unwrap().as_deref(), Some("false"));
+        assert_eq!(
+            latest(&index, &store, &old, "present").unwrap().as_deref(),
+            Some("false")
+        );
         let trail = live_from(&index, &store, &old, "renamed_to").unwrap();
         assert_eq!(trail.len(), 1);
         assert_eq!(trail[0].1, new);
 
         // Ambiguous matches (two identical new files) leave no trail.
         fs::write(src.path().join("src/twin_b.rs"), "pub fn dup() {}\n").unwrap();
-        fs::rename(src.path().join("src/twin_a.rs"), src.path().join("src/twin_c.rs")).unwrap();
+        fs::rename(
+            src.path().join("src/twin_a.rs"),
+            src.path().join("src/twin_c.rs"),
+        )
+        .unwrap();
         // twin_a's bytes now exist at BOTH twin_b and twin_c (new paths).
         fs::write(src.path().join("src/twin_c.rs"), "pub fn dup() {}\n").unwrap();
         std::thread::sleep(std::time::Duration::from_millis(3));
@@ -2833,7 +3309,9 @@ mod tests {
         let index = fresh_index(&store);
         let a = StableId::derive(&["file", "src/twin_a.rs"]);
         assert!(
-            live_from(&index, &store, &a, "renamed_to").unwrap().is_empty(),
+            live_from(&index, &store, &a, "renamed_to")
+                .unwrap()
+                .is_empty(),
             "two candidates: no unique match, no trail"
         );
 
@@ -2864,7 +3342,10 @@ mod tests {
         let b = StableId::derive(&["file", "src/b.rs"]);
         {
             let index = fresh_index(&store);
-            assert_eq!(live_from(&index, &store, &doc, "mentions").unwrap().len(), 2);
+            assert_eq!(
+                live_from(&index, &store, &doc, "mentions").unwrap().len(),
+                2
+            );
         }
 
         // The doc drops b.rs from its text: that mention is retracted, and
@@ -2917,6 +3398,10 @@ mod tests {
             .into_iter()
             .map(|(_, to)| to)
             .collect();
-        assert_eq!(live, vec![a], "mention of the deleted-but-still-named file stays");
+        assert_eq!(
+            live,
+            vec![a],
+            "mention of the deleted-but-still-named file stays"
+        );
     }
 }

@@ -31,6 +31,18 @@ pub struct Attention {
 /// edit as recent, which matches its reality.
 pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Attention>, StoreError> {
     let ins = twin::insights_with(store, index, prefix)?;
+    attend_with(store, index, prefix, &ins)
+}
+
+/// Rank attention using an already-computed insights projection. Human
+/// interfaces often need both summaries at once; sharing the expensive
+/// synthesis keeps the read side responsive without caching graph truth.
+pub fn attend_with(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    ins: &twin::Insights,
+) -> Result<Vec<Attention>, StoreError> {
     let mut out: Vec<Attention> = Vec::new();
 
     let repo_sid = StableId::derive(&["repo", prefix]);
@@ -41,7 +53,9 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
     // Failing test cases, attributed to files where defined_in links exist.
     let mut failing_by_file: BTreeMap<StableId, u32> = BTreeMap::new();
     for node in index.entities_by_kind("test_case") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) {
             continue;
         }
@@ -56,8 +70,17 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
     // File signals: full pass, untruncated (insights caps its lists).
     let ns = store.namespace()?;
     for (name, node) in &ns {
-        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
-        let Ok(Object::Entity { id: sid, entity_kind, .. }) = store.get(node) else { continue };
+        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
+            continue;
+        };
+        let Ok(Object::Entity {
+            id: sid,
+            entity_kind,
+            ..
+        }) = store.get(node)
+        else {
+            continue;
+        };
         if entity_kind != "source_file"
             || latest(index, store, &sid, "present")?.as_deref() == Some("false")
             // Generated projections regenerate constantly; never salient.
@@ -69,7 +92,12 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
         let mut reasons = Vec::new();
         let (mut lifetime, mut recent) = (0u32, 0u32);
         for id in index.observations_of(&sid) {
-            if let Ok(Object::Observation { property, observed_at_ms, .. }) = store.get(&id) {
+            if let Ok(Object::Observation {
+                property,
+                observed_at_ms,
+                ..
+            }) = store.get(&id)
+            {
                 if property == "content_b3" {
                     lifetime += 1;
                     if observed_at_ms > since {
@@ -90,9 +118,7 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
         let declared: u32 = latest(index, store, &sid, "tests_declared")?
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
-        if importers > 0
-            && declared == 0
-            && twin::live_to(index, store, &sid, "covers")?.is_empty()
+        if importers > 0 && declared == 0 && twin::live_to(index, store, &sid, "covers")?.is_empty()
         {
             score += importers * 3;
             reasons.push("untested hub".to_string());
@@ -102,7 +128,12 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
             reasons.push(format!("{f} failing test(s)"));
         }
         if score > 0 {
-            out.push(Attention { label: rel.to_string(), kind: "file".to_string(), score, reasons });
+            out.push(Attention {
+                label: rel.to_string(),
+                kind: "file".to_string(),
+                score,
+                reasons,
+            });
         }
     }
 
@@ -110,7 +141,9 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
     // follows the kind's rot policy — records murmur, living docs shout.
     let mut docs: BTreeMap<(String, String), (u32, Vec<String>)> = BTreeMap::new();
     for stale in &ins.stale_docs {
-        let e = docs.entry((stale.slug.clone(), stale.kind.clone())).or_default();
+        let e = docs
+            .entry((stale.slug.clone(), stale.kind.clone()))
+            .or_default();
         match stale.severity {
             twin::Severity::Warn => {
                 e.0 += 4 + stale.changed.len() as u32;
@@ -118,7 +151,10 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
             }
             twin::Severity::Info => {
                 e.0 += 1;
-                e.1.push(format!("stale (info): {} changed since", stale.changed.join(", ")));
+                e.1.push(format!(
+                    "stale (info): {} changed since",
+                    stale.changed.join(", ")
+                ));
             }
         }
     }
@@ -128,7 +164,12 @@ pub fn attend(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Atten
         e.1.push(format!("nonconforming: missing {missing}"));
     }
     for ((label, kind), (score, reasons)) in docs {
-        out.push(Attention { label, kind, score, reasons });
+        out.push(Attention {
+            label,
+            kind,
+            score,
+            reasons,
+        });
     }
 
     // Feature incoherence: claims to be shipped, graph says not done.
@@ -182,7 +223,11 @@ mod tests {
         }
         // The mentioned file changes after the ADR: the doc goes stale.
         std::thread::sleep(std::time::Duration::from_millis(5));
-        fs::write(src.path().join("web/a.js"), "import { h } from './util';\nh();\n").unwrap();
+        fs::write(
+            src.path().join("web/a.js"),
+            "import { h } from './util';\nh();\n",
+        )
+        .unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
 
         let mut index = MemIndex::new();
@@ -196,7 +241,10 @@ mod tests {
         assert!(ranked[0].reasons.iter().any(|r| r == "churn 3 (3 recent)"));
         assert!(ranked[0].reasons.iter().any(|r| r == "untested hub"));
         // The stale ADR appears with its reason.
-        let doc = ranked.iter().find(|a| a.kind == "decision").expect("stale doc ranked");
+        let doc = ranked
+            .iter()
+            .find(|a| a.kind == "decision")
+            .expect("stale doc ranked");
         assert_eq!(doc.label, "adr-001-x");
         assert!(doc.reasons[0].contains("stale"));
         // Determinism: recompute gives the identical ranking.
@@ -227,8 +275,11 @@ mod tests {
         // busy.rs churns hard before the sleep.
         for i in 0..6 {
             std::thread::sleep(std::time::Duration::from_millis(2));
-            fs::write(src.path().join("src/busy.rs"), format!("pub fn b() {{ /* {i} */ }}\n"))
-                .unwrap();
+            fs::write(
+                src.path().join("src/busy.rs"),
+                format!("pub fn b() {{ /* {i} */ }}\n"),
+            )
+            .unwrap();
             refresh(&store, src.path(), "twin/app").unwrap();
         }
         crate::sleep::sleep(&store, "twin/app").unwrap();
@@ -238,21 +289,34 @@ mod tests {
         // busy.rs's 0 recent + lifetime capped 7 = 7... so make it two.
         for i in 0..2 {
             std::thread::sleep(std::time::Duration::from_millis(2));
-            fs::write(src.path().join("src/quiet.rs"), format!("pub fn q() {{ /* {i} */ }}\n"))
-                .unwrap();
+            fs::write(
+                src.path().join("src/quiet.rs"),
+                format!("pub fn q() {{ /* {i} */ }}\n"),
+            )
+            .unwrap();
             refresh(&store, src.path(), "twin/app").unwrap();
         }
         let mut index = MemIndex::new();
         replay(&store, &mut index).unwrap();
         let ranked = attend(&store, &index, "twin/app").unwrap();
-        let busy = ranked.iter().find(|a| a.label == "src/busy.rs").expect("busy ranked");
-        let quiet = ranked.iter().find(|a| a.label == "src/quiet.rs").expect("quiet ranked");
+        let busy = ranked
+            .iter()
+            .find(|a| a.label == "src/busy.rs")
+            .expect("busy ranked");
+        let quiet = ranked
+            .iter()
+            .find(|a| a.label == "src/quiet.rs")
+            .expect("quiet ranked");
         assert!(
             quiet.score > busy.score,
             "recent work outranks history: quiet {} vs busy {}",
             quiet.score,
             busy.score
         );
-        assert!(busy.reasons.iter().any(|r| r.contains("(0 recent)")), "{:?}", busy.reasons);
+        assert!(
+            busy.reasons.iter().any(|r| r.contains("(0 recent)")),
+            "{:?}",
+            busy.reasons
+        );
     }
 }

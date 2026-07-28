@@ -245,14 +245,21 @@ fn norm(t: &Term, scope: &mut Vec<(String, String)>) -> Term {
             scope.push((name.clone(), canon.clone()));
             let body = Box::new(norm(body, scope));
             scope.pop();
-            Term::Let { name: canon, value, body }
+            Term::Let {
+                name: canon,
+                value,
+                body,
+            }
         }
         Term::App { func, arg } => Term::App {
             func: Box::new(norm(func, scope)),
             arg: Box::new(norm(arg, scope)),
         },
         Term::Record { fields } => Term::Record {
-            fields: fields.iter().map(|(k, v)| (k.clone(), norm(v, scope))).collect(),
+            fields: fields
+                .iter()
+                .map(|(k, v)| (k.clone(), norm(v, scope)))
+                .collect(),
         },
         Term::Field { record, field } => Term::Field {
             record: Box::new(norm(record, scope)),
@@ -262,7 +269,11 @@ fn norm(t: &Term, scope: &mut Vec<(String, String)>) -> Term {
             tag: tag.clone(),
             payload: Box::new(norm(payload, scope)),
         },
-        Term::Match { scrutinee, arms, default } => Term::Match {
+        Term::Match {
+            scrutinee,
+            arms,
+            default,
+        } => Term::Match {
             scrutinee: Box::new(norm(scrutinee, scope)),
             arms: arms
                 .iter()
@@ -288,7 +299,9 @@ fn norm(t: &Term, scope: &mut Vec<(String, String)>) -> Term {
 /// on disk is always the canonical form and stored bytes re-hash to the id.
 pub fn canonicalize(o: &Object) -> Object {
     match o {
-        Object::Code { term } => Object::Code { term: alpha_normalize(term) },
+        Object::Code { term } => Object::Code {
+            term: alpha_normalize(term),
+        },
         other => other.clone(),
     }
 }
@@ -365,7 +378,9 @@ mod tests {
         let f = |p: &str| Object::Code {
             term: Term::Lam {
                 param: p.to_string(),
-                body: Box::new(Term::Var { name: p.to_string() }),
+                body: Box::new(Term::Var {
+                    name: p.to_string(),
+                }),
             },
         };
         assert_ne!(
@@ -388,9 +403,13 @@ mod tests {
             body: Box::new(Term::App {
                 func: Box::new(Term::Lam {
                     param: "x".to_string(),
-                    body: Box::new(Term::Var { name: "x".to_string() }),
+                    body: Box::new(Term::Var {
+                        name: "x".to_string(),
+                    }),
                 }),
-                arg: Box::new(Term::Var { name: "x".to_string() }),
+                arg: Box::new(Term::Var {
+                    name: "x".to_string(),
+                }),
             }),
         };
         let n = alpha_normalize(&t);
@@ -399,15 +418,21 @@ mod tests {
             body: Box::new(Term::App {
                 func: Box::new(Term::Lam {
                     param: "_1".to_string(),
-                    body: Box::new(Term::Var { name: "_1".to_string() }),
+                    body: Box::new(Term::Var {
+                        name: "_1".to_string(),
+                    }),
                 }),
-                arg: Box::new(Term::Var { name: "_0".to_string() }),
+                arg: Box::new(Term::Var {
+                    name: "_0".to_string(),
+                }),
             }),
         };
         assert_eq!(n, expected);
 
         // Free variables pass through untouched.
-        let free = Term::Var { name: "unbound".to_string() };
+        let free = Term::Var {
+            name: "unbound".to_string(),
+        };
         assert_eq!(alpha_normalize(&free), free);
     }
 

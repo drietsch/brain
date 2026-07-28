@@ -41,13 +41,21 @@ pub struct Case {
 /// Convert a plain-JSON case value into a term of the calculus.
 pub fn json_to_term(v: &serde_json::Value) -> Result<Term, String> {
     match v {
-        serde_json::Value::Null => Ok(Term::Lit { value: Literal::Unit }),
-        serde_json::Value::Bool(b) => Ok(Term::Lit { value: Literal::Bool { value: *b } }),
+        serde_json::Value::Null => Ok(Term::Lit {
+            value: Literal::Unit,
+        }),
+        serde_json::Value::Bool(b) => Ok(Term::Lit {
+            value: Literal::Bool { value: *b },
+        }),
         serde_json::Value::Number(n) => n
             .as_i64()
-            .map(|i| Term::Lit { value: Literal::Int { value: i } })
+            .map(|i| Term::Lit {
+                value: Literal::Int { value: i },
+            })
             .ok_or_else(|| "only integers are supported (no floats)".to_string()),
-        serde_json::Value::String(s) => Ok(Term::Lit { value: Literal::Str { value: s.clone() } }),
+        serde_json::Value::String(s) => Ok(Term::Lit {
+            value: Literal::Str { value: s.clone() },
+        }),
         serde_json::Value::Object(map) => {
             if let (Some(serde_json::Value::String(tag)), Some(payload), 2) =
                 (map.get("$variant"), map.get("payload"), map.len())
@@ -100,15 +108,20 @@ pub fn check(
     solution: &Term,
 ) -> Result<CheckReport, String> {
     let code_id = store
-        .put(&Object::Code { term: solution.clone() })
+        .put(&Object::Code {
+            term: solution.clone(),
+        })
         .map_err(|e| e.to_string())?;
     let method = format!("task:{}@{}", task.name, task_key);
 
     let mut index = MemIndex::new();
     replay(store, &mut index).map_err(|e| e.to_string())?;
     for ev_id in index.evidence_for(&code_id) {
-        if let Object::Evidence { method: m, passed: true, .. } =
-            store.get(&ev_id).map_err(|e| e.to_string())?
+        if let Object::Evidence {
+            method: m,
+            passed: true,
+            ..
+        } = store.get(&ev_id).map_err(|e| e.to_string())?
         {
             if m == method {
                 store
@@ -148,7 +161,11 @@ pub fn check(
             Ok(v) => {
                 let got = value_to_json(&v);
                 if got == case.expect {
-                    CaseResult { passed: true, detail: format!("= {got}"), fuel_used }
+                    CaseResult {
+                        passed: true,
+                        detail: format!("= {got}"),
+                        fuel_used,
+                    }
                 } else {
                     CaseResult {
                         passed: false,
@@ -157,7 +174,11 @@ pub fn check(
                     }
                 }
             }
-            Err(e) => CaseResult { passed: false, detail: e.to_string(), fuel_used },
+            Err(e) => CaseResult {
+                passed: false,
+                detail: e.to_string(),
+                fuel_used,
+            },
         });
     }
 
@@ -185,7 +206,13 @@ pub fn check(
         .bind(&format!("task/{}/latest", task.name), code_id)
         .map_err(|e| e.to_string())?;
 
-    Ok(CheckReport { code_id, evidence_id, results, all_passed, cached: false })
+    Ok(CheckReport {
+        code_id,
+        evidence_id,
+        results,
+        all_passed,
+        cached: false,
+    })
 }
 
 #[cfg(test)]
@@ -199,18 +226,31 @@ mod tests {
             description: "add one".to_string(),
             spec: json!(null),
             cases: vec![
-                Case { arg: json!(1), expect: json!(2) },
-                Case { arg: json!(41), expect: json!(42) },
+                Case {
+                    arg: json!(1),
+                    expect: json!(2),
+                },
+                Case {
+                    arg: json!(41),
+                    expect: json!(42),
+                },
             ],
         }
     }
 
     fn increment_solution(param: &str) -> Term {
         let mut fields = BTreeMap::new();
-        fields.insert("a".to_string(), Term::Var { name: param.to_string() });
+        fields.insert(
+            "a".to_string(),
+            Term::Var {
+                name: param.to_string(),
+            },
+        );
         fields.insert(
             "b".to_string(),
-            Term::Lit { value: Literal::Int { value: 1 } },
+            Term::Lit {
+                value: Literal::Int { value: 1 },
+            },
         );
         Term::Lam {
             param: param.to_string(),

@@ -48,7 +48,10 @@ pub fn pull(dest: &Store, source: &Store) -> Result<SyncReport, StoreError> {
             // Never silently accept an object under a different identity
             // than it claimed. This fires when the source store was written
             // under an older canonicalization (e.g. pre-alpha-normalization).
-            return Err(StoreError::CanonEpoch { claimed: id, actual: copied });
+            return Err(StoreError::CanonEpoch {
+                claimed: id,
+                actual: copied,
+            });
         }
         report.objects_copied += 1;
     }
@@ -95,7 +98,9 @@ mod tests {
 
     fn code(i: i64) -> Object {
         Object::Code {
-            term: Term::Lit { value: Literal::Int { value: i } },
+            term: Term::Lit {
+                value: Literal::Int { value: i },
+            },
         }
     }
 
@@ -144,7 +149,10 @@ mod tests {
         a.bind("app/main", theirs).unwrap();
 
         let report = pull(&b, &a).unwrap();
-        assert_eq!(report.conflicts, vec![("app/main".to_string(), ours, theirs)]);
+        assert_eq!(
+            report.conflicts,
+            vec![("app/main".to_string(), ours, theirs)]
+        );
         // Destination keeps its binding; the source's target stays reachable.
         assert_eq!(b.resolve("app/main").unwrap(), Some(ours));
         assert_eq!(b.resolve("sync-conflict/app/main").unwrap(), Some(theirs));

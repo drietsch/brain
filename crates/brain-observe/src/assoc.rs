@@ -40,8 +40,15 @@ impl AssocIndex {
         };
         let ns = store.namespace()?;
         for (name, node) in &ns {
-            let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
-            let Ok(Object::Entity { id: sid, entity_kind, .. }) = store.get(node) else {
+            let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
+                continue;
+            };
+            let Ok(Object::Entity {
+                id: sid,
+                entity_kind,
+                ..
+            }) = store.get(node)
+            else {
                 continue;
             };
             if entity_kind != "source_file" {
@@ -49,14 +56,25 @@ impl AssocIndex {
             }
             a.labels.insert(sid.clone(), rel.to_string());
             for oid in index.observations_of(&sid) {
-                if let Object::Observation { property, observed_at_ms, .. } = store.get(&oid)? {
+                if let Object::Observation {
+                    property,
+                    observed_at_ms,
+                    ..
+                } = store.get(&oid)?
+                {
                     if property == "content_b3" {
-                        a.batches.entry(observed_at_ms).or_default().push(sid.clone());
+                        a.batches
+                            .entry(observed_at_ms)
+                            .or_default()
+                            .push(sid.clone());
                     }
                 }
             }
             for (_, to) in crate::twin::live_from(index, store, &sid, "imports")? {
-                a.neighbors.entry(sid.clone()).or_default().insert(to.clone());
+                a.neighbors
+                    .entry(sid.clone())
+                    .or_default()
+                    .insert(to.clone());
                 a.neighbors.entry(to).or_default().insert(sid.clone());
             }
         }
@@ -65,7 +83,9 @@ impl AssocIndex {
         for kind in &doc_kinds {
             let mut seen = BTreeSet::new();
             for node in index.entities_by_kind(kind) {
-                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                    continue;
+                };
                 if labels.get("prefix").map(String::as_str) != Some(prefix)
                     || !seen.insert(id.clone())
                 {
@@ -113,8 +133,11 @@ impl AssocIndex {
             if !targets.contains(sid) {
                 continue;
             }
-            let doc_label =
-                self.labels.get(doc).cloned().unwrap_or_else(|| doc.to_string());
+            let doc_label = self
+                .labels
+                .get(doc)
+                .cloned()
+                .unwrap_or_else(|| doc.to_string());
             for other in targets {
                 if other != sid {
                     let e = scores.entry(other.clone()).or_default();
@@ -172,10 +195,16 @@ mod tests {
         // a.rs and b.rs repeatedly change together; c.rs stays put.
         for i in 0..3 {
             std::thread::sleep(std::time::Duration::from_millis(2));
-            fs::write(src.path().join("src/a.rs"), format!("pub fn a() {{ /* {i} */ }}\n"))
-                .unwrap();
-            fs::write(src.path().join("src/b.rs"), format!("pub fn b() {{ /* {i} */ }}\n"))
-                .unwrap();
+            fs::write(
+                src.path().join("src/a.rs"),
+                format!("pub fn a() {{ /* {i} */ }}\n"),
+            )
+            .unwrap();
+            fs::write(
+                src.path().join("src/b.rs"),
+                format!("pub fn b() {{ /* {i} */ }}\n"),
+            )
+            .unwrap();
             refresh(&store, src.path(), "twin/app").unwrap();
         }
         // One decision mentions both a.rs and c.rs.
@@ -196,10 +225,19 @@ mod tests {
         // far ahead of c.rs (initial batch 3 + co-mention 2 = 5).
         assert_eq!(related[0].0, "src/b.rs", "{related:?}");
         assert_eq!(related[0].1, 12);
-        assert!(related[0].2.iter().any(|r| r.contains("changed together 4×")));
-        let c = related.iter().find(|(l, _, _)| l == "src/c.rs").expect("c.rs related");
+        assert!(related[0]
+            .2
+            .iter()
+            .any(|r| r.contains("changed together 4×")));
+        let c = related
+            .iter()
+            .find(|(l, _, _)| l == "src/c.rs")
+            .expect("c.rs related");
         assert_eq!(c.1, 5);
-        assert!(c.2.iter().any(|r| r.contains("both mentioned by adr-001-pair")));
+        assert!(c
+            .2
+            .iter()
+            .any(|r| r.contains("both mentioned by adr-001-pair")));
 
         // Disposable and deterministic: a rebuild ranks identically.
         let rebuilt = AssocIndex::build(&store, &index, "twin/app").unwrap();

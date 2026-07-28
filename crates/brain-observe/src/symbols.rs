@@ -42,7 +42,10 @@ fn analyze_lines(
     language: &'static str,
     classify: fn(&str) -> Found,
 ) -> FileStructure {
-    let mut out = FileStructure { language, ..Default::default() };
+    let mut out = FileStructure {
+        language,
+        ..Default::default()
+    };
     for (i, raw) in content.lines().enumerate() {
         let line = raw.trim();
         // '#' lines (Python/PHP comments, Rust attributes) are handled by the
@@ -56,7 +59,11 @@ fn analyze_lines(
         }
         match classify(line) {
             Found::Symbol(kind, name) if !name.is_empty() => {
-                out.symbols.push(Symbol { kind, name, line: i + 1 });
+                out.symbols.push(Symbol {
+                    kind,
+                    name,
+                    line: i + 1,
+                });
             }
             Found::Import(path) if !path.is_empty() => {
                 if !out.imports.contains(&path) {
@@ -92,7 +99,17 @@ fn strip_any<'a>(mut s: &'a str, prefixes: &[&str]) -> &'a str {
 }
 
 fn rust_line(line: &str) -> Found {
-    let l = strip_any(line, &["pub(crate) ", "pub(super) ", "pub ", "async ", "unsafe ", "const "]);
+    let l = strip_any(
+        line,
+        &[
+            "pub(crate) ",
+            "pub(super) ",
+            "pub ",
+            "async ",
+            "unsafe ",
+            "const ",
+        ],
+    );
     for (kw, kind) in [
         ("fn ", "fn"),
         ("struct ", "struct"),
@@ -107,7 +124,11 @@ fn rust_line(line: &str) -> Found {
     if let Some(rest) = line.strip_prefix("use ") {
         let path = rest.trim_end_matches(';').trim();
         // Drop brace-groups: `use a::b::{c, d}` -> `a::b`
-        let path = path.split("::{").next().unwrap_or(path).trim_end_matches("::");
+        let path = path
+            .split("::{")
+            .next()
+            .unwrap_or(path)
+            .trim_end_matches("::");
         return Found::Import(path.to_string());
     }
     Found::Nothing
@@ -119,7 +140,14 @@ fn php_line(line: &str) -> Found {
     }
     let l = strip_any(
         line,
-        &["public ", "private ", "protected ", "static ", "final ", "abstract "],
+        &[
+            "public ",
+            "private ",
+            "protected ",
+            "static ",
+            "final ",
+            "abstract ",
+        ],
     );
     for (kw, kind) in [
         ("class ", "class"),

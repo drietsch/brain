@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05080f;font-family:"IBM Plex Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;color:#cfd8e3}
+a{color:#8fb3d9}a:hover{color:#dbe7f4}
+select{appearance:none;-webkit-appearance:none}
+input::placeholder{color:#5c6b80}
+@keyframes mfade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes mpulse{0%{box-shadow:0 0 0 0 rgba(224,180,106,.4)}70%{box-shadow:0 0 0 8px rgba(224,180,106,0)}100%{box-shadow:0 0 0 0 rgba(224,180,106,0)}}
+@keyframes mlive{0%{opacity:1}50%{opacity:.4}100%{opacity:1}}
+</style>
+</helmet>
+
+<div style="height:100vh;display:flex;flex-direction:column;background:{{ bgPage }}">
+
+  <div style="flex:none;min-height:52px;display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid rgba(160,180,210,.12);position:relative;z-index:40;flex-wrap:wrap">
+    <span style="font:600 12px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#e8eef6">MRI</span>
+    <span style="font:400 11px/1 'IBM Plex Mono',monospace;color:#7688a0;white-space:nowrap">brain / twin-self</span>
+    <span style="display:inline-flex;align-items:center;gap:6px;font:500 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.08em;color:{{ liveC }}"><span style="width:7px;height:7px;border-radius:99px;background:{{ liveC }};animation:{{ liveAnim }}"></span>{{ liveState }}</span>
+    <input value="{{ q }}" onChange="{{ setQ }}" onKeyDown="{{ qKey }}" placeholder="Search graph, or path: A → B…" style="flex:1 1 130px;min-width:110px;max-width:290px;height:32px;background:rgba(160,180,210,.07);border:1px solid rgba(160,180,210,.16);border-radius:7px;padding:0 10px;font:400 12px 'IBM Plex Sans',sans-serif;color:#dbe7f4;outline:none">
+    <select value="{{ projId }}" onChange="{{ setProj }}" style="height:32px;background:rgba(160,180,210,.07);border:1px solid rgba(160,180,210,.16);border-radius:7px;padding:0 10px;font:500 12px 'IBM Plex Sans',sans-serif;color:#dbe7f4;outline:none;cursor:pointer">
+      <option value="live">Projection: Live activity</option>
+      <option value="features">Projection: Features</option>
+      <option value="evidence">Projection: Evidence</option>
+      <option value="capabilities">Projection: Capabilities</option>
+      <option value="artifacts">Projection: Artifacts</option>
+      <option value="architecture">Projection: Architecture</option>
+      <option value="change">Projection: Change</option>
+      <option value="risk">Projection: Risk &amp; attention</option>
+      <option value="governance">Projection: Governance</option>
+      <option value="sessions">Projection: Sessions</option>
+    </select>
+    <select value="{{ snapId }}" onChange="{{ setSnap }}" style="height:32px;background:rgba(160,180,210,.07);border:1px solid rgba(160,180,210,.16);border-radius:7px;padding:0 10px;font:500 12px 'IBM Plex Sans',sans-serif;color:#dbe7f4;outline:none;cursor:pointer">
+      <option value="now">Snapshot: Now</option>
+      <option value="before">Snapshot: Before docs update · 13:00</option>
+    </select>
+    <span onClick="{{ toggleCompare }}" style="height:32px;display:inline-flex;align-items:center;padding:0 11px;border:1px solid {{ compareBd }};border-radius:7px;font:500 12px/1 'IBM Plex Sans',sans-serif;color:{{ compareC }};cursor:pointer;user-select:none">Compare</span>
+    <span style="flex:1"></span>
+    <span onClick="{{ toggleStyleMode }}" style="height:32px;display:inline-flex;align-items:center;padding:0 11px;border:1px solid rgba(160,180,210,.16);border-radius:7px;font:400 11.5px/1 'IBM Plex Sans',sans-serif;color:#9fb0c6;cursor:pointer;user-select:none">Study: {{ styleLabel }}</span>
+    <span onClick="{{ toggleRM }}" title="Reduced motion" style="height:32px;display:inline-flex;align-items:center;padding:0 11px;border:1px solid {{ rmBd }};border-radius:7px;font:400 11.5px/1 'IBM Plex Sans',sans-serif;color:{{ rmC }};cursor:pointer;user-select:none">RM</span>
+    <span onClick="{{ toggleConn }}" title="Simulate connection loss" style="height:32px;display:inline-flex;align-items:center;padding:0 11px;border:1px solid rgba(160,180,210,.16);border-radius:7px;font:400 11.5px/1 'IBM Plex Sans',sans-serif;color:#9fb0c6;cursor:pointer;user-select:none">⚡</span>
+    <a href="Eyes - Prototype.dc.html" style="height:32px;display:inline-flex;align-items:center;padding:0 11px;border:1px solid rgba(160,180,210,.16);border-radius:7px;font:500 12px/1 'IBM Plex Sans',sans-serif;color:#9fb0c6;text-decoration:none">Exit MRI</a>
+  </div>
+
+  <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:none;display:flex;align-items:center;gap:6px;padding:7px 16px;border-bottom:1px solid rgba(160,180,210,.10);flex-wrap:wrap;position:relative;z-index:35">
+      <sc-for list="{{ chips }}" as="c" hint-placeholder-count="2">
+        <span onClick="{{ c.remove }}" style="display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:rgba(160,180,210,.08);border:1px solid rgba(160,180,210,.18);font:400 11px/1 'IBM Plex Sans',sans-serif;color:#c3d0de;cursor:pointer;white-space:nowrap">{{ c.label }} <span style="color:#7688a0">✕</span></span>
+      </sc-for>
+      <span onClick="{{ clearAll }}" style="font:400 11px/1 'IBM Plex Sans',sans-serif;color:#7688a0;cursor:pointer;margin-left:4px">Clear all</span>
+    </div>
+  </sc-if>
+
+  <div style="flex:1;display:flex;min-height:0;position:relative">
+
+    <div style="flex:none;width:60px;border-right:1px solid rgba(160,180,210,.10);background:rgba(6,10,18,.75);display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 0;position:relative;z-index:31">
+      <a href="Eyes - Prototype.dc.html#now" style="width:44px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:400 9.5px/1 'IBM Plex Sans',sans-serif;color:#9fb0c6;text-decoration:none" style-hover="background:rgba(160,180,210,.08)">Now</a>
+      <a href="Eyes - Prototype.dc.html#work" style="width:44px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:400 9.5px/1 'IBM Plex Sans',sans-serif;color:#9fb0c6;text-decoration:none" style-hover="background:rgba(160,180,210,.08)">Work</a>
+      <a href="Eyes - Prototype.dc.html#features" style="width:44px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:400 9.5px/1 'IBM Plex Sans',sans-serif;color:#9fb0c6;text-decoration:none" style-hover="background:rgba(160,180,210,.08)">Feat</a>
+      <a href="Eyes - Prototype.dc.html#artifacts" style="width:44px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:400 9.5px/1 'IBM Plex Sans',sans-serif;color:#9fb0c6;text-decoration:none" style-hover="background:rgba(160,180,210,.08)">Art</a>
+      <a href="Eyes - Prototype.dc.html#evidence" style="width:44px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:400 9.5px/1 'IBM Plex Sans',sans-serif;color:#9fb0c6;text-decoration:none" style-hover="background:rgba(160,180,210,.08)">Evid</a>
+      <a href="Eyes - Prototype.dc.html#history" style="width:44px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:400 9.5px/1 'IBM Plex Sans',sans-serif;color:#9fb0c6;text-decoration:none" style-hover="background:rgba(160,180,210,.08)">Hist</a>
+      <span style="width:44px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:500 9.5px/1 'IBM Plex Sans',sans-serif;color:#cfe0ec;background:rgba(110,168,207,.16)">MRI</span>
+      <span style="margin-top:auto;width:6px;height:6px;border-radius:99px;background:#5fbf94" title="live"></span>
+    </div>
+
+    <div style="flex:none;width:{{ railW }};border-right:1px solid rgba(160,180,210,.10);display:flex;flex-direction:column;overflow:auto;background:rgba(6,10,18,.6);position:relative;z-index:30;transition:width .2s">
+      <div onClick="{{ toggleRail }}" style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:12px 12px;cursor:pointer;border-bottom:1px solid rgba(160,180,210,.08)">
+        <span style="font:500 10px/1 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:#7688a0">{{ railTitle }}</span>
+        <span style="font:400 11px/1 'IBM Plex Mono',monospace;color:#7688a0">{{ railChev }}</span>
+      </div>
+      <sc-if value="{{ railOpen }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:12px 12px 30px;display:flex;flex-direction:column;gap:14px">
+          <div>
+            <div style="font:500 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#5c6b80;margin-bottom:8px">Display mode</div>
+            <div style="display:flex;gap:4px">
+              <sc-for list="{{ modeOpts }}" as="m" hint-placeholder-count="3">
+                <span onClick="{{ m.set }}" style="flex:1;text-align:center;padding:6px 0;border-radius:6px;border:1px solid {{ m.bd }};font:500 10.5px/1 'IBM Plex Sans',sans-serif;color:{{ m.c }};cursor:pointer;background:{{ m.bg }}">{{ m.label }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <div style="font:500 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#5c6b80;margin-bottom:8px">Entity kinds</div>
+            <sc-for list="{{ kindFilters }}" as="k" hint-placeholder-count="10">
+              <div onClick="{{ k.toggle }}" style="display:flex;align-items:center;gap:8px;padding:5px 4px;border-radius:5px;cursor:pointer;opacity:{{ k.op }}" style-hover="background:rgba(160,180,210,.06)">
+                <span style="width:10px;height:10px;border-radius:3px;border:1px solid {{ k.swBd }};background:{{ k.sw }};flex:none"></span>
+                <span style="font:400 11.5px/1 'IBM Plex Sans',sans-serif;color:#c3d0de;flex:1">{{ k.label }}</span>
+                <span style="font:400 10px/1 'IBM Plex Mono',monospace;color:#5c6b80">{{ k.n }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div>
+            <div style="font:500 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#5c6b80;margin-bottom:8px">Activity window</div>
+            <select value="{{ windowId }}" onChange="{{ setWindow }}" style="width:100%;height:30px;background:rgba(160,180,210,.07);border:1px solid rgba(160,180,210,.16);border-radius:6px;padding:0 8px;font:400 11.5px 'IBM Plex Sans',sans-serif;color:#dbe7f4;outline:none">
+              <option value="15m">Last 15 minutes</option>
+              <option value="1h">Last hour</option>
+              <option value="today">Today</option>
+            </select>
+          </div>
+          <div>
+            <div style="font:500 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#5c6b80;margin-bottom:8px">Blast radius</div>
+            <sc-if value="{{ blastOff }}" hint-placeholder-val="{{ true }}">
+              <div style="font:400 11px/1.5 'IBM Plex Sans',sans-serif;color:#5c6b80">Select a node, then</div>
+              <span onClick="{{ startBlast }}" style="display:inline-block;margin-top:6px;padding:7px 11px;border:1px solid rgba(224,180,106,.4);border-radius:6px;font:500 11px/1 'IBM Plex Sans',sans-serif;color:#e0b46a;cursor:pointer;opacity:{{ blastBtnOp }}">Compute blast radius</span>
+            </sc-if>
+            <sc-if value="{{ blastOn }}" hint-placeholder-val="{{ false }}">
+              <div style="font:400 11px/1.5 'IBM Plex Sans',sans-serif;color:#e0b46a;margin-bottom:6px">From {{ blastFrom }}</div>
+              <div style="display:flex;gap:4px;margin-bottom:8px">
+                <sc-for list="{{ blastDepths }}" as="d" hint-placeholder-count="3">
+                  <span onClick="{{ d.set }}" style="flex:1;text-align:center;padding:5px 0;border-radius:5px;border:1px solid {{ d.bd }};font:500 10.5px/1 'IBM Plex Sans',sans-serif;color:{{ d.c }};cursor:pointer">{{ d.label }}</span>
+                </sc-for>
+              </div>
+              <div style="font:400 10.5px/1.7 'IBM Plex Sans',sans-serif;color:#c3d0de"><span style="color:#e0b46a">●</span> {{ blastDirect }} directly affected<br><span style="color:#c8b48a">●</span> {{ blastTrans }} transitively affected<br><span style="color:#7688a0">●</span> unrelated faded</div>
+              <span onClick="{{ stopBlast }}" style="display:inline-block;margin-top:8px;font:400 11px/1 'IBM Plex Sans',sans-serif;color:#7688a0;cursor:pointer;text-decoration:underline">Exit blast radius</span>
+            </sc-if>
+          </div>
+          <div>
+            <div style="font:500 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#5c6b80;margin-bottom:8px">Stories</div>
+            <span onClick="{{ playStory }}" style="display:block;padding:7px 10px;border:1px solid rgba(160,180,210,.16);border-radius:6px;font:400 11.5px/1.4 'IBM Plex Sans',sans-serif;color:#c3d0de;cursor:pointer" style-hover="border-color:rgba(160,180,210,.4)">▸ How the authentication docs update happened</span>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="flex:1;position:relative;min-width:0">
+      <div data-g="mri" style="position:absolute;inset:0"></div>
+      <div style="position:absolute;inset:0;pointer-events:none;background:{{ atmo }}"></div>
+
+      <div style="position:absolute;top:12px;left:14px;display:flex;align-items:center;gap:6px;font:400 11px/1 'IBM Plex Mono',monospace;color:#7688a0;pointer-events:none">
+        <sc-for list="{{ crumbs }}" as="b" hint-placeholder-count="1">
+          <span style="pointer-events:auto;cursor:pointer;color:{{ b.c }}" onClick="{{ b.go }}">{{ b.label }}</span><span style="color:#41506333">›</span>
+        </sc-for>
+      </div>
+
+      <div style="position:absolute;top:34px;left:14px;font:400 11px/1.4 'IBM Plex Sans',sans-serif;color:#5c6b80;pointer-events:none;max-width:300px">{{ projDesc }}</div>
+
+      <div style="position:absolute;bottom:14px;left:14px;display:flex;flex-direction:column;gap:4px;pointer-events:none">
+        <sc-for list="{{ legend }}" as="l" hint-placeholder-count="5">
+          <span style="display:inline-flex;align-items:center;gap:6px;font:400 10.5px/1 'IBM Plex Sans',sans-serif;color:#9fb0c6"><span style="width:7px;height:7px;border-radius:99px;background:{{ l.c }}"></span>{{ l.label }}</span>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ stagedNote }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;top:12px;left:50%;transform:translateX(-50%);padding:6px 12px;border-radius:999px;background:rgba(20,28,42,.85);border:1px dashed rgba(160,180,210,.3);font:400 10.5px/1 'IBM Plex Mono',monospace;color:#9fb0c6;pointer-events:none">{{ stagedNote }}</div>
+      </sc-if>
+
+      <sc-if value="{{ hasDiff }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;top:56px;right:14px;width:230px;background:rgba(12,18,28,.9);backdrop-filter:blur(8px);border:1px solid rgba(160,180,210,.16);border-radius:9px;padding:13px;animation:mfade .25s">
+          <div style="font:500 10px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#7688a0;margin-bottom:9px">Difference · 13:00 → now</div>
+          <div style="font:400 11.5px/1.8 'IBM Plex Sans',sans-serif;color:#c3d0de"><span style="color:#5fbf94">●</span> 3 entities added<br><span style="color:#6ea8cf">●</span> 2 entities changed<br><span style="color:#7688a0">◌</span> 1 ghost (superseded version)<br><span style="color:#5fbf94">✓</span> 1 feature became complete<br><span style="color:#5fbf94">✓</span> 4 verification facts added</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ hasTray }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:rgba(12,18,28,.9);backdrop-filter:blur(8px);border:1px solid rgba(160,180,210,.16);border-radius:10px;padding:9px 12px;animation:mfade .2s;z-index:20">
+          <span style="font:500 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#7688a0">Selection</span>
+          <sc-for list="{{ tray }}" as="t" hint-placeholder-count="2">
+            <span onClick="{{ t.remove }}" style="padding:4px 8px;border-radius:6px;background:rgba(160,180,210,.09);font:400 10.5px/1 'IBM Plex Mono',monospace;color:#dbe7f4;cursor:pointer">{{ t.label }} ✕</span>
+          </sc-for>
+          <span onClick="{{ sharedHood }}" style="padding:5px 9px;border:1px solid rgba(110,168,207,.45);border-radius:6px;font:500 10.5px/1 'IBM Plex Sans',sans-serif;color:#6ea8cf;cursor:pointer">Shared neighborhood</span>
+          <span onClick="{{ connectPath }}" style="padding:5px 9px;border:1px solid rgba(110,168,207,.45);border-radius:6px;font:500 10.5px/1 'IBM Plex Sans',sans-serif;color:#6ea8cf;cursor:pointer">Connecting path</span>
+          <span onClick="{{ clearTray }}" style="font:400 11px/1 'IBM Plex Sans',sans-serif;color:#7688a0;cursor:pointer">clear</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ capOn }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:50%;bottom:96px;transform:translateX(-50%);max-width:480px;background:rgba(12,18,28,.92);backdrop-filter:blur(8px);border:1px solid rgba(224,180,106,.3);border-radius:9px;padding:13px 16px;text-align:center;animation:mfade .35s;z-index:20;pointer-events:none">
+          <div style="font:500 10px/1 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:#e0b46a;margin-bottom:7px">{{ capKicker }}</div>
+          <div style="font:400 13px/1.55 'IBM Plex Sans',sans-serif;color:#dbe7f4;text-wrap:pretty">{{ capText }}</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ connLost }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;top:0;left:0;right:0;background:rgba(176,58,52,.14);border-bottom:1px solid rgba(217,123,115,.4);padding:9px 16px;display:flex;align-items:center;gap:12px;z-index:25;animation:mfade .2s">
+          <span style="width:8px;height:8px;background:#d97b73;transform:rotate(45deg);flex:none"></span>
+          <span style="font:400 12px/1.4 'IBM Plex Sans',sans-serif;color:#f0c7c3;flex:1">Live connection lost. Displaying snapshot from 14:32:08 — actions are disabled.</span>
+          <span onClick="{{ toggleConn }}" style="font:500 11.5px/1 'IBM Plex Sans',sans-serif;color:#f0c7c3;border:1px solid rgba(217,123,115,.5);padding:6px 11px;border-radius:6px;cursor:pointer">Reconnect</span>
+        </div>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ hasInspector }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:none;width:320px;border-left:1px solid rgba(160,180,210,.10);background:rgba(8,12,20,.85);backdrop-filter:blur(10px);overflow:auto;position:relative;z-index:30;animation:mfade .2s">
+        <div style="padding:16px;border-bottom:1px solid rgba(160,180,210,.08)">
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:2px;background:{{ selKindC }};flex:none"></span><span style="font:400 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#7688a0">{{ selKind }}</span><span onClick="{{ closeInspector }}" style="margin-left:auto;font:400 14px/1 'IBM Plex Sans',sans-serif;color:#7688a0;cursor:pointer">✕</span></div>
+          <div style="font:400 16px/1.3 'IBM Plex Sans',sans-serif;color:#eef3f9;margin-top:8px">{{ selName }}</div>
+          <span style="display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:3px 8px 3px 6px;border-radius:999px;border:1px solid {{ selStateC }};font:500 10px/1 'IBM Plex Sans',sans-serif;color:{{ selStateC }};opacity:.95"><span style="width:6px;height:6px;border-radius:99px;background:{{ selStateC }}"></span>{{ selState }}</span>
+          <div style="font:400 9.5px/1.5 'IBM Plex Mono',monospace;color:#5c6b80;margin-top:9px">{{ selId }}<br>snapshot {{ selSnap }}</div>
+        </div>
+        <div style="padding:14px 16px">
+          <div style="font:500 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:#5c6b80;margin-bottom:8px">Why this state</div>
+          <div style="font:400 12px/1.65 'IBM Plex Sans',sans-serif;color:#c3d0de;text-wrap:pretty">{{ selWhy }}</div>
+          <div style="font:500 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:#5c6b80;margin:15px 0 8px">Relationships</div>
+          <sc-for list="{{ selRels }}" as="rl" hint-placeholder-count="3">
+            <div onClick="{{ rl.go }}" style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-top:1px solid rgba(160,180,210,.07);cursor:pointer" style-hover="background:rgba(160,180,210,.05)">
+              <span style="font:400 10px/1 'IBM Plex Mono',monospace;color:#7688a0;text-transform:uppercase;letter-spacing:.05em">{{ rl.rel }}</span>
+              <span style="font:400 11.5px/1.3 'IBM Plex Sans',sans-serif;color:#a9c4dc">{{ rl.target }}</span>
+            </div>
+          </sc-for>
+          <div style="font:500 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:#5c6b80;margin:15px 0 8px">Latest activity</div>
+          <div style="font:400 11px/1.7 'IBM Plex Mono',monospace;color:#9fb0c6">{{ selActivity }}</div>
+          <div style="display:flex;gap:6px;margin-top:16px;flex-wrap:wrap">
+            <span onClick="{{ focusSel }}" style="padding:7px 10px;border-radius:6px;background:#cfe0ec;font:500 11px/1 'IBM Plex Sans',sans-serif;color:#0b1220;cursor:pointer">Focus neighborhood</span>
+            <span onClick="{{ isolateSel }}" style="padding:7px 10px;border-radius:6px;border:1px solid rgba(160,180,210,.25);font:500 11px/1 'IBM Plex Sans',sans-serif;color:#c3d0de;cursor:pointer">Isolate</span>
+            <span onClick="{{ startBlast }}" style="padding:7px 10px;border-radius:6px;border:1px solid rgba(224,180,106,.4);font:500 11px/1 'IBM Plex Sans',sans-serif;color:#e0b46a;cursor:pointer">Blast radius</span>
+            <sc-if value="{{ selIsDoc }}" hint-placeholder-val="{{ false }}">
+              <span onClick="{{ openSplit }}" style="padding:7px 10px;border-radius:6px;border:1px solid rgba(160,180,210,.25);font:500 11px/1 'IBM Plex Sans',sans-serif;color:#c3d0de;cursor:pointer">Open artifact</span>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ hasSplit }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:none;width:42%;border-left:1px solid rgba(160,180,210,.12);background:#f4f6f7;overflow:auto;position:relative;z-index:30;animation:mfade .25s">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid #e2e6ea;background:#fff;position:sticky;top:0">
+          <span style="font:500 12px/1 'IBM Plex Mono',monospace;color:#14181d">authentication.md</span>
+          <span style="font:400 10.5px/1 'IBM Plex Mono',monospace;color:#98a2ac">b3:c3a7… · verified</span>
+          <span onClick="{{ closeSplit }}" style="margin-left:auto;font:400 14px/1 'IBM Plex Sans',sans-serif;color:#98a2ac;cursor:pointer">✕</span>
+        </div>
+        <div style="padding:26px 30px">
+          <div style="font:300 22px/1.25 'IBM Plex Sans',sans-serif;color:#14181d">Authentication</div>
+          <div style="font:400 12.5px/1.7 'IBM Plex Sans',sans-serif;color:#44505c;margin-top:12px;text-wrap:pretty">The authentication subsystem issues short-lived access tokens bound to a device session. Tokens are minted by <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;background:#eef1f3;padding:1px 4px;border-radius:4px">auth/token.rs</span> and refreshed transparently against the session store described in ADR-014.</div>
+          <div style="margin-top:14px;height:120px;border-radius:8px;background:repeating-linear-gradient(135deg,#eef1f3 0 10px,#e6ebef 10px 20px);border:1px solid #e2e6ea;display:flex;align-items:center;justify-content:center;font:400 10.5px/1 'IBM Plex Mono',monospace;color:#98a2ac">auth-login.png</div>
+          <div style="font:400 12.5px/1.7 'IBM Plex Sans',sans-serif;color:#44505c;margin-top:14px;text-wrap:pretty">Refresh occurs when a token is within 120 seconds of expiry. Failed refreshes invalidate the session and require re-authentication.</div>
+          <div style="font:400 11px/1.5 'IBM Plex Sans',sans-serif;color:#98a2ac;margin-top:16px">Graph context stays live on the left — spatial position is preserved while reading.</div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <div style="flex:none;height:78px;border-top:1px solid rgba(160,180,210,.12);background:rgba(5,8,15,.9);display:flex;align-items:center;gap:14px;padding:0 16px;position:relative;z-index:30">
+    <div style="flex:none;display:flex;flex-direction:column;gap:3px;width:66px">
+      <span style="font:400 9px/1.5 'IBM Plex Mono',monospace;color:#5c6b80">Actions<br>Sessions<br>Tests</span>
+    </div>
+    <div style="flex:1;position:relative;height:44px">
+      <div style="position:absolute;left:0;right:0;top:6px;height:1px;background:rgba(160,180,210,.14)"></div>
+      <div style="position:absolute;left:0;right:0;top:20px;height:1px;background:rgba(160,180,210,.14)"></div>
+      <div style="position:absolute;left:0;right:0;top:34px;height:1px;background:rgba(160,180,210,.14)"></div>
+      <sc-for list="{{ tlMarks }}" as="m" hint-placeholder-count="8">
+        <span onClick="{{ m.go }}" title="{{ m.tip }}" style="position:absolute;left:{{ m.x }};top:{{ m.y }};width:9px;height:9px;transform:translate(-4px,-4px) rotate({{ m.rot }});border-radius:{{ m.br }};background:{{ m.bg }};border:{{ m.bd }};cursor:pointer;box-sizing:border-box"></span>
+      </sc-for>
+      <span style="position:absolute;left:{{ tlCursor }};top:0;bottom:0;width:1.5px;background:#e0b46a;transition:left .5s"></span>
+    </div>
+    <div style="flex:none;display:flex;align-items:center;gap:7px">
+      <sc-if value="{{ seqIdle }}" hint-placeholder-val="{{ true }}">
+        <span onClick="{{ playReplay }}" style="padding:7px 12px;border:1px solid rgba(224,180,106,.45);border-radius:7px;font:500 11.5px/1 'IBM Plex Sans',sans-serif;color:#e0b46a;cursor:pointer;white-space:nowrap">▸ Replay action</span>
+      </sc-if>
+      <sc-if value="{{ seqOn }}" hint-placeholder-val="{{ false }}">
+        <span onClick="{{ stopSeq }}" style="padding:7px 12px;border:1px solid rgba(160,180,210,.25);border-radius:7px;font:500 11.5px/1 'IBM Plex Sans',sans-serif;color:#c3d0de;cursor:pointer;white-space:nowrap">■ Stop</span>
+        <span onClick="{{ seqPrev }}" style="padding:7px 9px;border:1px solid rgba(160,180,210,.25);border-radius:7px;font:400 11.5px/1 'IBM Plex Sans',sans-serif;color:#c3d0de;cursor:pointer">‹</span>
+        <span onClick="{{ seqNext }}" style="padding:7px 9px;border:1px solid rgba(160,180,210,.25);border-radius:7px;font:400 11.5px/1 'IBM Plex Sans',sans-serif;color:#c3d0de;cursor:pointer">›</span>
+        <span onClick="{{ toggleSpeed }}" style="padding:7px 9px;border:1px solid rgba(160,180,210,.25);border-radius:7px;font:400 11px/1 'IBM Plex Mono',monospace;color:#c3d0de;cursor:pointer">{{ speedLabel }}</span>
+      </sc-if>
+      <span style="font:400 10.5px/1 'IBM Plex Mono',monospace;color:#7688a0;min-width:88px;text-align:right">{{ tlClock }}</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:960}}">
+class Component extends DCLogic {
+  state = {
+    projId:'live', snapId:'now', compare:false, styleMode:'cosmic', rm:false, connLost:false,
+    railOpen:true, mode:'fade', windowId:'15m', kindsOff:{}, q:'',
+    sel:null, tray:[], pathSet:null, hoodSet:null, isoSet:null,
+    blast:null, blastDepth:2, split:false,
+    seq:null, seqStep:-1, speed:1, crumbTrail:[]
+  };
+
+  // ---------- data ----------
+  master() {
+    if (this._m) return this._m;
+    const N=[], L=[];
+    const n=(id,kind,name,state,why,extra)=>{ N.push(Object.assign({id,kind,name,state:state||'neutral',why},extra)); };
+    const l=(s,t,rel,hot)=>{ L.push({source:s,target:t,rel,hot:!!hot}); };
+    const feats=[['f.auth','Authentication','complete'],['f.co','Checkout','failed'],['f.se','Search','complete'],['f.cr','Capability Registry','active'],['f.sm','Session Management','unconfirmed'],['f.dg','Documentation Generation','complete'],['f.ar','Artifact Replication','complete'],['f.ag','Agent Configuration','progress'],['f.cg','Change Governance','progress'],['f.ob','Observability','complete']];
+    feats.forEach(([id,nm,st])=>n(id,'feature',nm,st,'Rollup of component evidence — never set by hand.'));
+    const impl=[['i.tok','auth/token.rs','changed'],['i.ses','auth/session.rs','changed'],['i.sco','auth/scope.rs'],['i.mod','auth/mod.rs'],['i.pay','checkout/payment.rs','changed'],['i.cse','checkout/session.rs','changed'],['i.six','search/index.rs'],['i.squ','search/query.rs'],['i.reg','cap/registry.rs'],['i.sto','session/store.rs'],['i.run','brain-runtime/lib.rs'],['i.obs','brain-observe/features.rs']];
+    impl.forEach(([id,nm,st])=>n(id,'impl',nm,st||'neutral','Latest observation at current snapshot.'));
+    const tests=[['t.da','docs-auth','complete'],['t.au','auth-unit','complete'],['t.sr','session-recovery','complete'],['t.ci','checkout-integration','failed'],['t.cr','capability-registry','active'],['t.ss','search-suite','complete'],['t.ag','artifact-generation','complete']];
+    tests.forEach(([id,nm,st])=>n(id,'test',nm,st,'Protocol — results are observations.'));
+    n('d.auth','doc','authentication.md','complete','Regenerated 14:34, verified by docs-auth 4/4.');
+    n('d.cr','doc','capability-registry.md','stale','Predates 2 implementation observations.');
+    n('d.se','doc','search.md','complete','Current, verified.');
+    n('d.gov','doc','governance-policy.md','neutral','Manual policy document.');
+    n('dec.12','decision','ADR-012 capability scope','neutral','Accepted 18 days ago.');
+    n('dec.14','decision','ADR-014 session model','neutral','Accepted 12 days ago.');
+    n('dec.09','decision','ADR-009 artifact hashing','neutral','Accepted 40 days ago.');
+    const arts=[['a.login','auth-login.png','complete'],['a.refresh','auth-refresh.png','complete'],['a.tour','authentication-tour.webm','stale'],['a.rep','checkout-failure-report.html'],['a.mat','capability-matrix.json'],['a.sres','search-results.png']];
+    arts.forEach(([id,nm,st])=>n(id,'artifact',nm,st||'neutral','Content-addressed generated artifact.'));
+    const caps=[['c.fsw','fs.write'],['c.run','process.run'],['c.net','network.read'],['c.obs','graph.observe'],['c.rel','graph.relate'],['c.auz','action.authorize']];
+    caps.forEach(([id,nm])=>n(id,'capability',nm,'neutral','Scoped grant — never blanket.'));
+    n('h.dz','actor','Dietz','active','Human collaborator.',{actor:'human'});
+    n('h.da','actor','docs-agent-04','active','Agent — same action system as humans.',{actor:'agent'});
+    n('h.ta','actor','test-agent-02','neutral','Agent.',{actor:'agent'});
+    n('h.aa','actor','architecture-agent-01','neutral','Agent.',{actor:'agent'});
+    n('h.sy','actor','system','neutral','Runtime.',{actor:'system'});
+    n('s.docs','session','docs session · improve auth docs','active','Objective: bring auth docs current.');
+    n('s.chk','session','Dietz · review checkout failures','active','Human investigation session.');
+    n('s.reg','session','registry verification run','active','Automated protocol session.');
+    const gov=[['g.req','request','Requested 14:31:48'],['g.prop','proposal','Proposed 14:31:52','proposed'],['g.auth','authorization','Authorized 14:34:08 · Dietz'],['g.int','intent','Intent recorded 14:34:12'],['g.eff','effect','Effect 14:34:14–20'],['g.rec','receipt','Receipt confirmed 14:34:21'],['g.ver','verification','Verified 14:34:25 · 4/4','complete']];
+    gov.forEach(([id,sub,why,st])=>n(id,'action',sub.charAt(0).toUpperCase()+sub.slice(1),st||'complete',why,{sub}));
+    n('e.c1','evidence','Claim: authentication is complete','complete','Supported by 4 facts.');
+    n('e.c2','evidence','Claim: checkout is complete','failed','Unsupported — 2 tests failing.');
+    n('e.t18','evidence','18/18 tests passing','complete','Protocol observation.');
+    n('e.i4','evidence','4 implementation entities','complete','Resolved at snapshot.');
+    n('e.doc','evidence','documentation current','complete','docs-auth 4/4 at 14:34:25.');
+    n('e.fail','evidence','2 failing integration tests','failed','payment_intent_timeout, session_replay.');
+    n('snap','snapshot','snapshot b3:91d4…a287','neutral','The exact graph state everything above is computed from.');
+    n('agg.sym','aggregate','Symbols · 1,284','neutral','Aggregated — expand progressively.');
+    n('agg.obs','aggregate','Observations · 12,077','neutral','Aggregated event history.');
+    // links
+    l('f.auth','i.tok','implements',1); l('f.auth','i.ses','implements',1); l('f.auth','i.sco','implements'); l('f.auth','i.mod','implements');
+    l('f.auth','t.da','tests',1); l('f.auth','t.au','tests'); l('f.auth','t.sr','tests');
+    l('f.auth','d.auth','documents',1); l('f.auth','dec.12','decided'); l('f.auth','dec.14','decided');
+    l('f.auth','a.login','depicts'); l('f.auth','a.refresh','depicts'); l('f.auth','a.tour','depicts');
+    l('f.co','i.pay','implements'); l('f.co','i.cse','implements'); l('f.co','t.ci','tests',1); l('f.co','a.rep','produces');
+    l('f.se','i.six','implements'); l('f.se','i.squ','implements'); l('f.se','t.ss','tests'); l('f.se','d.se','documents'); l('f.se','a.sres','depicts');
+    l('f.cr','i.reg','implements'); l('f.cr','t.cr','tests'); l('f.cr','d.cr','documents'); l('f.cr','a.mat','produces'); l('f.cr','dec.12','decided');
+    l('f.sm','i.sto','implements'); l('f.sm','t.sr','tests'); l('f.sm','dec.14','decided');
+    l('f.dg','t.ag','tests'); l('f.ar','dec.09','decided');
+    l('i.tok','i.run','imports'); l('i.ses','i.run','imports'); l('i.pay','i.run','imports'); l('i.six','i.run','imports'); l('i.reg','i.run','imports'); l('i.sto','i.run','imports'); l('i.obs','i.run','imports'); l('i.ses','i.sto','imports'); l('i.tok','i.sco','imports'); l('i.cse','i.sto','imports');
+    l('d.auth','i.tok','mentions'); l('d.auth','i.ses','mentions'); l('d.auth','a.login','embeds'); l('d.auth','a.refresh','embeds');
+    l('h.da','s.docs','drives',1); l('h.dz','s.chk','drives'); l('h.sy','s.reg','drives');
+    l('s.docs','i.tok','read',1); l('s.docs','i.ses','read',1); l('s.docs','dec.12','read'); l('s.docs','dec.14','read'); l('s.docs','d.auth','writes',1);
+    l('s.chk','t.ci','reads'); l('s.chk','a.rep','reads'); l('s.reg','t.cr','runs');
+    l('s.docs','g.req','emits'); l('g.req','g.prop','then'); l('g.prop','g.auth','then'); l('g.auth','g.int','then',1); l('g.int','g.eff','then',1); l('g.eff','g.rec','then',1); l('g.rec','g.ver','then',1);
+    l('h.dz','g.auth','authorized',1); l('g.auth','c.fsw','grants'); l('g.auth','c.run','grants');
+    l('g.eff','d.auth','writes',1); l('g.eff','a.login','generates',1); l('g.eff','a.refresh','generates',1);
+    l('g.ver','t.da','via'); l('t.da','e.doc','proves');
+    l('e.c1','e.t18','supported by'); l('e.c1','e.i4','supported by'); l('e.c1','e.doc','supported by');
+    l('e.c2','e.fail','broken by'); l('e.fail','t.ci','from'); l('t.ci','i.pay','concerns'); l('t.ci','i.cse','concerns');
+    l('e.t18','t.au','from'); l('e.t18','t.sr','from'); l('e.i4','snap','resolved at'); l('e.doc','snap','resolved at'); l('e.t18','snap','resolved at');
+    l('c.fsw','g.eff','scopes'); l('c.obs','s.docs','used by'); l('c.auz','h.dz','held by'); l('c.net','h.ta','held by');
+    l('agg.sym','i.run','aggregates'); l('agg.obs','h.sy','aggregates');
+    this._m = { N, L };
+    return this._m;
+  }
+
+  projCfg() {
+    return {
+      live:{ label:'Live activity', desc:'Humans, agents, protocols and their current focus. Unrelated anatomy stays faint.', kinds:['session','actor','feature','impl','doc','decision','action','test','artifact'], dag:null, staged:'time window is simulated in this prototype' },
+      features:{ label:'Features', desc:'Definition-of-done neighborhoods. Features anchor; evidence orbits.', kinds:['feature','impl','test','doc','decision','artifact'], dag:null },
+      evidence:{ label:'Evidence', desc:'Claims trace left-to-right back to protocol runs, inputs and the snapshot.', kinds:['evidence','test','snapshot','doc'], dag:'lr' },
+      capabilities:{ label:'Capabilities', desc:'Authority boundaries. Actions cross to the effect side only through an authorization gate.', kinds:['actor','capability','action','session'], dag:null },
+      artifacts:{ label:'Artifacts', desc:'Generated and manual artifacts grouped by producer and kind.', kinds:['artifact','doc','session','actor','feature'], dag:null },
+      architecture:{ label:'Architecture', desc:'Modules and dependency direction, layered top-down.', kinds:['impl','aggregate'], dag:'td' },
+      change:{ label:'Change', desc:'What the 14:34 action touched: written, generated, verified. Ghosts mark superseded versions.', kinds:['action','doc','artifact','feature','test','session'], dag:null },
+      risk:{ label:'Risk & attention', desc:'Risk kinds carry distinct signatures — failure, staleness, unconfirmed effects. Not a heatmap.', kinds:['feature','test','doc','evidence','impl','action'], dag:null },
+      governance:{ label:'Governance', desc:'One action, whole lifecycle: request → proposal → authorization → intent → effect → receipt → verification.', kinds:['action','actor','capability','doc','artifact'], dag:'lr' },
+      sessions:{ label:'Sessions', desc:'Each session is a temporary territory; overlap suggests collaboration or conflict.', kinds:['session','actor','impl','doc','decision','test','artifact'], dag:null }
+    };
+  }
+
+  buildData() {
+    const { N, L } = this.master();
+    const cfg = this.projCfg()[this.state.projId];
+    const before = this.state.snapId==='before' && !this.state.compare;
+    const kindOk = k => cfg.kinds.includes(k) && !this.state.kindsOff[k];
+    let nodes = N.filter(x => kindOk(x.kind));
+    if (this.state.projId==='change') nodes = nodes.filter(x => ['g.prop','g.auth','g.int','g.eff','g.rec','g.ver','d.auth','a.login','a.refresh','f.auth','t.da','s.docs','a.tour'].includes(x.id));
+    if (before) nodes = nodes.filter(x => !['g.eff','g.rec','g.ver','a.login','a.refresh'].includes(x.id));
+    const ids = new Set(nodes.map(x=>x.id));
+    const links = L.filter(e => ids.has(e.s||e.source) && ids.has(e.t||e.target)).map(e => ({ source: e.source.id||e.source, target: e.target.id||e.target, rel:e.rel, hot:e.hot }));
+    return { nodes: nodes.map(x=>Object.assign({},x)), links };
+  }
+
+  kindColor(k) {
+    const cosmic = this.state.styleMode==='cosmic';
+    const m = { feature:'#8fb3d9', impl:'#8fa3b3', test:'#5fbf94', doc:'#c8b48a', decision:'#a99adf', artifact:'#9aa7b4', capability:'#d9a4c6', actor:'#e0b46a', session:'#e0b46a', action:'#78c2c0', evidence:'#78c2c0', snapshot:'#dbe7f4', aggregate:'#5c6b80' };
+    const c = m[k]||'#8fa3b3';
+    return cosmic ? c : c;
+  }
+  stateColor(st) { return { complete:'#5fbf94', failed:'#d97b73', stale:'#e0b46a', active:'#6ea8cf', unconfirmed:'#a99adf', proposed:'#c3d0de', changed:'#e0b46a', progress:'#e0b46a', neutral:null }[st]||null; }
+
+  nodeColorFn(n) {
+    const st = this.state;
+    let base = this.kindColor(n.kind);
+    if (st.projId==='risk') {
+      const risky = this.stateColor(n.state) && ['failed','stale','unconfirmed'].includes(n.state);
+      base = risky ? this.stateColor(n.state) : '#3a4759';
+    } else if (this.state.styleMode==='cosmic') {
+      const sc = this.stateColor(n.state);
+      if (sc && ['failed','stale','unconfirmed','active'].includes(n.state)) base = sc;
+    }
+    if (st.compare) {
+      if (['a.login','a.refresh','g.rec'].includes(n.id)) base = '#5fbf94';
+      else if (['d.auth','f.auth'].includes(n.id)) base = '#6ea8cf';
+      else base = '#41506a';
+    }
+    let a = 1;
+    const dim = 0.13;
+    if (st.isoSet && !st.isoSet.has(n.id)) return 'rgba(70,85,105,0)';
+    if (st.hoodSet && !st.hoodSet.has(n.id)) a = dim;
+    if (st.pathSet && !st.pathSet.has(n.id)) a = Math.min(a, dim+.05);
+    if (st.blast) a = st.blast.direct.has(n.id) ? 1 : (st.blast.trans.has(n.id) ? .8 : dim);
+    if (st.blast && st.blast.direct.has(n.id)) base = '#e0b46a';
+    else if (st.blast && st.blast.trans.has(n.id)) base = '#c8b48a';
+    if (this._hotNodes && this._hotNodes.has(n.id)) { base = '#ffd98a'; a = 1; }
+    if (st.mode==='fade' && this._filterDimmed && this._filterDimmed.has(n.id)) a = dim;
+    if (st.sel && st.sel.id===n.id) { base = '#ffffff'; a = 1; }
+    if (st.tray.some(t=>t.id===n.id)) { base='#cfe0ec'; a=1; }
+    const c = base||'#8fa3b3';
+    const r = parseInt(c.slice(1,3),16), g = parseInt(c.slice(3,5),16), b = parseInt(c.slice(5,7),16);
+    return 'rgba('+r+','+g+','+b+','+a+')';
+  }
+  linkColorFn(e) {
+    const st = this.state, cosmic = st.styleMode==='cosmic';
+    const s = e.source.id||e.source, t = e.target.id||e.target;
+    let a = cosmic ? .16 : .2, c = cosmic ? '178,198,232' : '127,151,171';
+    if (e.hot) { c = '224,180,106'; a = .4; }
+    if (st.pathSet && st.pathSet.has(s) && st.pathSet.has(t)) { c='110,168,207'; a=.95; }
+    else if (st.pathSet) a = .04;
+    if (st.isoSet && (!st.isoSet.has(s)||!st.isoSet.has(t))) a = 0;
+    if (st.hoodSet && (!st.hoodSet.has(s)||!st.hoodSet.has(t))) a = .03;
+    if (st.blast) a = (st.blast.direct.has(s)&&st.blast.direct.has(t))||(st.blast.trans.has(s)||st.blast.trans.has(t)) ? .35 : .03;
+    if (this._hotLinks && this._hotLinks.has(s+'>'+t)) { c='255,217,138'; a=.9; }
+    return 'rgba('+c+','+a+')';
+  }
+  visFn(n) {
+    const st = this.state;
+    if (st.mode==='hide' && this._filterDimmed && this._filterDimmed.has(n.id)) return false;
+    if (st.mode==='isolate' && this._filterDimmed && this._filterDimmed.has(n.id)) return false;
+    if (st.isoSet && !st.isoSet.has(n.id)) return false;
+    return true;
+  }
+  sizeFn(n) {
+    let v = { feature:7, session:8, actor:5, aggregate:10, snapshot:5 }[n.kind]||3;
+    if (this.state.sel && this.state.sel.id===n.id) v *= 1.6;
+    if (this._hotNodes && this._hotNodes.has(n.id)) v *= 1.5;
+    return v;
+  }
+  partFn(e) {
+    if (this.state.rm) return 0;
+    const s=e.source.id||e.source, t=e.target.id||e.target;
+    if (this._hotLinks && this._hotLinks.has(s+'>'+t)) return 6;
+    return e.hot && this.state.projId==='live' ? 3 : 0;
+  }
+
+  restyle() {
+    const g = this.g; if (!g) return;
+    g.nodeColor(n=>this.nodeColorFn(n));
+    g.linkColor(e=>this.linkColorFn(e));
+    g.nodeVisibility(n=>this.visFn(n));
+    g.nodeVal(n=>this.sizeFn(n));
+    g.linkDirectionalParticles(e=>this.partFn(e));
+  }
+
+  rebuild() {
+    const g = this.g; if (!g) return;
+    const cfg = this.projCfg()[this.state.projId];
+    g.dagMode(cfg.dag||null).dagLevelDistance(cfg.dag?60:0);
+    g.graphData(this.buildData());
+    this.computeFilterDim();
+    this.restyle();
+    if (!this.state.rm) setTimeout(()=>{ try{ g.zoomToFit(700, 60); }catch(e){} }, 700);
+  }
+
+  computeFilterDim() {
+    // per-projection state/time dimming candidates (fade mode dims, hide removes)
+    this._filterDimmed = new Set();
+  }
+
+  neighbors(id, depth) {
+    const { links } = this.g.graphData();
+    const adj = {};
+    links.forEach(e=>{ const s=e.source.id||e.source, t=e.target.id||e.target; (adj[s]=adj[s]||[]).push(t); (adj[t]=adj[t]||[]).push(s); });
+    const seen = new Set([id]); let frontier=[id];
+    const rings=[new Set([id])];
+    for (let d=0; d<depth; d++) {
+      const next=[]; const ring=new Set();
+      frontier.forEach(x=>(adj[x]||[]).forEach(y=>{ if(!seen.has(y)){ seen.add(y); next.push(y); ring.add(y); } }));
+      rings.push(ring); frontier=next;
+    }
+    return { all:seen, rings };
+  }
+  bfsPath(a, b) {
+    const { links } = this.g.graphData();
+    const adj = {};
+    links.forEach(e=>{ const s=e.source.id||e.source, t=e.target.id||e.target; (adj[s]=adj[s]||[]).push(t); (adj[t]=adj[t]||[]).push(s); });
+    const prev={ [a]:null }; let q=[a];
+    while (q.length) { const x=q.shift(); if (x===b) break; (adj[x]||[]).forEach(y=>{ if(!(y in prev)){ prev[y]=x; q.push(y); } }); }
+    if (!(b in prev)) return null;
+    const path=[]; let cur=b; while(cur){ path.push(cur); cur=prev[cur]; }
+    return path;
+  }
+  focusNode(id, ms) {
+    const g=this.g; if(!g) return;
+    const n = g.graphData().nodes.find(x=>x.id===id); if(!n||n.x===undefined) return;
+    const dist = 130, r = Math.hypot(n.x,n.y,n.z)||1, k = 1 + dist/r;
+    g.cameraPosition({ x:n.x*k, y:n.y*k, z:n.z*k }, n, this.state.rm ? 0 : (ms||800));
+  }
+
+  // ---------- lifecycle ----------
+  componentDidMount() {
+    this.timers=[];
+    if (this.state.seq) this.setState({ seq:null, seqStep:-1 });
+    const load = () => new Promise((res, rej) => {
+      if (window.ForceGraph3D) return res();
+      const s=document.createElement('script'); s.src='https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js';
+      s.onload=res; s.onerror=rej; document.head.appendChild(s);
+    });
+    load().then(()=>this.init()).catch(()=>{});
+    this.keyH = (ev) => {
+      if (ev.target && (ev.target.tagName==='INPUT'||ev.target.tagName==='SELECT')) return;
+      if (ev.key==='Escape') this.escOut();
+      if (ev.key===' ') { ev.preventDefault(); this.isolateSelected(); }
+      if (ev.key==='r'||ev.key==='R') { try{ this.g.zoomToFit(600,60); }catch(e){} }
+    };
+    window.addEventListener('keydown', this.keyH);
+  }
+  componentWillUnmount() { (this.timers||[]).forEach(clearTimeout); window.removeEventListener('keydown', this.keyH); try{ this.g && this.g._destructor && this.g._destructor(); }catch(e){} }
+
+  init() {
+    let tries=0;
+    const iv = setInterval(()=>{
+      const el = document.querySelector('[data-g="mri"]');
+      if (!el) { if(++tries>60) clearInterval(iv); return; }
+      clearInterval(iv);
+      const g = window.ForceGraph3D({ controlType:'orbit' })(el)
+        .backgroundColor('rgba(0,0,0,0)')
+        .showNavInfo(false)
+        .nodeRelSize(2.6).nodeResolution(14).nodeOpacity(.95)
+        .nodeLabel(n=>'<div style="font:400 11px IBM Plex Mono,monospace;color:#dbe7f4;background:rgba(8,12,20,.92);padding:5px 9px;border-radius:6px;border:1px solid rgba(160,180,210,.2)">'+n.name+'<br><span style="color:#7688a0">'+n.kind+' · '+n.state+'</span></div>')
+        .linkWidth(e=>e.hot?.7:.4).linkOpacity(1).linkCurvature(.12)
+        .linkDirectionalParticleWidth(1.4).linkDirectionalParticleSpeed(.005)
+        .enableNodeDrag(false).cooldownTicks(140)
+        .onNodeClick((n, ev)=>{
+          if (ev && ev.shiftKey) {
+            const tray = this.state.tray.slice(0,7);
+            if (!tray.some(t=>t.id===n.id)) tray.push({ id:n.id, name:n.name });
+            this.setState({ tray });
+          } else {
+            this.setState({ sel:{ id:n.id }, split:false });
+            const trail = this.state.crumbTrail.filter(x=>x!==n.id).concat(n.id).slice(-3);
+            this.setState({ crumbTrail: trail });
+          }
+          this.restyle();
+        })
+        .onBackgroundClick(()=>{ this.setState({ sel:null, pathSet:null, hoodSet:null }); this.restyle(); });
+      g.d3Force('charge').strength(-60);
+      this.g = g;
+      const resize=()=>{ const r=el.getBoundingClientRect(); if(r.width&&r.height) g.width(r.width).height(r.height); };
+      resize(); setTimeout(resize,300); new ResizeObserver(resize).observe(el);
+      const ctrl=g.controls(); ctrl.autoRotate = !this.state.rm; ctrl.autoRotateSpeed=.25;
+      this.rebuild();
+    }, 400);
+    this.timers.push(iv);
+  }
+
+  escOut() {
+    const st=this.state;
+    if (st.isoSet) { this.setState({ isoSet:null }); this.restyle(); return; }
+    if (st.blast) { this.setState({ blast:null }); this.restyle(); return; }
+    if (st.pathSet||st.hoodSet) { this.setState({ pathSet:null, hoodSet:null }); this.restyle(); return; }
+    if (st.sel) { this.setState({ sel:null }); this.restyle(); return; }
+    try{ this.g.zoomToFit(600,60); }catch(e){}
+  }
+  isolateSelected() {
+    if (!this.state.sel) return;
+    const { all } = this.neighbors(this.state.sel.id, 1);
+    this.setState({ isoSet: all }); this.restyle();
+  }
+
+  // ---------- sequences (replay / story) ----------
+  replaySteps() {
+    return [
+      { cap:'docs-agent-04 opens a session against snapshot b3:91d4…a287.', kick:'Observation', focus:'s.docs', nodes:['s.docs','h.da'], links:['h.da>s.docs'] },
+      { cap:'It reads auth/token.rs and auth/session.rs — a subtle flow, the entities briefly brighten.', kick:'Entity read', focus:'i.tok', nodes:['i.tok','i.ses'], links:['s.docs>i.tok','s.docs>i.ses'] },
+      { cap:'ADR-012 and ADR-014 are read; the doc is compared and marked stale.', kick:'Observation', focus:'d.auth', nodes:['dec.12','dec.14','d.auth'], links:['s.docs>dec.12','s.docs>dec.14'] },
+      { cap:'A proposal materializes near the session — dashed, unapplied, inside the graph.', kick:'Proposal created', focus:'g.prop', nodes:['g.prop','g.req'], links:['g.req>g.prop'] },
+      { cap:'Dietz authorizes. The connection forms from the human to the action; the capability gate opens.', kick:'Authorization granted', focus:'g.auth', nodes:['g.auth','h.dz','c.fsw','c.run'], links:['h.dz>g.auth','g.auth>c.fsw','g.auth>c.run'] },
+      { cap:'Intent is durably recorded — a hollow ring; motion pauses to emphasize durability.', kick:'Intent recorded', focus:'g.int', nodes:['g.int'], links:['g.auth>g.int'] },
+      { cap:'The effect executes: particles flow into the document and two screenshots.', kick:'Effect executed', focus:'g.eff', nodes:['g.eff','d.auth','a.login','a.refresh'], links:['g.int>g.eff','g.eff>d.auth','g.eff>a.login','g.eff>a.refresh'] },
+      { cap:'The intent ring resolves into a solid receipt.', kick:'Receipt confirmed', focus:'g.rec', nodes:['g.rec'], links:['g.eff>g.rec'] },
+      { cap:'A verification wave moves from docs-auth across the outputs — 4 / 4. The feature stabilizes: a restrained completion wave, not a celebration.', kick:'Verification passed', focus:'f.auth', nodes:['g.ver','t.da','f.auth','e.doc'], links:['g.rec>g.ver','g.ver>t.da','t.da>e.doc'] }
+    ];
+  }
+  storySteps() {
+    return [
+      { cap:'Authentication is a feature node — its status is a rollup of evidence, never hand-set.', kick:'Story · 1/5', focus:'f.auth', nodes:['f.auth'], links:[] },
+      { cap:'Four implementation entities carry it; two of them changed this afternoon.', kick:'Story · 2/5', focus:'i.tok', nodes:['i.tok','i.ses','i.sco','i.mod'], links:['f.auth>i.tok','f.auth>i.ses'] },
+      { cap:'Those changes made authentication.md stale — it predated two newer observations.', kick:'Story · 3/5', focus:'d.auth', nodes:['d.auth'], links:['f.auth>d.auth'] },
+      { cap:'An agent proposed a regeneration; Dietz authorized it at a visible capability gate.', kick:'Story · 4/5', focus:'g.auth', nodes:['g.prop','g.auth','h.dz'], links:['h.dz>g.auth'] },
+      { cap:'Effect, receipt, verification — and the feature crossed to complete. Every hop is auditable.', kick:'Story · 5/5', focus:'f.auth', nodes:['g.eff','g.rec','g.ver','f.auth'], links:['g.eff>d.auth','g.rec>g.ver'] }
+    ];
+  }
+  runSeq(kind) {
+    if (this.state.projId!=='live' && kind==='replay') this.setState({ projId:'live' }, ()=>this.rebuild());
+    this.setState({ seq:kind, seqStep:0 });
+    this.applySeqStep(0);
+    this.scheduleSeq();
+  }
+  scheduleSeq() {
+    clearTimeout(this.seqTO);
+    const iv = 3400 / this.state.speed;
+    this.seqTO = setTimeout(()=>{
+      if (!this.state.seq) return;
+      const steps = this.state.seq==='replay' ? this.replaySteps() : this.storySteps();
+      if (this.state.seqStep >= steps.length-1) { this.stopSeqNow(); return; }
+      this.setState({ seqStep: this.state.seqStep+1 });
+      this.applySeqStep(this.state.seqStep);
+      this.scheduleSeq();
+    }, iv);
+    this.timers.push(this.seqTO);
+  }
+  applySeqStep(i) {
+    const steps = this.state.seq==='replay' ? this.replaySteps() : this.storySteps();
+    const s = steps[Math.max(0,Math.min(i,steps.length-1))];
+    this._hotNodes = new Set(s.nodes);
+    this._hotLinks = new Set(s.links);
+    this.restyle();
+    if (s.focus) this.focusNode(s.focus, 900);
+  }
+  stopSeqNow() {
+    clearTimeout(this.seqTO);
+    this._hotNodes=null; this._hotLinks=null;
+    this.setState({ seq:null, seqStep:-1 });
+    this.restyle();
+    try{ this.g.zoomToFit(800,60); }catch(e){}
+  }
+
+  // ---------- render ----------
+  renderVals() {
+    const st = this.state, cfg = this.projCfg()[st.projId];
+    const cosmic = st.styleMode==='cosmic';
+    const setAnd = (patch, fn) => { this.setState(patch); setTimeout(()=>{ fn&&fn(); },0); };
+    const kinds = [['feature','Features'],['impl','Implementation'],['test','Tests & protocols'],['doc','Documents'],['decision','Decisions'],['artifact','Artifacts'],['capability','Capabilities'],['actor','Actors'],['session','Sessions'],['action','Actions'],['evidence','Evidence'],['aggregate','Aggregates']];
+    const { N } = this.master();
+    const kindFilters = kinds.map(([k,label])=>{
+      const inProj = cfg.kinds.includes(k);
+      const off = !!st.kindsOff[k];
+      return { label, n: String(N.filter(x=>x.kind===k).length),
+        sw: off?'transparent':this.kindColor(k), swBd: off?'#5c6b80':this.kindColor(k), op: inProj?1:.35,
+        toggle: ()=>{ if(!inProj) return; this.setState(s=>({ kindsOff:{...s.kindsOff,[k]:!s.kindsOff[k]} })); setTimeout(()=>this.rebuild(),0); } };
+    });
+    const chips = [];
+    chips.push({ label: cfg.label, remove:()=>{} });
+    Object.keys(st.kindsOff).filter(k=>st.kindsOff[k]).forEach(k=>chips.push({ label:'hide: '+k, remove:()=>{ this.setState(s=>({kindsOff:{...s.kindsOff,[k]:false}})); setTimeout(()=>this.rebuild(),0);} }));
+    if (st.blast) chips.push({ label:'blast radius', remove:()=>{ this.setState({blast:null}); this.restyle(); } });
+    if (st.pathSet) chips.push({ label:'semantic path', remove:()=>{ this.setState({pathSet:null}); this.restyle(); } });
+    if (st.isoSet) chips.push({ label:'isolated neighborhood', remove:()=>{ this.setState({isoSet:null}); this.restyle(); } });
+    if (st.snapId==='before') chips.push({ label:'historical: 13:00', remove:()=>{ this.setState({snapId:'now'}); setTimeout(()=>this.rebuild(),0); } });
+    if (st.compare) chips.push({ label:'compare: 13:00 → now', remove:()=>{ this.setState({compare:false}); setTimeout(()=>this.rebuild(),0); } });
+
+    const selNode = st.sel ? this.master().N.find(x=>x.id===st.sel.id) : null;
+    const { L } = this.master();
+    const selRels = selNode ? L.filter(e=>e.source===selNode.id||e.target===selNode.id).slice(0,7).map(e=>{
+      const otherId = e.source===selNode.id ? e.target : e.source;
+      const other = this.master().N.find(x=>x.id===otherId);
+      return { rel:e.rel, target:other?other.name:otherId, go:()=>{ this.setState({sel:{id:otherId}}); this.restyle(); this.focusNode(otherId,700); } };
+    }) : [];
+
+    const steps = st.seq ? (st.seq==='replay'?this.replaySteps():this.storySteps()) : null;
+    const curStep = steps ? steps[Math.max(0,st.seqStep)] : null;
+
+    const tlEvents = [
+      { x:'6%', y:'6px', kind:'obs', tip:'auth-unit run 09:40', rot:'0deg', br:'99px', bg:'#5fbf94', bd:'none', step:-1 },
+      { x:'18%', y:'34px', kind:'test', tip:'session-recovery 11:15', rot:'0deg', br:'99px', bg:'#5fbf94', bd:'none', step:-1 },
+      { x:'34%', y:'34px', kind:'fail', tip:'checkout-integration failed 14:02', rot:'45deg', br:'1px', bg:'#d97b73', bd:'none', step:-1 },
+      { x:'46%', y:'20px', kind:'sess', tip:'docs session started 14:16', rot:'0deg', br:'99px', bg:'transparent', bd:'1.5px solid #e0b46a', step:0 },
+      { x:'58%', y:'6px', kind:'act', tip:'proposal 14:31:52', rot:'45deg', br:'1px', bg:'#c3d0de', bd:'none', step:3 },
+      { x:'66%', y:'6px', kind:'auth', tip:'authorization 14:34:08', rot:'0deg', br:'2px', bg:'#e0b46a', bd:'none', step:4 },
+      { x:'74%', y:'6px', kind:'intent', tip:'intent 14:34:12', rot:'0deg', br:'99px', bg:'transparent', bd:'2px solid #dbe7f4', step:5 },
+      { x:'84%', y:'6px', kind:'receipt', tip:'receipt 14:34:21', rot:'0deg', br:'99px', bg:'#dbe7f4', bd:'none', step:7 },
+      { x:'92%', y:'6px', kind:'verify', tip:'verification 14:34:25 · 4/4', rot:'0deg', br:'99px', bg:'#5fbf94', bd:'none', step:8 }
+    ];
+    const tlMarks = tlEvents.map(m=>({ ...m, go:()=>{ if(m.step>=0){ if(!st.seq){ this.runSeq('replay'); } this.setState({ seqStep:m.step }); this.applySeqStep(m.step); this.scheduleSeq(); } } }));
+
+    return {
+      bgPage: cosmic ? 'radial-gradient(90% 90% at 55% 35%, #0a1120 0%, #05080f 70%)' : '#101820',
+      atmo: cosmic ? 'radial-gradient(60% 55% at 50% 45%, rgba(110,150,220,.07), transparent 70%)' : 'radial-gradient(60% 55% at 50% 45%, rgba(110,168,207,.05), transparent 70%)',
+      styleLabel: cosmic ? 'Cosmic' : 'Hybrid',
+      toggleStyleMode: ()=>{ this.setState({ styleMode: cosmic?'hybrid':'cosmic' }); setTimeout(()=>this.restyle(),0); },
+      liveState: st.connLost ? 'DISCONNECTED' : (st.seq==='replay' ? 'REPLAYING' : (st.seq==='story' ? 'STORY' : (st.compare ? 'COMPARING' : (st.snapId==='before' ? 'HISTORICAL' : 'LIVE')))),
+      liveC: st.connLost ? '#d97b73' : (st.seq||st.compare||st.snapId==='before' ? '#e0b46a' : '#5fbf94'),
+      liveAnim: (!st.connLost && !st.seq && st.snapId==='now' && !st.rm) ? 'mlive 2.6s infinite' : 'none',
+      q: st.q, setQ:(e)=>this.setState({q:e.target.value}),
+      qKey:(e)=>{ if(e.key==='Enter') this.doSearch(); },
+      projId: st.projId,
+      setProj:(e)=>{ this.setState({ projId:e.target.value, sel:null, blast:null, pathSet:null, hoodSet:null, isoSet:null }); setTimeout(()=>this.rebuild(),0); },
+      snapId: st.snapId,
+      setSnap:(e)=>{ this.setState({ snapId:e.target.value, compare:false }); setTimeout(()=>this.rebuild(),0); },
+      compareBd: st.compare ? '#e0b46a' : 'rgba(160,180,210,.16)', compareC: st.compare ? '#e0b46a' : '#9fb0c6',
+      toggleCompare: ()=>{ this.setState({ compare:!st.compare, snapId:'now' }); setTimeout(()=>this.rebuild(),0); },
+      rmBd: st.rm ? '#6ea8cf' : 'rgba(160,180,210,.16)', rmC: st.rm ? '#6ea8cf' : '#9fb0c6',
+      toggleRM: ()=>{ this.setState({ rm:!st.rm }); setTimeout(()=>{ const c=this.g&&this.g.controls(); if(c) c.autoRotate=!this.state.rm; this.restyle(); },0); },
+      connLost: st.connLost, toggleConn: ()=>this.setState({ connLost:!st.connLost }),
+      hasChips: chips.length>0, chips, clearAll: ()=>{ this.setState({ kindsOff:{}, blast:null, pathSet:null, isoSet:null, hoodSet:null, compare:false, snapId:'now' }); setTimeout(()=>this.rebuild(),0); },
+      railW: st.railOpen ? '236px' : '44px', railOpen: st.railOpen, railTitle: st.railOpen ? 'Lens & filters' : '☰', railChev: st.railOpen ? '‹' : '',
+      toggleRail: ()=>this.setState({ railOpen:!st.railOpen }),
+      modeOpts: [['fade','Fade'],['hide','Hide'],['isolate','Isolate']].map(([m,label])=>({ label,
+        bd: st.mode===m?'rgba(110,168,207,.6)':'rgba(160,180,210,.16)', c: st.mode===m?'#6ea8cf':'#9fb0c6', bg: st.mode===m?'rgba(110,168,207,.1)':'transparent',
+        set:()=>{ this.setState({mode:m}); setTimeout(()=>this.restyle(),0); } })),
+      kindFilters,
+      windowId: st.windowId, setWindow:(e)=>this.setState({ windowId:e.target.value }),
+      blastOff: !st.blast, blastOn: !!st.blast,
+      blastBtnOp: st.sel ? 1 : .4,
+      startBlast: ()=>{ if(!this.state.sel) return; const nb=this.neighbors(this.state.sel.id, this.state.blastDepth); const direct=new Set([this.state.sel.id]); (nb.rings[1]||new Set()).forEach(x=>direct.add(x)); const trans=new Set(); nb.all.forEach(x=>{ if(!direct.has(x)) trans.add(x); }); this.setState({ blast:{ direct, trans } }); this.restyle(); },
+      stopBlast: ()=>{ this.setState({ blast:null }); this.restyle(); },
+      blastFrom: selNode ? selNode.name : '',
+      blastDirect: st.blast ? String(st.blast.direct.size-1) : '0', blastTrans: st.blast ? String(st.blast.trans.size) : '0',
+      blastDepths: [[1,'Direct'],[2,'2 levels'],[3,'Transitive']].map(([d,label])=>({ label,
+        bd: st.blastDepth===d?'rgba(224,180,106,.6)':'rgba(160,180,210,.16)', c: st.blastDepth===d?'#e0b46a':'#9fb0c6',
+        set:()=>{ this.setState({ blastDepth:d }); setTimeout(()=>{ const s=this.state; if(s.sel){ const nb=this.neighbors(s.sel.id,d); const direct=new Set([s.sel.id]); (nb.rings[1]||new Set()).forEach(x=>direct.add(x)); const trans=new Set(); nb.all.forEach(x=>{ if(!direct.has(x)) trans.add(x); }); this.setState({ blast:{direct,trans} }); this.restyle(); } },0); } })),
+      playStory: ()=>this.runSeq('story'),
+      crumbs: (()=>{ const items=[{ label:'Application', c:'#7688a0', go:()=>{ this.setState({sel:null,isoSet:null,crumbTrail:[]}); this.restyle(); try{this.g.zoomToFit(600,60);}catch(e){} } }];
+        st.crumbTrail.forEach(id=>{ const nd=this.master().N.find(x=>x.id===id); if(nd) items.push({ label:nd.name, c: st.sel&&st.sel.id===id?'#dbe7f4':'#7688a0', go:()=>{ this.setState({sel:{id}}); this.restyle(); this.focusNode(id,600); } }); });
+        return items; })(),
+      projDesc: cfg.desc,
+      legend: cfg.kinds.slice(0,6).map(k=>({ label: kinds.find(x=>x[0]===k)?kinds.find(x=>x[0]===k)[1]:k, c:this.kindColor(k) })),
+      stagedNote: st.seq ? '' : (cfg.staged || (st.projId==='risk' ? 'risk scoring is simulated from current states' : '')),
+      hasDiff: st.compare, hasTray: st.tray.length>0,
+      tray: st.tray.map(t=>({ label:t.name.length>22?t.name.slice(0,20)+'…':t.name, remove:()=>{ this.setState({tray:st.tray.filter(x=>x.id!==t.id)}); this.restyle(); } })),
+      sharedHood: ()=>{ if(st.tray.length<2) return; let inter=null; st.tray.forEach(t=>{ const nb=this.neighbors(t.id,1).all; inter = inter? new Set([...inter].filter(x=>nb.has(x))) : nb; }); st.tray.forEach(t=>inter.add(t.id)); this.setState({ hoodSet:inter }); this.restyle(); },
+      connectPath: ()=>{ if(st.tray.length<2) return; const p=this.bfsPath(st.tray[0].id, st.tray[st.tray.length-1].id); if(p){ this.setState({ pathSet:new Set(p) }); this.restyle(); } },
+      clearTray: ()=>{ this.setState({ tray:[], hoodSet:null, pathSet:null }); this.restyle(); },
+      capOn: !!curStep, capKicker: curStep?curStep.kick:'', capText: curStep?curStep.cap:'',
+      hasInspector: !!selNode && !st.split, closeInspector: ()=>{ this.setState({sel:null}); this.restyle(); },
+      selKind: selNode?selNode.kind:'', selKindC: selNode?this.kindColor(selNode.kind):'#888',
+      selName: selNode?selNode.name:'', selState: selNode?selNode.state:'',
+      selStateC: selNode?(this.stateColor(selNode.state)||'#9fb0c6'):'#9fb0c6',
+      selId: selNode?(selNode.kind+':twin/self/'+selNode.id):'', selSnap:'b3:91d4…a287',
+      selWhy: selNode?selNode.why:'', selRels,
+      selActivity: selNode ? (selNode.id==='d.auth' ? '14:34 regenerated · verified\n14:29 marked stale\n13:02 generated' : (selNode.state==='failed' ? '14:02 protocol failed 12/14' : 'observed at current snapshot')) : '',
+      focusSel: ()=>{ if(st.sel){ this.focusNode(st.sel.id, 800); const nb=this.neighbors(st.sel.id,1); this.setState({hoodSet:nb.all}); this.restyle(); } },
+      isolateSel: ()=>this.isolateSelected(),
+      selIsDoc: !!selNode && selNode.id==='d.auth',
+      openSplit: ()=>this.setState({ split:true }),
+      hasSplit: st.split, closeSplit: ()=>this.setState({ split:false }),
+      tlMarks, tlCursor: st.seq ? (46 + Math.max(0,st.seqStep)*5.8) + '%' : '100%',
+      tlClock: st.seq ? '14:3'+(1+Math.min(Math.max(st.seqStep,0),4))+':00' : (st.snapId==='before'?'13:00:00':'14:34:25'),
+      seqIdle: !st.seq, seqOn: !!st.seq,
+      playReplay: ()=>this.runSeq('replay'),
+      stopSeq: ()=>this.stopSeqNow(),
+      seqPrev: ()=>{ if(st.seqStep>0){ this.setState({seqStep:st.seqStep-1}); this.applySeqStep(st.seqStep-1); this.scheduleSeq(); } },
+      seqNext: ()=>{ const steps2=st.seq==='replay'?this.replaySteps():this.storySteps(); if(st.seqStep<steps2.length-1){ this.setState({seqStep:st.seqStep+1}); this.applySeqStep(st.seqStep+1); this.scheduleSeq(); } },
+      speedLabel: st.speed+'×', toggleSpeed: ()=>{ const nx={1:2,2:4,4:0.5,0.5:1}[st.speed]||1; this.setState({speed:nx}); if(st.seq) this.scheduleSeq(); }
+    };
+  }
+
+  doSearch() {
+    const q = (this.state.q||'').trim().toLowerCase();
+    if (!q) return;
+    const { N } = this.master();
+    const arrow = q.split(/→|->/).map(s=>s.trim()).filter(Boolean);
+    if (arrow.length===2) {
+      const a = N.find(x=>x.name.toLowerCase().includes(arrow[0])), b = N.find(x=>x.name.toLowerCase().includes(arrow[1]));
+      if (a&&b) { const p=this.bfsPath(a.id,b.id); if(p){ this.setState({ pathSet:new Set(p), sel:{id:b.id} }); this.restyle(); this.focusNode(b.id,900); } }
+      return;
+    }
+    const hit = N.find(x=>x.name.toLowerCase().includes(q));
+    if (hit) { this.setState({ sel:{ id:hit.id }, crumbTrail:[hit.id] }); this.restyle(); this.focusNode(hit.id, 900); }
+  }
+}
+</script>
+</body>
+</html>

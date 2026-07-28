@@ -50,7 +50,11 @@ pub struct KindDef {
 }
 
 fn csv(s: &str) -> Vec<String> {
-    s.split(',').map(str::trim).filter(|x| !x.is_empty()).map(str::to_string).collect()
+    s.split(',')
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 impl KindDef {
@@ -107,10 +111,7 @@ impl KindDef {
 
 /// The merged registry, keyed by entity kind. Compiled defaults form the
 /// base; every graph template overlays its observed properties on top.
-pub fn registry(
-    store: &Store,
-    index: &MemIndex,
-) -> Result<BTreeMap<String, KindDef>, StoreError> {
+pub fn registry(store: &Store, index: &MemIndex) -> Result<BTreeMap<String, KindDef>, StoreError> {
     let mut out: BTreeMap<String, KindDef> = BTreeMap::new();
     for def in templates::DEFAULTS {
         let kd = KindDef::from_default(def);
@@ -118,14 +119,21 @@ pub fn registry(
     }
     let mut seen: BTreeSet<StableId> = BTreeSet::new();
     for node in index.entities_by_kind("template") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if !seen.insert(id.clone()) {
             continue;
         }
-        let Some(applies) = latest(index, store, &id, "applies_to")? else { continue };
+        let Some(applies) = latest(index, store, &id, "applies_to")? else {
+            continue;
+        };
         let entry = out.entry(applies.clone()).or_insert_with(|| KindDef {
             kind: applies.clone(),
-            slug: labels.get("slug").cloned().unwrap_or_else(|| applies.clone()),
+            slug: labels
+                .get("slug")
+                .cloned()
+                .unwrap_or_else(|| applies.clone()),
             placement: "file_first".to_string(),
             enforce: "advisory".to_string(),
             parser: "fields".to_string(),
@@ -158,10 +166,7 @@ pub fn registry(
 /// The kinds whose artifacts are captured documents — the loop set for
 /// staleness, conformance, association, and consolidation. Built-ins
 /// first, then every registry kind that captures paths.
-pub fn doc_kinds(
-    store: &Store,
-    index: &MemIndex,
-) -> Result<Vec<String>, StoreError> {
+pub fn doc_kinds(store: &Store, index: &MemIndex) -> Result<Vec<String>, StoreError> {
     let builtin = ["decision", "plan", "skill", "agent_config"];
     let mut out: Vec<String> = builtin.iter().map(|s| s.to_string()).collect();
     for (kind, def) in registry(store, index)? {
@@ -250,7 +255,10 @@ mod tests {
         replay(&store, &mut index).unwrap();
         let reg = registry(&store, &index).unwrap();
         assert_eq!(reg["runbook"].enforce, "enforced", "graph wins");
-        assert_eq!(reg["runbook"].placement, "file_first", "untouched props keep defaults");
+        assert_eq!(
+            reg["runbook"].placement, "file_first",
+            "untouched props keep defaults"
+        );
         assert!(reg["runbook"].template.is_some());
         assert!(!reg["runbook"].contract.is_empty());
     }
@@ -269,8 +277,14 @@ mod tests {
                 fields: vec![],
             },
         ];
-        assert_eq!(match_rule(&rules, "docs/runbooks/deploy.md").unwrap().kind, "runbook");
-        assert_eq!(match_rule(&rules, "docs/architecture.md").unwrap().kind, "doc");
+        assert_eq!(
+            match_rule(&rules, "docs/runbooks/deploy.md").unwrap().kind,
+            "runbook"
+        );
+        assert_eq!(
+            match_rule(&rules, "docs/architecture.md").unwrap().kind,
+            "doc"
+        );
         assert_eq!(match_rule(&rules, "README.md").unwrap().kind, "doc");
         assert!(match_rule(&rules, "src/main.rs").is_none());
     }

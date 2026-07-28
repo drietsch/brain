@@ -75,7 +75,12 @@ impl Cortex {
             index.on_object(id, &obj);
         }
         cursor = history.len();
-        Ok(Cortex { index, cursor, path, checkpointed })
+        Ok(Cortex {
+            index,
+            cursor,
+            path,
+            checkpointed,
+        })
     }
 
     /// A cold, non-persisting build: the reference behavior, for
@@ -88,7 +93,12 @@ impl Cortex {
             index.on_object(id, &store.get(id)?);
         }
         let cursor = history.len();
-        Ok(Cortex { index, cursor, path: store.root().join("cortex.json"), checkpointed: cursor })
+        Ok(Cortex {
+            index,
+            cursor,
+            path: store.root().join("cortex.json"),
+            checkpointed: cursor,
+        })
     }
 
     fn load(path: &PathBuf) -> Option<(MemIndex, usize)> {
@@ -197,7 +207,9 @@ pub fn answers_match(
             }
         }
     }
-    kinds.iter().all(|k| a.entities_by_kind(k) == b.entities_by_kind(k))
+    kinds
+        .iter()
+        .all(|k| a.entities_by_kind(k) == b.entities_by_kind(k))
 }
 
 #[cfg(test)]
@@ -299,7 +311,14 @@ mod tests {
         let rebuilt = Cortex::open(&store).unwrap();
         let mut reference = MemIndex::new();
         replay(&store, &mut reference).unwrap();
-        assert!(answers_match(&*rebuilt, &reference, &nodes, &sids, &["source_file"], &["imports"]));
+        assert!(answers_match(
+            &*rebuilt,
+            &reference,
+            &nodes,
+            &sids,
+            &["source_file"],
+            &["imports"]
+        ));
     }
 
     #[test]
@@ -307,7 +326,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(dir.path()).unwrap();
         let (sids, _) = populate(&store, 4); // chain f0 -> f1 -> f2 -> f3
-        // Add a cycle back edge f3 -> f0.
+                                             // Add a cycle back edge f3 -> f0.
         store
             .put(&Object::Relation {
                 from: sids[3].clone(),
@@ -353,7 +372,11 @@ mod tests {
             .unwrap();
         let graf = Cortex::open(&store).unwrap();
         let fwd = graf.reach(&store, &sids[0], "imports", false, 10).unwrap();
-        assert_eq!(fwd, vec![(sids[1].clone(), 1)], "traversal stops at the dead edge");
+        assert_eq!(
+            fwd,
+            vec![(sids[1].clone(), 1)],
+            "traversal stops at the dead edge"
+        );
 
         // Reverse blast radius of f3 likewise stops before the dead edge.
         let back = graf.reach(&store, &sids[3], "imports", true, 10).unwrap();
@@ -370,6 +393,11 @@ mod tests {
             })
             .unwrap();
         let graf = Cortex::open(&store).unwrap();
-        assert_eq!(graf.reach(&store, &sids[0], "imports", false, 10).unwrap().len(), 3);
+        assert_eq!(
+            graf.reach(&store, &sids[0], "imports", false, 10)
+                .unwrap()
+                .len(),
+            3
+        );
     }
 }

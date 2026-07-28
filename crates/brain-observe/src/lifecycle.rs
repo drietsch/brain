@@ -162,8 +162,11 @@ mod tests {
         )
         .unwrap();
         fs::write(src.path().join("docs/plans/quiet.md"), "# Quiet plan\n").unwrap();
-        fs::write(src.path().join("docs/plans/shipped.md"), "# Shipped\n\nStatus: done\n")
-            .unwrap();
+        fs::write(
+            src.path().join("docs/plans/shipped.md"),
+            "# Shipped\n\nStatus: done\n",
+        )
+        .unwrap();
         let store_dir = tempfile::tempdir().unwrap();
         let store = Store::open(store_dir.path()).unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
@@ -185,14 +188,32 @@ mod tests {
         assert_eq!(of(&index, &store, &quiet).unwrap().0, Lifecycle::Active);
 
         // 2. An explicit set outranks status; setting is guarded.
-        assert!(set(&store, &index, &shipped, Lifecycle::Abandoned, Some("rescoped")).unwrap());
+        assert!(set(
+            &store,
+            &index,
+            &shipped,
+            Lifecycle::Abandoned,
+            Some("rescoped")
+        )
+        .unwrap());
         let index = fresh_index(&store);
         let (state, why) = of(&index, &store, &shipped).unwrap();
         assert_eq!(state, Lifecycle::Abandoned);
         assert!(why.contains("rescoped"));
         let before = store.count_objects().unwrap();
-        assert!(!set(&store, &index, &shipped, Lifecycle::Abandoned, Some("rescoped")).unwrap());
-        assert_eq!(store.count_objects().unwrap(), before, "guarded re-set writes nothing");
+        assert!(!set(
+            &store,
+            &index,
+            &shipped,
+            Lifecycle::Abandoned,
+            Some("rescoped")
+        )
+        .unwrap());
+        assert_eq!(
+            store.count_objects().unwrap(),
+            before,
+            "guarded re-set writes nothing"
+        );
 
         // 4. Deleting the file a doc is recorded in retires it.
         fs::remove_file(src.path().join("docs/plans/quiet.md")).unwrap();

@@ -29,11 +29,7 @@ impl fmt::Display for Finding {
 }
 
 /// Run every coherence check under a prefix. Deterministic order.
-pub fn check(
-    store: &Store,
-    index: &MemIndex,
-    prefix: &str,
-) -> Result<Vec<Finding>, StoreError> {
+pub fn check(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Finding>, StoreError> {
     let mut out = Vec::new();
 
     // Active documents holding live edges to deleted files.
@@ -41,7 +37,9 @@ pub fn check(
     for kind in &doc_kinds {
         let mut seen = BTreeSet::new();
         for node in index.entities_by_kind(kind) {
-            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                continue;
+            };
             if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone())
             {
                 continue;
@@ -82,8 +80,9 @@ pub fn check(
                         out.push(Finding {
                             kind: format!("active-but-homeless ({kind})"),
                             label: slug,
-                            detail: "explicitly active, but every file it is recorded in is deleted"
-                                .to_string(),
+                            detail:
+                                "explicitly active, but every file it is recorded in is deleted"
+                                    .to_string(),
                         });
                     }
                 }
@@ -94,7 +93,9 @@ pub fn check(
     // Test cases defined in files that no longer exist.
     let mut seen = BTreeSet::new();
     for node in index.entities_by_kind("test_case") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
@@ -112,7 +113,9 @@ pub fn check(
     // Governed changes stuck between states.
     let mut seen = BTreeSet::new();
     for node in index.entities_by_kind("change") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
@@ -191,9 +194,15 @@ mod tests {
 
         // A test case defined in a file, then the file (and mention target)
         // are deleted.
-        let junit = "<testsuite>\n  <testcase classname=\"src/core.rs\" name=\"works\"/>\n</testsuite>\n";
-        crate::testing::record_run(&store, "twin/app", &crate::testing::parse_report(junit), junit)
-            .unwrap();
+        let junit =
+            "<testsuite>\n  <testcase classname=\"src/core.rs\" name=\"works\"/>\n</testsuite>\n";
+        crate::testing::record_run(
+            &store,
+            "twin/app",
+            &crate::testing::parse_report(junit),
+            junit,
+        )
+        .unwrap();
         fs::remove_file(src.path().join("src/core.rs")).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(3));
         refresh(&store, src.path(), "twin/app").unwrap();

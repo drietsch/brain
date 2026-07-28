@@ -7,6 +7,7 @@ members = [
     "crates/brain-observe",
     "crates/brain-index",
     "crates/cortex",
+    "crates/brain-eyes",
     "crates/brain-cli",
 ]
 
@@ -27,6 +28,8 @@ brain-runtime = { path = "crates/brain-runtime" }
 brain-observe = { path = "crates/brain-observe" }
 brain-index = { path = "crates/brain-index" }
 cortex = { path = "crates/cortex" }
+brain-eyes = { path = "crates/brain-eyes" }
+tiny_http = "0.12"
 
 # The monolithic `brain` binary ships lean: one file, symbols stripped.
 [profile.release]

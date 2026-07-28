@@ -43,50 +43,78 @@ pub fn classify(rel_path: &str, language: &str, content: &str) -> Option<TestInf
     let file = rel_path.rsplit('/').next().unwrap_or(rel_path);
     match language {
         "rust" => {
-            let declared = content.lines().filter(|l| {
-                let t = l.trim();
-                t == "#[test]" || t.starts_with("#[test(") || t.ends_with("::test]")
-            }).count();
+            let declared = content
+                .lines()
+                .filter(|l| {
+                    let t = l.trim();
+                    t == "#[test]" || t.starts_with("#[test(") || t.ends_with("::test]")
+                })
+                .count();
             if declared == 0 {
                 return None;
             }
             let by_convention = rel_path.starts_with("tests/") || rel_path.contains("/tests/");
-            Some(TestInfo { framework: "rust", declared, is_test_file: by_convention })
+            Some(TestInfo {
+                framework: "rust",
+                declared,
+                is_test_file: by_convention,
+            })
         }
         "javascript" => {
             let is_spec = file.contains(".test.") || file.contains(".spec.");
             let playwright = content.contains("@playwright/test");
-            let declared = content.lines().filter(|l| {
-                let t = l.trim_start();
-                t.starts_with("test(") || t.starts_with("test.only(")
-                    || t.starts_with("it(") || t.starts_with("it.only(")
-            }).count();
+            let declared = content
+                .lines()
+                .filter(|l| {
+                    let t = l.trim_start();
+                    t.starts_with("test(")
+                        || t.starts_with("test.only(")
+                        || t.starts_with("it(")
+                        || t.starts_with("it.only(")
+                })
+                .count();
             if !is_spec && !playwright && declared == 0 {
                 return None;
             }
             let framework = if playwright { "playwright" } else { "jest" };
-            Some(TestInfo { framework, declared, is_test_file: is_spec || playwright })
+            Some(TestInfo {
+                framework,
+                declared,
+                is_test_file: is_spec || playwright,
+            })
         }
         "python" => {
             let is_test = file.starts_with("test_") || file.ends_with("_test.py");
-            let declared = content.lines().filter(|l| {
-                let t = l.trim_start();
-                t.starts_with("def test_") || t.starts_with("async def test_")
-            }).count();
+            let declared = content
+                .lines()
+                .filter(|l| {
+                    let t = l.trim_start();
+                    t.starts_with("def test_") || t.starts_with("async def test_")
+                })
+                .count();
             if !is_test && declared == 0 {
                 return None;
             }
-            Some(TestInfo { framework: "pytest", declared, is_test_file: is_test })
+            Some(TestInfo {
+                framework: "pytest",
+                declared,
+                is_test_file: is_test,
+            })
         }
         "php" => {
             let is_test = file.ends_with("Test.php");
-            let declared = content.lines().filter(|l| {
-                l.trim_start().starts_with("public function test")
-            }).count();
+            let declared = content
+                .lines()
+                .filter(|l| l.trim_start().starts_with("public function test"))
+                .count();
             if !is_test && declared == 0 {
                 return None;
             }
-            Some(TestInfo { framework: "phpunit", declared, is_test_file: is_test })
+            Some(TestInfo {
+                framework: "phpunit",
+                declared,
+                is_test_file: is_test,
+            })
         }
         _ => None,
     }
@@ -121,13 +149,22 @@ pub struct RunReport {
 
 impl RunReport {
     pub fn passed(&self) -> usize {
-        self.cases.iter().filter(|(_, s)| *s == CaseStatus::Pass).count()
+        self.cases
+            .iter()
+            .filter(|(_, s)| *s == CaseStatus::Pass)
+            .count()
     }
     pub fn failed(&self) -> usize {
-        self.cases.iter().filter(|(_, s)| *s == CaseStatus::Fail).count()
+        self.cases
+            .iter()
+            .filter(|(_, s)| *s == CaseStatus::Fail)
+            .count()
     }
     pub fn skipped(&self) -> usize {
-        self.cases.iter().filter(|(_, s)| *s == CaseStatus::Skip).count()
+        self.cases
+            .iter()
+            .filter(|(_, s)| *s == CaseStatus::Skip)
+            .count()
     }
 }
 
@@ -142,14 +179,21 @@ pub fn parse_report(text: &str) -> RunReport {
 
 /// `cargo test` textual output: `test path::name ... ok|FAILED|ignored`.
 pub fn parse_cargo(text: &str) -> RunReport {
-    let mut report = RunReport { format: "cargo", cases: Vec::new() };
+    let mut report = RunReport {
+        format: "cargo",
+        cases: Vec::new(),
+    };
     for line in text.lines() {
         let t = line.trim();
-        let Some(rest) = t.strip_prefix("test ") else { continue };
+        let Some(rest) = t.strip_prefix("test ") else {
+            continue;
+        };
         if rest.starts_with("result:") {
             continue;
         }
-        let Some((name, verdict)) = rest.rsplit_once(" ... ") else { continue };
+        let Some((name, verdict)) = rest.rsplit_once(" ... ") else {
+            continue;
+        };
         let status = match verdict.split_whitespace().next() {
             Some("ok") => CaseStatus::Pass,
             Some("FAILED") => CaseStatus::Fail,
@@ -166,7 +210,10 @@ pub fn parse_cargo(text: &str) -> RunReport {
 /// name is `classname::name`; Playwright puts the spec file path in
 /// `classname`, which lets test cases link back to their twinned file.
 pub fn parse_junit(text: &str) -> RunReport {
-    let mut report = RunReport { format: "junit", cases: Vec::new() };
+    let mut report = RunReport {
+        format: "junit",
+        cases: Vec::new(),
+    };
     for chunk in text.split("<testcase").skip(1) {
         // A testcase's scope ends at its closing tag when it has children,
         // else at the next testcase; <failure>/<error>/<skipped> children
@@ -279,7 +326,15 @@ pub fn record_run(
 
     let repo_sid = StableId::derive(&["repo", prefix]);
     let mut written = BTreeSet::new();
-    relate(store, &index, &mut written, &run_sid, "concerns", &repo_sid, now)?;
+    relate(
+        store,
+        &index,
+        &mut written,
+        &run_sid,
+        "concerns",
+        &repo_sid,
+        now,
+    )?;
 
     let files = crate::twin::twinned_paths(store, prefix)?;
     for (name, status) in &report.cases {
@@ -300,14 +355,30 @@ pub fn record_run(
             }
         }
         if *status == CaseStatus::Fail {
-            relate(store, &index, &mut written, &run_sid, "failed", &case_sid, now)?;
+            relate(
+                store,
+                &index,
+                &mut written,
+                &run_sid,
+                "failed",
+                &case_sid,
+                now,
+            )?;
         }
         // JUnit classnames that are twinned file paths (Playwright's
         // convention) link the case to its file.
         if let Some((class, _)) = name.split_once("::") {
             if files.contains(class) {
                 let file_sid = StableId::derive(&["file", class]);
-                relate(store, &index, &mut written, &case_sid, "defined_in", &file_sid, now)?;
+                relate(
+                    store,
+                    &index,
+                    &mut written,
+                    &case_sid,
+                    "defined_in",
+                    &file_sid,
+                    now,
+                )?;
             }
         }
     }
@@ -347,7 +418,9 @@ pub fn runs(
     let mut seen: BTreeSet<StableId> = BTreeSet::new();
     let mut out = Vec::new();
     for node in index.entities_by_kind("test_run") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
@@ -361,13 +434,20 @@ pub fn runs(
             .max()
             .copied()
             .unwrap_or(0);
-        let passed = latest(index, store, &id, "passed")?.and_then(|v| v.parse().ok()).unwrap_or(0);
-        let failed = latest(index, store, &id, "failed")?.and_then(|v| v.parse().ok()).unwrap_or(0);
+        let passed = latest(index, store, &id, "passed")?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        let failed = latest(index, store, &id, "failed")?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
         let format = labels.get("format").cloned().unwrap_or_default();
         out.push((pos, at, total.parse().unwrap_or(0), passed, failed, format));
     }
     out.sort_by(|a, b| b.0.cmp(&a.0));
-    Ok(out.into_iter().map(|(_, at, t, p, f, fmt)| (at, t, p, f, fmt)).collect())
+    Ok(out
+        .into_iter()
+        .map(|(_, at, t, p, f, fmt)| (at, t, p, f, fmt))
+        .collect())
 }
 
 /// Test cases whose latest recorded result is `fail`, sorted by name.
@@ -379,7 +459,9 @@ pub fn failing_cases(
     let mut seen: BTreeSet<StableId> = BTreeSet::new();
     let mut out = Vec::new();
     for node in index.entities_by_kind("test_case") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
@@ -398,8 +480,16 @@ mod tests {
     #[test]
     fn classification_by_framework() {
         let rust = classify("src/lib.rs", "rust", "pub fn a() {}\n#[test]\nfn t() {}\n").unwrap();
-        assert_eq!((rust.framework, rust.declared, rust.is_test_file), ("rust", 1, false));
-        let rust = classify("tests/it.rs", "rust", "#[test]\nfn t() {}\n#[tokio::test]\nasync fn u() {}\n").unwrap();
+        assert_eq!(
+            (rust.framework, rust.declared, rust.is_test_file),
+            ("rust", 1, false)
+        );
+        let rust = classify(
+            "tests/it.rs",
+            "rust",
+            "#[test]\nfn t() {}\n#[tokio::test]\nasync fn u() {}\n",
+        )
+        .unwrap();
         assert_eq!((rust.declared, rust.is_test_file), (2, true));
         assert!(classify("src/lib.rs", "rust", "pub fn a() {}\n").is_none());
 
@@ -409,7 +499,10 @@ mod tests {
             "import { test } from '@playwright/test';\ntest('logs in', async () => {});\n",
         )
         .unwrap();
-        assert_eq!((pw.framework, pw.declared, pw.is_test_file), ("playwright", 1, true));
+        assert_eq!(
+            (pw.framework, pw.declared, pw.is_test_file),
+            ("playwright", 1, true)
+        );
         let jest = classify(
             "web/app.test.js",
             "javascript",
@@ -419,9 +512,20 @@ mod tests {
         assert_eq!((jest.framework, jest.declared), ("jest", 2));
 
         let py = classify("test_cli.py", "python", "def test_main():\n    pass\n").unwrap();
-        assert_eq!((py.framework, py.declared, py.is_test_file), ("pytest", 1, true));
-        let php = classify("tests/UserTest.php", "php", "<?php\nclass UserTest {\npublic function testLoad() {}\n}\n").unwrap();
-        assert_eq!((php.framework, php.declared, php.is_test_file), ("phpunit", 1, true));
+        assert_eq!(
+            (py.framework, py.declared, py.is_test_file),
+            ("pytest", 1, true)
+        );
+        let php = classify(
+            "tests/UserTest.php",
+            "php",
+            "<?php\nclass UserTest {\npublic function testLoad() {}\n}\n",
+        )
+        .unwrap();
+        assert_eq!(
+            (php.framework, php.declared, php.is_test_file),
+            ("phpunit", 1, true)
+        );
     }
 
     #[test]

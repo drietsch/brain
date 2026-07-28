@@ -46,8 +46,10 @@ pub enum StoreError {
     Corrupt { id: NodeId, actual: NodeId },
     #[error("expected {expected} object at {id}")]
     WrongKind { id: NodeId, expected: &'static str },
-    #[error("canonicalization mismatch during sync: {claimed} now canonicalizes to {actual} — \
-             the source store predates the current canonical form; rebuild or migrate it")]
+    #[error(
+        "canonicalization mismatch during sync: {claimed} now canonicalizes to {actual} — \
+             the source store predates the current canonical form; rebuild or migrate it"
+    )]
     CanonEpoch { claimed: NodeId, actual: NodeId },
 }
 
@@ -179,7 +181,10 @@ impl Store {
         let ns = Object::Namespace { entries, parent };
         let id = self.put(&ns)?;
         fs::write(self.head_path(), id.to_string())?;
-        self.append_event("bind", json!({ "names": names, "namespace": id.to_string() }))?;
+        self.append_event(
+            "bind",
+            json!({ "names": names, "namespace": id.to_string() }),
+        )?;
         Ok(id)
     }
 
@@ -226,7 +231,11 @@ impl Store {
 
     // ---- event log ----
 
-    pub(crate) fn append_event(&self, kind: &str, detail: serde_json::Value) -> Result<(), StoreError> {
+    pub(crate) fn append_event(
+        &self,
+        kind: &str,
+        detail: serde_json::Value,
+    ) -> Result<(), StoreError> {
         let line = json!({ "at_ms": now_ms(), "kind": kind, "detail": detail });
         let mut f = fs::OpenOptions::new()
             .create(true)
@@ -280,7 +289,9 @@ mod tests {
         let identity = |p: &str| Object::Code {
             term: Term::Lam {
                 param: p.to_string(),
-                body: Box::new(Term::Var { name: p.to_string() }),
+                body: Box::new(Term::Var {
+                    name: p.to_string(),
+                }),
             },
         };
         let a = store.put(&identity("x")).unwrap();

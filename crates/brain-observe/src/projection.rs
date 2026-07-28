@@ -43,7 +43,9 @@ pub fn marker(rel_path: &str, kind: &str, prefix: &str, slug: &str) -> String {
     } else if rel_path.ends_with(".md") {
         format!("<!-- brain:projection kind={kind} slug={slug} — GENERATED, READ-ONLY. Edit via: {edit} -->\n")
     } else {
-        format!("# brain:projection kind={kind} slug={slug} — GENERATED, READ-ONLY. Edit via: {edit}\n")
+        format!(
+            "# brain:projection kind={kind} slug={slug} — GENERATED, READ-ONLY. Edit via: {edit}\n"
+        )
     }
 }
 
@@ -84,7 +86,9 @@ pub fn write_projection(
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent)?;
     }
-    let unchanged = fs::read(&target).map(|cur| cur == body.as_bytes()).unwrap_or(false);
+    let unchanged = fs::read(&target)
+        .map(|cur| cur == body.as_bytes())
+        .unwrap_or(false);
     if !unchanged {
         set_readonly(&target, false);
         let tmp = target.with_extension("tmp");
@@ -110,7 +114,15 @@ pub fn write_projection(
         observe_src(store, &file_sid, "expected_b3", &hash, "projection", now)?;
     }
     let mut written: BTreeSet<(StableId, String, StableId)> = BTreeSet::new();
-    relate(store, index, &mut written, artifact, "projected_to", &file_sid, now)?;
+    relate(
+        store,
+        index,
+        &mut written,
+        artifact,
+        "projected_to",
+        &file_sid,
+        now,
+    )?;
     Ok(target)
 }
 
@@ -124,11 +136,18 @@ pub fn reapply_readonly(
 ) -> Result<usize, StoreError> {
     let mut armed = 0;
     for (name, node) in store.namespace()? {
-        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
-        let Ok(Object::Entity { id: sid, entity_kind, .. }) = store.get(&node) else { continue };
-        if entity_kind != "source_file"
-            || latest(index, store, &sid, "expected_b3")?.is_none()
-        {
+        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
+            continue;
+        };
+        let Ok(Object::Entity {
+            id: sid,
+            entity_kind,
+            ..
+        }) = store.get(&node)
+        else {
+            continue;
+        };
+        if entity_kind != "source_file" || latest(index, store, &sid, "expected_b3")?.is_none() {
             continue;
         }
         let path = root.join(rel);
@@ -173,18 +192,33 @@ pub fn drift(
     let registry = crate::kinds::registry(store, index)?;
     let mut out = Vec::new();
     for (name, node) in store.namespace()? {
-        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
-        let Ok(Object::Entity { id: sid, entity_kind, .. }) = store.get(&node) else { continue };
+        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
+            continue;
+        };
+        let Ok(Object::Entity {
+            id: sid,
+            entity_kind,
+            ..
+        }) = store.get(&node)
+        else {
+            continue;
+        };
         if entity_kind != "source_file" {
             continue;
         }
-        let Some(expected) = latest(index, store, &sid, "expected_b3")? else { continue };
+        let Some(expected) = latest(index, store, &sid, "expected_b3")? else {
+            continue;
+        };
 
         // Who projects here, and of what kind?
         let mut source: Option<(StableId, String, String)> = None; // artifact, kind, slug
         for (_, artifact) in crate::twin::live_to(index, store, &sid, "projected_to")? {
             for anode in index.entity_nodes(&artifact) {
-                if let Ok(Object::Entity { entity_kind: ak, labels: al, .. }) = store.get(&anode)
+                if let Ok(Object::Entity {
+                    entity_kind: ak,
+                    labels: al,
+                    ..
+                }) = store.get(&anode)
                 {
                     source = Some((
                         artifact.clone(),
@@ -237,10 +271,8 @@ pub fn drift(
                     ) {
                         if let Some(rel_expected) = projection_rel(def, slug) {
                             if rel_expected == rel {
-                                let fresh =
-                                    render_body(rel, kind, prefix, slug, &content);
-                                if blake3::hash(fresh.as_bytes()).to_hex().to_string() != expected
-                                {
+                                let fresh = render_body(rel, kind, prefix, slug, &content);
+                                if blake3::hash(fresh.as_bytes()).to_hex().to_string() != expected {
                                     out.push(Drift {
                                         path: rel.to_string(),
                                         kind: DriftKind::StaleRender,
@@ -289,20 +321,51 @@ mod tests {
                 },
             })
             .unwrap();
-        observe_src(&store, &artifact, "content", "# Big Plan\n\nDo things.\n", "agent", 10)
-            .unwrap();
+        observe_src(
+            &store,
+            &artifact,
+            "content",
+            "# Big Plan\n\nDo things.\n",
+            "agent",
+            10,
+        )
+        .unwrap();
 
         let index = fresh_index(&store);
         let rel = "docs/brain/plans/big-plan.md";
-        let body = render_body(rel, "plan", "twin/app", "big-plan", "# Big Plan\n\nDo things.\n");
-        assert_eq!(body, render_body(rel, "plan", "twin/app", "big-plan", "# Big Plan\n\nDo things.\n"), "deterministic");
-        let target =
-            write_projection(&store, &index, root.path(), &artifact, rel, &body).unwrap();
+        let body = render_body(
+            rel,
+            "plan",
+            "twin/app",
+            "big-plan",
+            "# Big Plan\n\nDo things.\n",
+        );
+        assert_eq!(
+            body,
+            render_body(
+                rel,
+                "plan",
+                "twin/app",
+                "big-plan",
+                "# Big Plan\n\nDo things.\n"
+            ),
+            "deterministic"
+        );
+        let target = write_projection(&store, &index, root.path(), &artifact, rel, &body).unwrap();
         assert!(target.exists());
-        assert!(fs::metadata(&target).unwrap().permissions().readonly(), "chmod armed");
+        assert!(
+            fs::metadata(&target).unwrap().permissions().readonly(),
+            "chmod armed"
+        );
         let text = fs::read_to_string(&target).unwrap();
-        assert!(text.starts_with("<!-- brain:projection kind=plan"), "{text}");
-        assert!(text.contains("brain artifact edit twin/app plan big-plan"), "marker names the fix");
+        assert!(
+            text.starts_with("<!-- brain:projection kind=plan"),
+            "{text}"
+        );
+        assert!(
+            text.contains("brain artifact edit twin/app plan big-plan"),
+            "marker names the fix"
+        );
 
         // Bind the file so drift/reapply can find it under the prefix.
         let file_sid = StableId::derive(&["file", rel]);
@@ -324,7 +387,9 @@ mod tests {
         let before = store.count_objects().unwrap();
         write_projection(&store, &index, root.path(), &artifact, rel, &body).unwrap();
         assert_eq!(store.count_objects().unwrap(), before);
-        assert!(drift(&store, &index, root.path(), "twin/app").unwrap().is_empty());
+        assert!(drift(&store, &index, root.path(), "twin/app")
+            .unwrap()
+            .is_empty());
 
         // A hand-edit is detected even after the read-only bit is defeated.
         set_readonly(&target, false);
@@ -332,19 +397,32 @@ mod tests {
         let found = drift(&store, &index, root.path(), "twin/app").unwrap();
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].kind, DriftKind::HandEdited);
-        assert!(found[0].fix.contains("brain artifact edit"), "{}", found[0].fix);
+        assert!(
+            found[0].fix.contains("brain artifact edit"),
+            "{}",
+            found[0].fix
+        );
 
         // Repair by re-render; reapply_readonly re-arms lost bits.
         write_projection(&store, &index, root.path(), &artifact, rel, &body).unwrap();
-        assert!(drift(&store, &index, root.path(), "twin/app").unwrap().is_empty());
+        assert!(drift(&store, &index, root.path(), "twin/app")
+            .unwrap()
+            .is_empty());
         set_readonly(&target, false);
         let armed = reapply_readonly(&store, &index, root.path(), "twin/app").unwrap();
         assert_eq!(armed, 1);
         assert!(fs::metadata(&target).unwrap().permissions().readonly());
 
         // The graph moves on: same file, newer artifact content -> stale render.
-        observe_src(&store, &artifact, "content", "# Big Plan\n\nDo MORE things.\n", "agent", 20)
-            .unwrap();
+        observe_src(
+            &store,
+            &artifact,
+            "content",
+            "# Big Plan\n\nDo MORE things.\n",
+            "agent",
+            20,
+        )
+        .unwrap();
         let index = fresh_index(&store);
         let found = drift(&store, &index, root.path(), "twin/app").unwrap();
         assert_eq!(found.len(), 1, "{found:?}");

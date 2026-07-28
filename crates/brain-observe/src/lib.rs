@@ -55,8 +55,8 @@ use brain_store::StoreError;
 /// `1` so the docs pipeline's own outputs (narration.txt, brain.1) are
 /// projections the graph can verify.
 pub(crate) const INGEST_EXTENSIONS: &[&str] = &[
-    "rs", "toml", "md", "json", "php", "py", "js", "jsx", "ts", "tsx", "mdc", "sh", "mjs",
-    "png", "svg", "gif", "webm", "mp4", "wav", "txt", "1",
+    "rs", "toml", "md", "json", "php", "py", "js", "jsx", "ts", "tsx", "mdc", "sh", "mjs", "png",
+    "svg", "gif", "webm", "mp4", "wav", "txt", "1",
 ];
 /// Extensionless files worth twinning by exact name (agent configuration).
 pub(crate) const INGEST_FILENAMES: &[&str] = &[".cursorrules"];
@@ -119,7 +119,10 @@ pub(crate) fn collect_files_with(
             let taught = !builtin
                 && !extra.is_empty()
                 && ext.is_some_and(|e| extra.keep(&rel, e))
-                && entry.metadata().map(|m| m.len() <= MAX_EXTRA_FILE).unwrap_or(false);
+                && entry
+                    .metadata()
+                    .map(|m| m.len() <= MAX_EXTRA_FILE)
+                    .unwrap_or(false);
             if builtin || taught {
                 out.push(rel);
             }

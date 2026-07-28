@@ -17,7 +17,10 @@ use std::process::Command;
 const CAPTURE_MJS: &str = include_str!("../assets/capture.mjs");
 const TTS_PY: &str = include_str!("../assets/tts.py");
 
-pub fn cmd_docs(args: &[String], open_store: impl Fn() -> Result<Store, String>) -> Result<(), String> {
+pub fn cmd_docs(
+    args: &[String],
+    open_store: impl Fn() -> Result<Store, String>,
+) -> Result<(), String> {
     let usage = "usage: brain docs generate [dir] [--prefix <p>] [--out <dir>]";
     if args.first().map(String::as_str) != Some("generate") {
         return Err(usage.to_string());
@@ -60,7 +63,11 @@ fn generate(store: &Store, dir: &Path, prefix: &str, out: &Path) -> Result<(), S
     ];
     let mut captured: Vec<(String, String, String)> = Vec::new(); // id, cmd, text
     for (id, args) in &sections {
-        captured.push((id.to_string(), format!("brain {}", args.join(" ")), self_out(args)?));
+        captured.push((
+            id.to_string(),
+            format!("brain {}", args.join(" ")),
+            self_out(args)?,
+        ));
     }
     let stale = self_out(&["twin", "stale", prefix])?;
 
@@ -71,7 +78,10 @@ fn generate(store: &Store, dir: &Path, prefix: &str, out: &Path) -> Result<(), S
     ));
     let titles = [
         ("insights", "Insights (`brain twin insights`)"),
-        ("matrix", "Feature matrix — definition of done (`brain feature matrix`)"),
+        (
+            "matrix",
+            "Feature matrix — definition of done (`brain feature matrix`)",
+        ),
         ("decisions", "Decisions (`brain adr list`)"),
         ("tests", "Tests (`brain twin tests`)"),
         ("protocols", "Test protocols (`brain testrun list`)"),
@@ -80,9 +90,13 @@ fn generate(store: &Store, dir: &Path, prefix: &str, out: &Path) -> Result<(), S
     for ((_, title), (_, _, text)) in titles.iter().zip(&captured) {
         tour.push_str(&format!("## {title}\n```\n{text}\n```\n\n"));
     }
-    tour.push_str(&format!("## Doc staleness (`brain twin stale`)\n```\n{stale}\n```\n\n"));
+    tour.push_str(&format!(
+        "## Doc staleness (`brain twin stale`)\n```\n{stale}\n```\n\n"
+    ));
     tour.push_str("![insights](img/insights.png)\n\n![feature matrix](img/matrix.png)\n\n");
-    tour.push_str("Screencast: [tour.webm](tour.webm) — narrated: [tour-narrated.webm](tour-narrated.webm)\n");
+    tour.push_str(
+        "Screencast: [tour.webm](tour.webm) — narrated: [tour-narrated.webm](tour-narrated.webm)\n",
+    );
     fs::write(out.join("tour.md"), &tour).map_err(|e| e.to_string())?;
 
     // ---- narration: computed from the graph, not parsed from text --------
@@ -172,7 +186,9 @@ fn generate(store: &Store, dir: &Path, prefix: &str, out: &Path) -> Result<(), S
 fn set_tree_writable(out: &Path) {
     let mut stack = vec![out.to_path_buf()];
     while let Some(d) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&d) else { continue };
+        let Ok(entries) = fs::read_dir(&d) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
@@ -231,12 +247,14 @@ fn record_projection(
                 observe("generated", "true")?;
             }
             let hash = blake3::hash(&std::fs::read(&path)?).to_hex().to_string();
-            if twin::latest(&index, store, &sid, "expected_b3")?.as_deref()
-                != Some(hash.as_str())
-            {
+            if twin::latest(&index, store, &sid, "expected_b3")?.as_deref() != Some(hash.as_str()) {
                 observe("expected_b3", &hash)?;
             }
-            let out_rel = path.strip_prefix(out).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+            let out_rel = path
+                .strip_prefix(out)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
             if let Some((_, cmd)) = provenance.iter().find(|(p, _)| *p == out_rel) {
                 if twin::latest(&index, store, &sid, "rendered_from")?.as_deref()
                     != Some(cmd.as_str())
@@ -285,9 +303,11 @@ pub fn narrate(store: &Store, prefix: &str) -> Result<String, String> {
         }
     }
     if !ins.features.is_empty() {
-        let done = ins.features.iter().filter(|(_, _, f)| {
-            f.split_once('/').is_some_and(|(a, b)| a == b)
-        }).count();
+        let done = ins
+            .features
+            .iter()
+            .filter(|(_, _, f)| f.split_once('/').is_some_and(|(a, b)| a == b))
+            .count();
         lines.push(format!(
             "The feature matrix shows {} registered features, {done} of them meeting the full definition of done.",
             ins.features.len()
@@ -309,7 +329,9 @@ pub fn narrate(store: &Store, prefix: &str) -> Result<String, String> {
             "No documentation is stale: every doc is newer than the files it mentions.".to_string(),
         );
     } else if stale_warns > 0 {
-        lines.push(format!("{stale_warns} document(s) have gone stale and need attention."));
+        lines.push(format!(
+            "{stale_warns} document(s) have gone stale and need attention."
+        ));
     } else {
         lines.push(format!(
             "{} record(s) quietly aged behind the code they describe.",
@@ -326,7 +348,10 @@ pub fn narrate(store: &Store, prefix: &str) -> Result<String, String> {
 /// Run this same binary with args, capturing stdout.
 fn self_out(args: &[&str]) -> Result<String, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let out = Command::new(exe).args(args).output().map_err(|e| e.to_string())?;
+    let out = Command::new(exe)
+        .args(args)
+        .output()
+        .map_err(|e| e.to_string())?;
     if !out.status.success() {
         return Err(format!(
             "brain {} failed: {}",
@@ -349,12 +374,19 @@ fn npm_global_root() -> Option<PathBuf> {
 
 fn find_ffmpeg() -> Option<String> {
     for cand in ["ffmpeg"] {
-        if Command::new(cand).arg("-version").output().is_ok_and(|o| o.status.success()) {
+        if Command::new(cand)
+            .arg("-version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+        {
             return Some(cand.to_string());
         }
     }
     let out = Command::new("python3")
-        .args(["-c", "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"])
+        .args([
+            "-c",
+            "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())",
+        ])
         .output()
         .ok()?;
     if out.status.success() {
@@ -393,7 +425,10 @@ fn mux(ffmpeg: &str, webm: &Path, wav: &Path, out: &Path) -> Result<(), String> 
             .arg(webm)
             .arg("-i")
             .arg(wav)
-            .args(["-vf", &format!("tpad=stop_mode=clone:stop_duration={pad:.2}")])
+            .args([
+                "-vf",
+                &format!("tpad=stop_mode=clone:stop_duration={pad:.2}"),
+            ])
             .args(["-c:v", "libvpx", "-b:v", "1M", "-c:a", "libopus"])
             .arg(out)
             .status()
@@ -423,16 +458,25 @@ mod tests {
     fn narration_is_computed_from_graph_state() {
         let src = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(src.path().join("src")).unwrap();
-        std::fs::write(src.path().join("src/main.rs"), "pub fn main() {}\n#[test]\nfn t() {}\n")
-            .unwrap();
+        std::fs::write(
+            src.path().join("src/main.rs"),
+            "pub fn main() {}\n#[test]\nfn t() {}\n",
+        )
+        .unwrap();
         let store_dir = tempfile::tempdir().unwrap();
         let store = Store::open(store_dir.path()).unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
 
         let text = narrate(&store, "twin/app").unwrap();
         assert!(text.contains("twin app"), "prefix spoken: {text}");
-        assert!(text.contains("1 files") || text.contains("tracks 1"), "file count spoken: {text}");
-        assert!(text.contains("1 tests are declared"), "declared tests spoken: {text}");
+        assert!(
+            text.contains("1 files") || text.contains("tracks 1"),
+            "file count spoken: {text}"
+        );
+        assert!(
+            text.contains("1 tests are declared"),
+            "declared tests spoken: {text}"
+        );
         assert!(text.contains("No documentation is stale"));
         assert!(text.contains("regenerate this tour"));
     }

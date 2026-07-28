@@ -57,7 +57,9 @@ pub fn value_to_json(v: &Value) -> serde_json::Value {
             }
             serde_json::Value::Object(m)
         }
-        Value::Variant { tag, payload } => json!({ "variant": tag, "payload": value_to_json(payload) }),
+        Value::Variant { tag, payload } => {
+            json!({ "variant": tag, "payload": value_to_json(payload) })
+        }
         Value::Closure { param, .. } => json!({ "closure": param }),
     }
 }
@@ -153,31 +155,59 @@ impl Registry {
         let mut r = Registry::default();
         r.register(
             "core/add",
-            ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_add },
+            ForeignFn {
+                effect: EffectClass::Pure,
+                requires: None,
+                run: builtin_add,
+            },
         );
         r.register(
             "core/sub",
-            ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_sub },
+            ForeignFn {
+                effect: EffectClass::Pure,
+                requires: None,
+                run: builtin_sub,
+            },
         );
         r.register(
             "core/mul",
-            ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_mul },
+            ForeignFn {
+                effect: EffectClass::Pure,
+                requires: None,
+                run: builtin_mul,
+            },
         );
         r.register(
             "core/lt",
-            ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_lt },
+            ForeignFn {
+                effect: EffectClass::Pure,
+                requires: None,
+                run: builtin_lt,
+            },
         );
         r.register(
             "core/if",
-            ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_if },
+            ForeignFn {
+                effect: EffectClass::Pure,
+                requires: None,
+                run: builtin_if,
+            },
         );
         r.register(
             "core/concat",
-            ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_concat },
+            ForeignFn {
+                effect: EffectClass::Pure,
+                requires: None,
+                run: builtin_concat,
+            },
         );
         r.register(
             "core/eq",
-            ForeignFn { effect: EffectClass::Pure, requires: None, run: builtin_eq },
+            ForeignFn {
+                effect: EffectClass::Pure,
+                requires: None,
+                run: builtin_eq,
+            },
         );
         r.register(
             "io/echo",
@@ -340,7 +370,11 @@ pub fn eval(ctx: &mut EvalCtx, env: &Env, term: &Term) -> Result<Value, EvalErro
             let f = eval(ctx, env, func)?;
             let a = eval(ctx, env, arg)?;
             match f {
-                Value::Closure { param, body, env: closure_env } => {
+                Value::Closure {
+                    param,
+                    body,
+                    env: closure_env,
+                } => {
                     let mut inner = closure_env;
                     inner.insert(param, a);
                     eval(ctx, &inner, &body)
@@ -381,7 +415,11 @@ pub fn eval(ctx: &mut EvalCtx, env: &Env, term: &Term) -> Result<Value, EvalErro
             payload: Box::new(eval(ctx, env, payload)?),
         }),
 
-        Term::Match { scrutinee, arms, default } => match eval(ctx, env, scrutinee)? {
+        Term::Match {
+            scrutinee,
+            arms,
+            default,
+        } => match eval(ctx, env, scrutinee)? {
             Value::Variant { tag, payload } => {
                 if let Some(Arm { bind, body }) = arms.get(&tag) {
                     let mut inner = env.clone();
@@ -443,7 +481,9 @@ mod tests {
     use super::*;
 
     fn int(i: i64) -> Term {
-        Term::Lit { value: Literal::Int { value: i } }
+        Term::Lit {
+            value: Literal::Int { value: i },
+        }
     }
 
     fn ctx<'a>(
@@ -476,7 +516,12 @@ mod tests {
         let term = Term::App {
             func: Box::new(Term::Lam {
                 param: "x".to_string(),
-                body: Box::new(add(Term::Var { name: "x".to_string() }, int(2))),
+                body: Box::new(add(
+                    Term::Var {
+                        name: "x".to_string(),
+                    },
+                    int(2),
+                )),
             }),
             arg: Box::new(int(40)),
         };
@@ -496,7 +541,12 @@ mod tests {
             "some".to_string(),
             Arm {
                 bind: "x".to_string(),
-                body: add(Term::Var { name: "x".to_string() }, int(1)),
+                body: add(
+                    Term::Var {
+                        name: "x".to_string(),
+                    },
+                    int(1),
+                ),
             },
         );
         let term = Term::Let {
@@ -506,7 +556,9 @@ mod tests {
                 payload: Box::new(int(5)),
             }),
             body: Box::new(Term::Match {
-                scrutinee: Box::new(Term::Var { name: "v".to_string() }),
+                scrutinee: Box::new(Term::Var {
+                    name: "v".to_string(),
+                }),
                 arms,
                 default: Some(Box::new(int(0))),
             }),
@@ -530,11 +582,17 @@ mod tests {
         let mut if_fields = BTreeMap::new();
         if_fields.insert(
             "cond".to_string(),
-            Term::Foreign { symbol: "core/lt".to_string(), arg: Box::new(Term::Record { fields: lt_fields }) },
+            Term::Foreign {
+                symbol: "core/lt".to_string(),
+                arg: Box::new(Term::Record { fields: lt_fields }),
+            },
         );
         if_fields.insert(
             "then".to_string(),
-            Term::Foreign { symbol: "core/sub".to_string(), arg: Box::new(Term::Record { fields: sub_fields }) },
+            Term::Foreign {
+                symbol: "core/sub".to_string(),
+                arg: Box::new(Term::Record { fields: sub_fields }),
+            },
         );
         if_fields.insert("else".to_string(), int(x));
         let term = Term::Foreign {
@@ -549,13 +607,21 @@ mod tests {
 
     #[test]
     fn holes_suspend_instead_of_crashing() {
-        let term = add(int(1), Term::Hole { id: "h0".to_string(), expected: Some("int".to_string()) });
+        let term = add(
+            int(1),
+            Term::Hole {
+                id: "h0".to_string(),
+                expected: Some("int".to_string()),
+            },
+        );
         let registry = Registry::with_builtins();
         let mut effects = MemEffects::default();
         let mut c = ctx(&registry, &mut effects, &[]);
         assert_eq!(
             eval_closed(&mut c, &term),
-            Err(EvalError::Incomplete { hole: "h0".to_string() })
+            Err(EvalError::Incomplete {
+                hole: "h0".to_string()
+            })
         );
     }
 
@@ -564,16 +630,29 @@ mod tests {
         // (\x -> (\x -> add x 1) (add x 2)) 10  =>  (10+2)+1 = 13
         let inner = Term::Lam {
             param: "x".to_string(),
-            body: Box::new(add(Term::Var { name: "x".to_string() }, int(1))),
+            body: Box::new(add(
+                Term::Var {
+                    name: "x".to_string(),
+                },
+                int(1),
+            )),
         };
         let outer = Term::Lam {
             param: "x".to_string(),
             body: Box::new(Term::App {
                 func: Box::new(inner),
-                arg: Box::new(add(Term::Var { name: "x".to_string() }, int(2))),
+                arg: Box::new(add(
+                    Term::Var {
+                        name: "x".to_string(),
+                    },
+                    int(2),
+                )),
             }),
         };
-        let term = Term::App { func: Box::new(outer), arg: Box::new(int(10)) };
+        let term = Term::App {
+            func: Box::new(outer),
+            arg: Box::new(int(10)),
+        };
         let normalized = brain_core::object::alpha_normalize(&term);
         assert_ne!(term, normalized, "binder names should have changed");
 
@@ -591,8 +670,12 @@ mod tests {
         let self_app = Term::Lam {
             param: "x".to_string(),
             body: Box::new(Term::App {
-                func: Box::new(Term::Var { name: "x".to_string() }),
-                arg: Box::new(Term::Var { name: "x".to_string() }),
+                func: Box::new(Term::Var {
+                    name: "x".to_string(),
+                }),
+                arg: Box::new(Term::Var {
+                    name: "x".to_string(),
+                }),
             }),
         };
         let omega = Term::App {

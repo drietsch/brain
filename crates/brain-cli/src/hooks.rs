@@ -54,7 +54,10 @@ pub fn cmd_hook(
                     .or_else(|| infer_test_command(Path::new(&opts.dir)))
                     .ok_or("cannot infer a test command for this repo; pass --test-cmd \"...\"")?;
                 set_test_command(&open_store()?, &opts.prefix, &cmd)?;
-                println!("test command for {}: {cmd} (stored in the graph)", opts.prefix);
+                println!(
+                    "test command for {}: {cmd} (stored in the graph)",
+                    opts.prefix
+                );
             }
             install(&opts)
         }
@@ -121,7 +124,11 @@ fn infer_test_command(dir: &Path) -> Option<String> {
     }
     if dir.join("phpunit.xml").exists() || dir.join("phpunit.xml.dist").exists() {
         let vendored = dir.join("vendor/bin/phpunit");
-        return Some(if vendored.exists() { "vendor/bin/phpunit".into() } else { "phpunit".into() });
+        return Some(if vendored.exists() {
+            "vendor/bin/phpunit".into()
+        } else {
+            "phpunit".into()
+        });
     }
     None
 }
@@ -159,7 +166,11 @@ fn hooks_dir(dir: &str) -> Result<PathBuf, String> {
         return Err(format!("'{dir}' is not a git repository"));
     }
     let git_dir = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
-    let git_dir = if git_dir.is_absolute() { git_dir } else { Path::new(dir).join(git_dir) };
+    let git_dir = if git_dir.is_absolute() {
+        git_dir
+    } else {
+        Path::new(dir).join(git_dir)
+    };
     Ok(git_dir.join("hooks"))
 }
 
@@ -179,9 +190,17 @@ fn hook_body(event: &str, opts: &Opts) -> String {
             prefix = opts.prefix
         );
     }
-    let docs_flag = if opts.docs && event == "pre-push" { " --docs" } else { "" };
+    let docs_flag = if opts.docs && event == "pre-push" {
+        " --docs"
+    } else {
+        ""
+    };
     // Tests run post-commit (the moment code changed), not again on push.
-    let tests_flag = if opts.tests && event == "post-commit" { " --tests" } else { "" };
+    let tests_flag = if opts.tests && event == "post-commit" {
+        " --tests"
+    } else {
+        ""
+    };
     format!(
         "#!/bin/sh\n{MARKER} v1 — installed by `brain hook install`; the twin refreshes on\n\
          {MARKER} every {event}. Sense organ, never a gate: failures are ignored.\n\
@@ -227,7 +246,10 @@ fn install(opts: &Opts) -> Result<(), String> {
         (false, true) => " + gate",
         (false, false) => "",
     };
-    println!("every commit and push now refreshes the twin ({}{extra})", opts.prefix);
+    println!(
+        "every commit and push now refreshes the twin ({}{extra})",
+        opts.prefix
+    );
     Ok(())
 }
 
@@ -255,7 +277,10 @@ fn status(dir: &str) -> Result<(), String> {
         let path = hooks.join(event);
         let state = if !path.exists() {
             "absent"
-        } else if fs::read_to_string(&path).unwrap_or_default().contains(MARKER) {
+        } else if fs::read_to_string(&path)
+            .unwrap_or_default()
+            .contains(MARKER)
+        {
             "brain"
         } else {
             "foreign"
@@ -305,8 +330,7 @@ fn run_event(
         return Ok(());
     }
 
-    let report =
-        twin::refresh(&store, Path::new(dir), prefix).map_err(|e| e.to_string())?;
+    let report = twin::refresh(&store, Path::new(dir), prefix).map_err(|e| e.to_string())?;
     println!(
         "brain[{event}]: {prefix} refreshed — {} added, {} changed, {} deleted, {} doc(s)",
         report.added.len(),
@@ -434,10 +458,11 @@ fn gate_check(
     for d in brain_observe::projection::drift(&store, &index, Path::new(dir), prefix)
         .map_err(|e| e.to_string())?
     {
-        if d.kind == brain_observe::projection::DriftKind::HandEdited
-            && staged.contains(&d.path)
-        {
-            violations.push(format!("{} — hand-edited projection; fix: {}", d.path, d.fix));
+        if d.kind == brain_observe::projection::DriftKind::HandEdited && staged.contains(&d.path) {
+            violations.push(format!(
+                "{} — hand-edited projection; fix: {}",
+                d.path, d.fix
+            ));
         }
     }
 
@@ -447,11 +472,11 @@ fn gate_check(
     for path in &staged {
         let kind = brain_observe::docs::parse_doc(path, "")
             .map(|m| m.kind.as_str().to_string())
-            .or_else(|| {
-                brain_observe::kinds::match_rule(&rules, path).map(|r| r.kind.clone())
-            });
+            .or_else(|| brain_observe::kinds::match_rule(&rules, path).map(|r| r.kind.clone()));
         let Some(kind) = kind else { continue };
-        let Some(def) = registry.get(&kind) else { continue };
+        let Some(def) = registry.get(&kind) else {
+            continue;
+        };
         if def.enforce != "enforced" {
             continue;
         }
@@ -497,8 +522,8 @@ fn run_configured_tests(
     let mut index = MemIndex::new();
     replay(store, &mut index).map_err(|e| e.to_string())?;
     let repo_sid = StableId::derive(&["repo", prefix]);
-    let Some(cmd) = twin::latest(&index, store, &repo_sid, "test_command")
-        .map_err(|e| e.to_string())?
+    let Some(cmd) =
+        twin::latest(&index, store, &repo_sid, "test_command").map_err(|e| e.to_string())?
     else {
         println!(
             "brain: no test command stored — re-run `brain hook install --tests --test-cmd \"...\"`"
@@ -596,7 +621,10 @@ mod tests {
         let repo = git_repo();
         let dir = repo.path().to_str().unwrap();
         fs::write(repo.path().join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
-        assert_eq!(infer_test_command(repo.path()).as_deref(), Some("cargo test"));
+        assert_eq!(
+            infer_test_command(repo.path()).as_deref(),
+            Some("cargo test")
+        );
 
         install(&opts(dir, true, false)).unwrap();
         let post = fs::read_to_string(repo.path().join(".git/hooks/post-commit")).unwrap();
@@ -620,7 +648,9 @@ mod tests {
         let store = Store::open(store_dir.path()).unwrap();
 
         // No command stored yet: a hint, not an error.
-        assert!(run_configured_tests(&store, dir, "twin/app").unwrap().is_none());
+        assert!(run_configured_tests(&store, dir, "twin/app")
+            .unwrap()
+            .is_none());
 
         set_test_command(
             &store,
@@ -628,7 +658,9 @@ mod tests {
             "printf 'test a::ok_case ... ok\\ntest b::bad_case ... FAILED\\n'",
         )
         .unwrap();
-        let out = run_configured_tests(&store, dir, "twin/app").unwrap().unwrap();
+        let out = run_configured_tests(&store, dir, "twin/app")
+            .unwrap()
+            .unwrap();
         assert!(out.wrote);
         assert_eq!((out.total, out.passed, out.failed), (2, 1, 1));
         assert_eq!(out.failing, vec!["b::bad_case".to_string()]);
@@ -641,12 +673,16 @@ mod tests {
             testing::failing_cases(&store, &index, "twin/app").unwrap(),
             vec!["b::bad_case".to_string()]
         );
-        let again = run_configured_tests(&store, dir, "twin/app").unwrap().unwrap();
+        let again = run_configured_tests(&store, dir, "twin/app")
+            .unwrap()
+            .unwrap();
         assert!(!again.wrote, "identical protocol is a no-op");
 
         // Changing the command is one guarded observation, no reinstall.
         set_test_command(&store, "twin/app", "printf 'test a::ok_case ... ok\\n'").unwrap();
-        let out = run_configured_tests(&store, dir, "twin/app").unwrap().unwrap();
+        let out = run_configured_tests(&store, dir, "twin/app")
+            .unwrap()
+            .unwrap();
         assert_eq!(out.failed, 0);
     }
 }

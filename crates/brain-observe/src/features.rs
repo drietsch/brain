@@ -52,7 +52,15 @@ pub fn add(
     }
     let repo_sid = StableId::derive(&["repo", prefix]);
     let mut written = BTreeSet::new();
-    if relate(store, &index, &mut written, &sid, "concerns", &repo_sid, now)? {
+    if relate(
+        store,
+        &index,
+        &mut written,
+        &sid,
+        "concerns",
+        &repo_sid,
+        now,
+    )? {
         wrote = true;
     }
     Ok((sid, wrote))
@@ -68,17 +76,20 @@ pub fn resolve_target(
     prefix: &str,
     name: &str,
 ) -> Result<Option<(StableId, String)>, StoreError> {
-    let mut kinds: Vec<String> =
-        ["decision", "plan", "skill", "agent_config", "feature"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+    let mut kinds: Vec<String> = ["decision", "plan", "skill", "agent_config", "feature"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
     for kind in crate::kinds::registry(store, index)?.keys() {
         if !kinds.contains(kind) {
             kinds.push(kind.clone());
         }
     }
-    kinds.extend(["change", "test_run", "test_case"].iter().map(|s| s.to_string()));
+    kinds.extend(
+        ["change", "test_run", "test_case"]
+            .iter()
+            .map(|s| s.to_string()),
+    );
 
     let file = StableId::derive(&["file", name]);
     if !index.entity_nodes(&file).is_empty() {
@@ -154,7 +165,10 @@ pub fn evaluate(
         for (_, to) in crate::twin::live_from(index, store, &sid, &predicate)? {
             targets.insert(to);
         }
-        checks.push(DoneCheck { predicate, count: targets.len() });
+        checks.push(DoneCheck {
+            predicate,
+            count: targets.len(),
+        });
     }
     let done = !checks.is_empty() && checks.iter().all(|c| c.count > 0);
     Ok(DoneReport { checks, done })
@@ -188,15 +202,13 @@ pub struct FeatureRow {
 }
 
 /// All features under a prefix, sorted by slug.
-pub fn list(
-    store: &Store,
-    index: &MemIndex,
-    prefix: &str,
-) -> Result<Vec<FeatureRow>, StoreError> {
+pub fn list(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<FeatureRow>, StoreError> {
     let mut seen: BTreeSet<StableId> = BTreeSet::new();
     let mut out = Vec::new();
     for node in index.entities_by_kind("feature") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
@@ -204,10 +216,14 @@ pub fn list(
         let title = latest(index, store, &id, "title")?
             .or_else(|| labels.get("title").cloned())
             .unwrap_or_else(|| slug.clone());
-        let status =
-            latest(index, store, &id, "status")?.unwrap_or_else(|| "planned".to_string());
+        let status = latest(index, store, &id, "status")?.unwrap_or_else(|| "planned".to_string());
         let done = latest(index, store, &id, "done")?;
-        out.push(FeatureRow { slug, title, status, done });
+        out.push(FeatureRow {
+            slug,
+            title,
+            status,
+            done,
+        });
     }
     out.sort_by(|a, b| a.slug.cmp(&b.slug));
     Ok(out)

@@ -76,8 +76,11 @@ pub fn add(
 
     let mut written: BTreeSet<(StableId, String, StableId)> = BTreeSet::new();
     let repo_sid = StableId::derive(&["repo", prefix]);
-    for (kind, to) in [("recorded_in", &file_sid), ("attached_to", owner), ("concerns", &repo_sid)]
-    {
+    for (kind, to) in [
+        ("recorded_in", &file_sid),
+        ("attached_to", owner),
+        ("concerns", &repo_sid),
+    ] {
         if relate(store, &index, &mut written, &sid, kind, to, now)? {
             wrote = true;
         }
@@ -100,15 +103,13 @@ pub struct AssetRow {
 }
 
 /// All assets under a prefix, with their owner labels and lifecycle.
-pub fn list(
-    store: &Store,
-    index: &MemIndex,
-    prefix: &str,
-) -> Result<Vec<AssetRow>, StoreError> {
+pub fn list(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<AssetRow>, StoreError> {
     let mut seen: BTreeSet<StableId> = BTreeSet::new();
     let mut out = Vec::new();
     for node in index.entities_by_kind("asset") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
@@ -139,7 +140,9 @@ pub fn stale(
     let mut out = Vec::new();
     let mut seen: BTreeSet<StableId> = BTreeSet::new();
     for node in index.entities_by_kind("asset") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
@@ -195,7 +198,9 @@ pub fn orphaned(
     let mut out = Vec::new();
     let mut seen: BTreeSet<StableId> = BTreeSet::new();
     for node in index.entities_by_kind("asset") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
@@ -239,7 +244,11 @@ mod tests {
         fs::create_dir_all(src.path().join("docs/plans")).unwrap();
         fs::create_dir_all(src.path().join("src")).unwrap();
         fs::write(src.path().join("docs/assets/flow.svg"), "<svg>1</svg>").unwrap();
-        fs::write(src.path().join("docs/plans/build.md"), "# Build\n\nsrc/ui.rs.\n").unwrap();
+        fs::write(
+            src.path().join("docs/plans/build.md"),
+            "# Build\n\nsrc/ui.rs.\n",
+        )
+        .unwrap();
         fs::write(src.path().join("src/ui.rs"), "pub fn ui() {}\n").unwrap();
         let store_dir = tempfile::tempdir().unwrap();
         let store = Store::open(store_dir.path()).unwrap();
@@ -248,13 +257,27 @@ mod tests {
         let index = fresh_index(&store);
         let plan = StableId::derive(&["plan", "twin/app", "build"]);
         let ui = StableId::derive(&["file", "src/ui.rs"]);
-        let out = add(&store, "twin/app", "docs/assets/flow.svg", &plan, &[ui.clone()], None)
-            .unwrap();
+        let out = add(
+            &store,
+            "twin/app",
+            "docs/assets/flow.svg",
+            &plan,
+            &[ui.clone()],
+            None,
+        )
+        .unwrap();
         assert!(out.wrote);
         // Re-declaring writes nothing.
         let before = store.count_objects().unwrap();
-        let again =
-            add(&store, "twin/app", "docs/assets/flow.svg", &plan, &[ui.clone()], None).unwrap();
+        let again = add(
+            &store,
+            "twin/app",
+            "docs/assets/flow.svg",
+            &plan,
+            &[ui.clone()],
+            None,
+        )
+        .unwrap();
         assert!(!again.wrote);
         assert_eq!(store.count_objects().unwrap(), before);
 

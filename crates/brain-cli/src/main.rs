@@ -12,9 +12,7 @@ mod tasks;
 use brain_core::ids::NodeId;
 use brain_core::object::{Object, Term};
 use brain_index::{object_edges, Index, MemIndex};
-use brain_runtime::{
-    eval_closed, value_to_json, CodeSource, EffectPort, EvalCtx, Registry, Value,
-};
+use brain_runtime::{eval_closed, value_to_json, CodeSource, EffectPort, EvalCtx, Registry, Value};
 use brain_store::{now_ms, Store};
 use serde_json::json;
 use std::collections::BTreeSet;
@@ -88,6 +86,7 @@ fn main() -> ExitCode {
         Some("attend") => cmd_attend(&args[1..]),
         Some("sleep") => cmd_sleep(&args[1..]),
         Some("related") => cmd_related(&args[1..]),
+        Some("eyes") => cmd_eyes(&args[1..]),
         Some("docs") => docsgen::cmd_docs(&args[1..], open_store),
         Some("hook") => hooks::cmd_hook(&args[1..], open_store),
         Some("watch") => cmd_watch(&args[1..]),
@@ -148,7 +147,9 @@ fn print_sync_report(report: &brain_store::sync::SyncReport) {
         report.names_added, report.names_agreed
     );
     for (name, kept, incoming) in &report.conflicts {
-        println!("CONFLICT {name}: kept {kept:?}, source's {incoming:?} bound as sync-conflict/{name}");
+        println!(
+            "CONFLICT {name}: kept {kept:?}, source's {incoming:?} bound as sync-conflict/{name}"
+        );
     }
 }
 
@@ -168,11 +169,18 @@ fn cmd_init() -> Result<(), String> {
 fn cmd_status() -> Result<(), String> {
     let store = open_store()?;
     let head = store.head().map_err(|e| e.to_string())?;
-    println!("objects:    {}", store.count_objects().map_err(|e| e.to_string())?);
-    println!("names:      {}", store.namespace().map_err(|e| e.to_string())?.len());
+    println!(
+        "objects:    {}",
+        store.count_objects().map_err(|e| e.to_string())?
+    );
+    println!(
+        "names:      {}",
+        store.namespace().map_err(|e| e.to_string())?.len()
+    );
     println!(
         "head:       {}",
-        head.map(|h| h.to_string()).unwrap_or_else(|| "(none)".to_string())
+        head.map(|h| h.to_string())
+            .unwrap_or_else(|| "(none)".to_string())
     );
     println!(
         "history:    {} namespace step(s)",
@@ -247,7 +255,9 @@ fn parse_caps(args: &[String]) -> BTreeSet<String> {
 }
 
 fn cmd_run(args: &[String]) -> Result<(), String> {
-    let name = args.first().ok_or("usage: brain run <name> [--cap <c>]...")?;
+    let name = args
+        .first()
+        .ok_or("usage: brain run <name> [--cap <c>]...")?;
     let caps = parse_caps(&args[1..]);
     let store = open_store()?;
     let id = store
@@ -294,8 +304,8 @@ fn cmd_recover() -> Result<(), String> {
     for (name, node) in store.namespace().map_err(|e| e.to_string())? {
         if let Ok(Object::Entity { entity_kind, .. }) = store.get(&node) {
             if entity_kind == "repo" {
-                for slug in brain_observe::govern::reconcile(&store, &name)
-                    .map_err(|e| e.to_string())?
+                for slug in
+                    brain_observe::govern::reconcile(&store, &name).map_err(|e| e.to_string())?
                 {
                     println!("change '{slug}' ({name}) marked indeterminate");
                 }
@@ -375,7 +385,10 @@ fn entity_sid(store: &Store, name: &str) -> Result<brain_core::ids::StableId, St
     let node = resolve_arg(store, name)?;
     match store.get(&node).map_err(|e| e.to_string())? {
         Object::Entity { id, .. } => Ok(id),
-        other => Err(format!("'{name}' is not an entity (found {})", kind_of(&other))),
+        other => Err(format!(
+            "'{name}' is not an entity (found {})",
+            kind_of(&other)
+        )),
     }
 }
 
@@ -418,9 +431,10 @@ fn cmd_relation(args: &[String]) -> Result<(), String> {
     let usage = "usage: brain relation retract <from> <predicate> <to> [--prefix <p>]\n       brain relation list <name> [--all] [--prefix <p>]";
     match args.first().map(String::as_str) {
         Some("retract") => {
-            let pos: Vec<&String> =
-                args[1..].iter().filter(|a| !a.starts_with("--")).collect();
-            let [from, predicate, to] = pos.as_slice() else { return Err(usage.into()) };
+            let pos: Vec<&String> = args[1..].iter().filter(|a| !a.starts_with("--")).collect();
+            let [from, predicate, to] = pos.as_slice() else {
+                return Err(usage.into());
+            };
             let prefix = parse_prefix(&args[1..]);
             let store = open_store()?;
             let index = build_index(&store)?;
@@ -446,7 +460,13 @@ fn cmd_relation(args: &[String]) -> Result<(), String> {
                 std::collections::BTreeSet::new();
             let mut shown = 0usize;
             for id in store.put_history().map_err(|e| e.to_string())? {
-                let Ok(Object::Relation { from, predicate, to, .. }) = store.get(&id) else {
+                let Ok(Object::Relation {
+                    from,
+                    predicate,
+                    to,
+                    ..
+                }) = store.get(&id)
+                else {
                     continue;
                 };
                 let (out, other) = if from == sid {
@@ -456,14 +476,8 @@ fn cmd_relation(args: &[String]) -> Result<(), String> {
                 } else {
                     continue;
                 };
-                let live = brain_index::edge_active(
-                    &*index,
-                    &store,
-                    &from,
-                    &predicate,
-                    &to,
-                )
-                .map_err(|e| e.to_string())?;
+                let live = brain_index::edge_active(&*index, &store, &from, &predicate, &to)
+                    .map_err(|e| e.to_string())?;
                 if !live && !all {
                     continue;
                 }
@@ -487,7 +501,12 @@ fn cmd_relation(args: &[String]) -> Result<(), String> {
 /// A human-readable label for an entity: its path, name, or raw stable id.
 fn entity_label(store: &Store, index: &MemIndex, sid: &brain_core::ids::StableId) -> String {
     for node in index.entity_nodes(sid) {
-        if let Ok(Object::Entity { labels, entity_kind, .. }) = store.get(&node) {
+        if let Ok(Object::Entity {
+            labels,
+            entity_kind,
+            ..
+        }) = store.get(&node)
+        {
             if let Some(p) = labels.get("path").or_else(|| labels.get("name")) {
                 return format!("{p} ({entity_kind})");
             }
@@ -507,8 +526,12 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             let index = build_index(&store)?;
             let now = now_ms();
             for (name, node) in store.namespace().map_err(|e| e.to_string())? {
-                let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
-                let Ok(Object::Entity { id: sid, .. }) = store.get(&node) else { continue };
+                let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
+                    continue;
+                };
+                let Ok(Object::Entity { id: sid, .. }) = store.get(&node) else {
+                    continue;
+                };
                 let present = brain_observe::twin::latest(&index, &store, &sid, "present")
                     .map_err(|e| e.to_string())?
                     .unwrap_or_else(|| "true".to_string());
@@ -576,7 +599,11 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     println!("nothing, transitively");
                 }
                 for (target, depth) in reached {
-                    println!("{}{}", "  ".repeat(depth - 1), entity_label(&store, &index, &target));
+                    println!(
+                        "{}{}",
+                        "  ".repeat(depth - 1),
+                        entity_label(&store, &index, &target)
+                    );
                 }
                 return Ok(());
             }
@@ -593,7 +620,10 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                 }
             }
             if targets.is_empty() {
-                println!("nothing {} {name}", if reverse { "imports" } else { "imported by" });
+                println!(
+                    "nothing {} {name}",
+                    if reverse { "imports" } else { "imported by" }
+                );
             }
             for t in targets {
                 println!("{}", entity_label(&store, &index, &t));
@@ -613,13 +643,9 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0);
             let store = open_store()?;
-            let report = brain_observe::backfill::backfill(
-                &store,
-                std::path::Path::new(dir),
-                &prefix,
-                max,
-            )
-            .map_err(|e| e.to_string())?;
+            let report =
+                brain_observe::backfill::backfill(&store, std::path::Path::new(dir), &prefix, max)
+                    .map_err(|e| e.to_string())?;
             println!(
                 "backfilled {} commit(s): {} file version(s), {} deletion(s), {} blob(s) skipped, {} object(s) written",
                 report.commits,
@@ -715,15 +741,27 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             if !ins.churn.is_empty() {
                 println!("churn (most edited):");
                 for (name, n) in ins.churn.iter().take(SHOW) {
-                    let tag = if ins.decided.contains(name) { "  [decided]" } else { "" };
+                    let tag = if ins.decided.contains(name) {
+                        "  [decided]"
+                    } else {
+                        ""
+                    };
                     println!("  {n:>4} versions  {name}{tag}");
                 }
                 showing(ins.churn.len(), "churned files");
             }
             list("hubs (most imported)", &ins.hubs, "importers");
-            list("untested hubs (imported, no tests)", &ins.untested_hubs, "importers");
+            list(
+                "untested hubs (imported, no tests)",
+                &ins.untested_hubs,
+                "importers",
+            );
             list("largest (symbols declared)", &ins.largest, "symbols");
-            list("external deps (unresolved imports)", &ins.external_modules, "uses");
+            list(
+                "external deps (unresolved imports)",
+                &ins.external_modules,
+                "uses",
+            );
             if !ins.decisions.is_empty() {
                 println!("decisions (ADRs, {} active):", ins.decisions.len());
                 for (slug, title, status) in ins.decisions.iter().take(SHOW) {
@@ -758,7 +796,10 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     .iter()
                     .map(|(k, n)| format!("{k} ×{n}"))
                     .collect();
-                println!("custom artifacts (graph-defined kinds): {}", parts.join(", "));
+                println!(
+                    "custom artifacts (graph-defined kinds): {}",
+                    parts.join(", ")
+                );
             }
             if !ins.features.is_empty() {
                 println!("features (DoD progress):");
@@ -819,10 +860,15 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             let store = open_store()?;
             let index = build_index(&store)?;
             for (name, node) in store.namespace().map_err(|e| e.to_string())? {
-                let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
-                let Ok(Object::Entity { id: sid, .. }) = store.get(&node) else { continue };
-                let Some(framework) = brain_observe::twin::latest(&index, &store, &sid, "test_framework")
-                    .map_err(|e| e.to_string())?
+                let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
+                    continue;
+                };
+                let Ok(Object::Entity { id: sid, .. }) = store.get(&node) else {
+                    continue;
+                };
+                let Some(framework) =
+                    brain_observe::twin::latest(&index, &store, &sid, "test_framework")
+                        .map_err(|e| e.to_string())?
                 else {
                     continue;
                 };
@@ -876,8 +922,11 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     println!("  {f}");
                 }
             }
-            let warns =
-                ins.stale_docs.iter().filter(|d| d.severity == brain_observe::twin::Severity::Warn).count();
+            let warns = ins
+                .stale_docs
+                .iter()
+                .filter(|d| d.severity == brain_observe::twin::Severity::Warn)
+                .count();
             if !ins.stale_docs.is_empty() {
                 println!(
                     "({warns} warn, {} info; reviewed-and-still-accurate? `brain adr|plan|artifact ack`)",
@@ -908,7 +957,9 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             match brain_observe::twin::add_ingest_extensions(&store, prefix, &add)
                 .map_err(|e| e.to_string())?
             {
-                Some(csv) => println!("extra ingest extensions for {prefix}: {csv} (next refresh ingests them)"),
+                Some(csv) => println!(
+                    "extra ingest extensions for {prefix}: {csv} (next refresh ingests them)"
+                ),
                 None => println!("no change — already taught"),
             }
             Ok(())
@@ -966,7 +1017,11 @@ fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), St
         "usage: brain {cmd} add <md-file> --prefix <p> [--title T]{} | \
          brain {cmd} list <prefix> [--all] | brain {cmd} show <prefix> <slug>{}",
         if cmd == "adr" { " [--status S]" } else { "" },
-        if cmd == "plan" { " | brain plan done|abandon|reopen <prefix> <slug> [--why R]" } else { "" }
+        if cmd == "plan" {
+            " | brain plan done|abandon|reopen <prefix> <slug> [--why R]"
+        } else {
+            ""
+        }
     );
     match args.first().map(String::as_str) {
         Some(op @ ("done" | "abandon" | "reopen")) if cmd == "plan" => {
@@ -1036,15 +1091,19 @@ fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), St
             }
             let file = file.ok_or_else(|| usage.clone())?;
             let prefix = prefix.ok_or_else(|| format!("--prefix is required\n{usage}"))?;
-            let content = std::fs::read_to_string(&file)
-                .map_err(|e| format!("cannot read '{file}': {e}"))?;
+            let content =
+                std::fs::read_to_string(&file).map_err(|e| format!("cannot read '{file}': {e}"))?;
             let slug = docs::slug_of(&file);
             let meta =
                 docs::parse_content(kind, &slug, &content, title.as_deref(), status.as_deref());
             let store = open_store()?;
             let out = twin::add_doc(&store, &prefix, &meta, &content, "claude-code")
                 .map_err(|e| e.to_string())?;
-            let state = if out.wrote { "recorded" } else { "already recorded (unchanged)" };
+            let state = if out.wrote {
+                "recorded"
+            } else {
+                "already recorded (unchanged)"
+            };
             let status_part = meta
                 .status
                 .as_deref()
@@ -1061,7 +1120,10 @@ fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), St
             Ok(())
         }
         Some("list") => {
-            let prefix = args.get(1).filter(|a| !a.starts_with("--")).ok_or_else(|| usage.clone())?;
+            let prefix = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .ok_or_else(|| usage.clone())?;
             let all = args.iter().any(|a| a == "--all");
             let store = open_store()?;
             let index = build_index(&store)?;
@@ -1070,12 +1132,14 @@ fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), St
             let mut any = false;
             let mut hidden = 0usize;
             for node in index.entities_by_kind(noun) {
-                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                    continue;
+                };
                 if labels.get("prefix") != Some(prefix) || !seen.insert(id.clone()) {
                     continue;
                 }
-                let (lc, _) = brain_observe::lifecycle::of(&index, &store, &id)
-                    .map_err(|e| e.to_string())?;
+                let (lc, _) =
+                    brain_observe::lifecycle::of(&index, &store, &id).map_err(|e| e.to_string())?;
                 if !lc.is_active() && !all {
                     hidden += 1;
                     continue;
@@ -1094,13 +1158,19 @@ fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), St
                     .map(|(at, _)| format!("{}s ago", now.saturating_sub(at) / 1000))
                     .unwrap_or_else(|| "?".to_string());
                 let mentions = relation_targets(&store, &index, &id, "mentions")?.len();
-                let tag =
-                    if lc.is_active() { String::new() } else { format!("  [{}]", lc.as_str()) };
+                let tag = if lc.is_active() {
+                    String::new()
+                } else {
+                    format!("  [{}]", lc.as_str())
+                };
                 println!("{status}{slug}: {title}  ({age}, {mentions} mention(s)){tag}");
                 any = true;
             }
             if !any {
-                println!("no {}{noun}s under {prefix}", if all { "" } else { "active " });
+                println!(
+                    "no {}{noun}s under {prefix}",
+                    if all { "" } else { "active " }
+                );
             }
             if hidden > 0 {
                 println!("({hidden} non-active hidden — --all shows history)");
@@ -1122,17 +1192,25 @@ fn cmd_doc(args: &[String], kind: brain_observe::docs::DocKind) -> Result<(), St
             if !content.ends_with('\n') {
                 println!();
             }
-            let (lc, why) = brain_observe::lifecycle::of(&index, &store, &sid)
-                .map_err(|e| e.to_string())?;
+            let (lc, why) =
+                brain_observe::lifecycle::of(&index, &store, &sid).map_err(|e| e.to_string())?;
             if !lc.is_active() {
-                let detail = if why.is_empty() { String::new() } else { format!(" ({why})") };
+                let detail = if why.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({why})")
+                };
                 println!("--- lifecycle: {}{detail} ---", lc.as_str());
             }
             // Status timeline (decisions), oldest first.
             let mut statuses = Vec::new();
             for id in index.observations_of(&sid) {
-                if let Object::Observation { property, value, observed_at_ms, .. } =
-                    store.get(&id).map_err(|e| e.to_string())?
+                if let Object::Observation {
+                    property,
+                    value,
+                    observed_at_ms,
+                    ..
+                } = store.get(&id).map_err(|e| e.to_string())?
                 {
                     if property == "status" {
                         statuses.push((observed_at_ms, value));
@@ -1191,8 +1269,8 @@ fn cmd_agent_doc(args: &[String], kind: brain_observe::agents::AgentDocKind) -> 
             }
             let file = file.ok_or_else(|| usage.clone())?;
             let prefix = prefix.ok_or_else(|| format!("--prefix is required\n{usage}"))?;
-            let content = std::fs::read_to_string(&file)
-                .map_err(|e| format!("cannot read '{file}': {e}"))?;
+            let content =
+                std::fs::read_to_string(&file).map_err(|e| format!("cannot read '{file}': {e}"))?;
             // Detect slug/agent/role from the path conventions when they
             // apply, then let explicit flags override.
             let normalized = file.replace('\\', "/");
@@ -1201,8 +1279,11 @@ fn cmd_agent_doc(args: &[String], kind: brain_observe::agents::AgentDocKind) -> 
                 _ => {
                     let stem = normalized.rsplit('/').next().unwrap_or(&normalized);
                     let stem = stem.strip_suffix(".md").unwrap_or(stem).to_lowercase();
-                    let default_role =
-                        if cmd == "skill" { "skill" } else { "instructions" };
+                    let default_role = if cmd == "skill" {
+                        "skill"
+                    } else {
+                        "instructions"
+                    };
                     (stem, "generic".to_string(), default_role.to_string())
                 }
             };
@@ -1216,7 +1297,11 @@ fn cmd_agent_doc(args: &[String], kind: brain_observe::agents::AgentDocKind) -> 
             let store = open_store()?;
             let out = twin::add_agent_doc(&store, &prefix, &doc, &content, "claude-code")
                 .map_err(|e| e.to_string())?;
-            let state = if out.wrote { "recorded" } else { "already recorded (unchanged)" };
+            let state = if out.wrote {
+                "recorded"
+            } else {
+                "already recorded (unchanged)"
+            };
             println!(
                 "{noun} '{slug}' {state} under {prefix} (agent: {}, role: {}, {} mention(s))",
                 doc.agent,
@@ -1229,7 +1314,10 @@ fn cmd_agent_doc(args: &[String], kind: brain_observe::agents::AgentDocKind) -> 
             Ok(())
         }
         Some("list") => {
-            let prefix = args.get(1).filter(|a| !a.starts_with("--")).ok_or_else(|| usage.clone())?;
+            let prefix = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .ok_or_else(|| usage.clone())?;
             let all = args.iter().any(|a| a == "--all");
             let store = open_store()?;
             let index = build_index(&store)?;
@@ -1237,12 +1325,14 @@ fn cmd_agent_doc(args: &[String], kind: brain_observe::agents::AgentDocKind) -> 
             let mut any = false;
             let mut hidden = 0usize;
             for node in index.entities_by_kind(noun) {
-                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                    continue;
+                };
                 if labels.get("prefix") != Some(prefix) || !seen.insert(id.clone()) {
                     continue;
                 }
-                let (lc, _) = brain_observe::lifecycle::of(&index, &store, &id)
-                    .map_err(|e| e.to_string())?;
+                let (lc, _) =
+                    brain_observe::lifecycle::of(&index, &store, &id).map_err(|e| e.to_string())?;
                 if !lc.is_active() && !all {
                     hidden += 1;
                     continue;
@@ -1258,13 +1348,19 @@ fn cmd_agent_doc(args: &[String], kind: brain_observe::agents::AgentDocKind) -> 
                     .map_err(|e| e.to_string())?
                     .map(|d| format!("  — {d}"))
                     .unwrap_or_default();
-                let tag =
-                    if lc.is_active() { String::new() } else { format!("  [{}]", lc.as_str()) };
+                let tag = if lc.is_active() {
+                    String::new()
+                } else {
+                    format!("  [{}]", lc.as_str())
+                };
                 println!("[{agent}] {slug} ({role}){desc}{tag}");
                 any = true;
             }
             if !any {
-                println!("no {}{noun}s under {prefix}", if all { "" } else { "active " });
+                println!(
+                    "no {}{noun}s under {prefix}",
+                    if all { "" } else { "active " }
+                );
             }
             if hidden > 0 {
                 println!("({hidden} non-active hidden — --all shows history)");
@@ -1398,7 +1494,11 @@ fn cmd_template(args: &[String]) -> Result<(), String> {
             }
             // Version the contract: this-run values win over the index.
             let this_run = |key: &str| {
-                props.iter().rev().find(|(p, _)| p == key).map(|(_, v)| v.clone())
+                props
+                    .iter()
+                    .rev()
+                    .find(|(p, _)| p == key)
+                    .map(|(_, v)| v.clone())
             };
             let requires = match this_run("requires") {
                 Some(v) => v,
@@ -1409,10 +1509,9 @@ fn cmd_template(args: &[String]) -> Result<(), String> {
             let content = twin::latest(&index, &store, &sid, "content")
                 .map_err(|e| e.to_string())?
                 .unwrap_or_default();
-            wrote += templates::stamp_contract(
-                &store, &index, &sid, &requires, &content, "agent", now,
-            )
-            .map_err(|e| e.to_string())?;
+            wrote +=
+                templates::stamp_contract(&store, &index, &sid, &requires, &content, "agent", now)
+                    .map_err(|e| e.to_string())?;
             println!("template '{slug}': {wrote} observation(s) written");
             if props.iter().any(|(p, _)| p == "capture") {
                 println!("the twin now auto-captures matching paths on every refresh");
@@ -1429,7 +1528,10 @@ fn cmd_template(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("fitness") => {
-            let slug = args.get(1).filter(|a| !a.starts_with("--")).map(String::as_str);
+            let slug = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .map(String::as_str);
             let prefix = parse_prefix(&args[1..]);
             let store = open_store()?;
             let index = build_index(&store)?;
@@ -1516,7 +1618,10 @@ fn cmd_template(args: &[String]) -> Result<(), String> {
                     .map_err(|e| e.to_string())?
                     .map(|c| format!("  captures [{c}]"))
                     .unwrap_or_default();
-                println!("{applies:<12} requires [{}]{capture}  — {title}", requires.join(", "));
+                println!(
+                    "{applies:<12} requires [{}]{capture}  — {title}",
+                    requires.join(", ")
+                );
             }
             Ok(())
         }
@@ -1554,7 +1659,9 @@ fn render_projections(
         if def.placement == "graph_first" {
             let mut seen = BTreeSet::new();
             for node in index.entities_by_kind(kind) {
-                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                    continue;
+                };
                 if labels.get("prefix").map(String::as_str) != Some(prefix)
                     || !seen.insert(id.clone())
                 {
@@ -1573,7 +1680,9 @@ fn render_projections(
                 else {
                     continue;
                 };
-                let Some(rel) = projection::projection_rel(def, &slug) else { continue };
+                let Some(rel) = projection::projection_rel(def, &slug) else {
+                    continue;
+                };
                 let body = projection::render_body(&rel, kind, prefix, &slug, &content);
                 projection::write_projection(store, index, root, &id, &rel, &body)
                     .map_err(|e| e.to_string())?;
@@ -1627,7 +1736,9 @@ fn render_projections(
                     })
                     .map_err(|e| e.to_string())?;
             }
-            let Some(rel) = projection::projection_rel(def, slug) else { continue };
+            let Some(rel) = projection::projection_rel(def, slug) else {
+                continue;
+            };
             let body = projection::render_body(&rel, kind, prefix, slug, &content);
             projection::write_projection(store, index, root, &sid, &rel, &body)
                 .map_err(|e| e.to_string())?;
@@ -1668,8 +1779,7 @@ fn cmd_artifact(args: &[String]) -> Result<(), String> {
             }
             let store = open_store()?;
             let index = build_index(&store)?;
-            let reg = brain_observe::kinds::registry(&store, &index)
-                .map_err(|e| e.to_string())?;
+            let reg = brain_observe::kinds::registry(&store, &index).map_err(|e| e.to_string())?;
             let def = reg
                 .get(kind.as_str())
                 .ok_or_else(|| format!("unknown kind '{kind}' — teach it: brain template set <slug> --applies-to {kind} ..."))?
@@ -1677,7 +1787,9 @@ fn cmd_artifact(args: &[String]) -> Result<(), String> {
             let sid = brain_core::ids::StableId::derive(&[kind, prefix, slug]);
             let exists = !index.entity_nodes(&sid).is_empty();
             if op == "edit" && !exists {
-                return Err(format!("no {kind} '{slug}' under {prefix} — use artifact new"));
+                return Err(format!(
+                    "no {kind} '{slug}' under {prefix} — use artifact new"
+                ));
             }
             let title = title.unwrap_or_else(|| slug.replace('-', " "));
             let content = match file.as_deref() {
@@ -1710,24 +1822,30 @@ fn cmd_artifact(args: &[String]) -> Result<(), String> {
                         "refused: {kind} '{slug}' does not meet its contract; nothing written\n  {fix}"
                     ));
                 }
-                eprintln!("warning: {kind} '{slug}' does not meet its contract ({fix}) — recorded anyway");
+                eprintln!(
+                    "warning: {kind} '{slug}' does not meet its contract ({fix}) — recorded anyway"
+                );
             }
             let out = brain_observe::twin::author_artifact(
                 &store, prefix, kind, slug, &title, &content, "agent",
             )
             .map_err(|e| e.to_string())?;
-            let state = if out.wrote { "recorded" } else { "already recorded (unchanged)" };
-            println!("{kind} '{slug}' {state} under {prefix} ({} mention(s))", out.mentions.len());
+            let state = if out.wrote {
+                "recorded"
+            } else {
+                "already recorded (unchanged)"
+            };
+            println!(
+                "{kind} '{slug}' {state} under {prefix} ({} mention(s))",
+                out.mentions.len()
+            );
 
             // Graph-first kinds materialize as read-only projections.
             if def.placement == "graph_first" {
-                if let Some(rel) =
-                    brain_observe::projection::projection_rel(&def, slug)
-                {
+                if let Some(rel) = brain_observe::projection::projection_rel(&def, slug) {
                     let index = build_index(&store)?;
-                    let body = brain_observe::projection::render_body(
-                        &rel, kind, prefix, slug, &content,
-                    );
+                    let body =
+                        brain_observe::projection::render_body(&rel, kind, prefix, slug, &content);
                     let target = brain_observe::projection::write_projection(
                         &store,
                         &index,
@@ -1780,7 +1898,10 @@ fn cmd_artifact(args: &[String]) -> Result<(), String> {
                 return Ok(());
             }
             let rendered = render_projections(&store, &index, root, &prefix, only_kind.as_deref())?;
-            println!("{rendered} projection(s) rendered under {}/docs/brain", dir.trim_end_matches('/'));
+            println!(
+                "{rendered} projection(s) rendered under {}/docs/brain",
+                dir.trim_end_matches('/')
+            );
             Ok(())
         }
         Some("ack") => {
@@ -1842,12 +1963,14 @@ fn cmd_artifact(args: &[String]) -> Result<(), String> {
             let mut any = false;
             let mut hidden = 0usize;
             for node in index.entities_by_kind(kind) {
-                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                    continue;
+                };
                 if labels.get("prefix") != Some(prefix) || !seen.insert(id.clone()) {
                     continue;
                 }
-                let (lc, _) = brain_observe::lifecycle::of(&index, &store, &id)
-                    .map_err(|e| e.to_string())?;
+                let (lc, _) =
+                    brain_observe::lifecycle::of(&index, &store, &id).map_err(|e| e.to_string())?;
                 if !lc.is_active() && !all {
                     hidden += 1;
                     continue;
@@ -1859,16 +1982,28 @@ fn cmd_artifact(args: &[String]) -> Result<(), String> {
                     .unwrap_or_else(|| slug.clone());
                 let conforms = brain_observe::twin::latest(&index, &store, &id, "conforms")
                     .map_err(|e| e.to_string())?
-                    .map(|c| if c == "true" { "".to_string() } else { "  [nonconforming]".to_string() })
+                    .map(|c| {
+                        if c == "true" {
+                            "".to_string()
+                        } else {
+                            "  [nonconforming]".to_string()
+                        }
+                    })
                     .unwrap_or_default();
                 let mentions = relation_targets(&store, &index, &id, "mentions")?.len();
-                let tag =
-                    if lc.is_active() { String::new() } else { format!("  [{}]", lc.as_str()) };
+                let tag = if lc.is_active() {
+                    String::new()
+                } else {
+                    format!("  [{}]", lc.as_str())
+                };
                 println!("{slug}: {title}  ({mentions} mention(s)){conforms}{tag}");
                 any = true;
             }
             if !any {
-                println!("no {}{kind} artifacts under {prefix}", if all { "" } else { "active " });
+                println!(
+                    "no {}{kind} artifacts under {prefix}",
+                    if all { "" } else { "active " }
+                );
             }
             if hidden > 0 {
                 println!("({hidden} non-active hidden — --all shows history)");
@@ -1887,8 +2022,12 @@ fn cmd_artifact(args: &[String]) -> Result<(), String> {
             let mut latest_props: std::collections::BTreeMap<String, (u64, String)> =
                 Default::default();
             for id in index.observations_of(&sid) {
-                if let Object::Observation { property, value, observed_at_ms, .. } =
-                    store.get(&id).map_err(|e| e.to_string())?
+                if let Object::Observation {
+                    property,
+                    value,
+                    observed_at_ms,
+                    ..
+                } = store.get(&id).map_err(|e| e.to_string())?
                 {
                     let entry = latest_props.entry(property).or_insert((0, String::new()));
                     if observed_at_ms >= entry.0 {
@@ -1961,14 +2100,17 @@ fn cmd_tidy(args: &[String]) -> Result<(), String> {
         return Ok(());
     }
 
-    let findings = brain_observe::tidy::scan(&store, &index, root, &prefix)
-        .map_err(|e| e.to_string())?;
+    let findings =
+        brain_observe::tidy::scan(&store, &index, root, &prefix).map_err(|e| e.to_string())?;
     if findings.is_empty() {
         println!("nothing to tidy under {prefix}");
         return Ok(());
     }
     for f in &findings {
-        println!("[{}] {} — {}\n    fix: {}", f.category, f.path, f.detail, f.fix);
+        println!(
+            "[{}] {} — {}\n    fix: {}",
+            f.category, f.path, f.detail, f.fix
+        );
     }
     if !apply_fix {
         let fixable = findings.iter().filter(|f| f.fixable).count();
@@ -1978,9 +2120,8 @@ fn cmd_tidy(args: &[String]) -> Result<(), String> {
         );
         return Ok(());
     }
-    let (fixed, skipped) =
-        brain_observe::tidy::fix(&store, root, &prefix, &findings, &caps)
-            .map_err(|e| e.to_string())?;
+    let (fixed, skipped) = brain_observe::tidy::fix(&store, root, &prefix, &findings, &caps)
+        .map_err(|e| e.to_string())?;
     for m in &fixed {
         println!("fixed: {m}");
     }
@@ -2019,9 +2160,8 @@ fn cmd_instructions(args: &[String]) -> Result<(), String> {
             drifted.join(", ")
         ));
     }
-    for (file, changed) in
-        brain_observe::instructions::generate(&store, &index, root, &prefix)
-            .map_err(|e| e.to_string())?
+    for (file, changed) in brain_observe::instructions::generate(&store, &index, root, &prefix)
+        .map_err(|e| e.to_string())?
     {
         let state = if changed { "updated" } else { "unchanged" };
         println!("{file}: guardrail block {state}");
@@ -2091,7 +2231,11 @@ fn cmd_asset(args: &[String]) -> Result<(), String> {
                 subtype.as_deref(),
             )
             .map_err(|e| e.to_string())?;
-            let state = if out.wrote { "declared" } else { "already declared (unchanged)" };
+            let state = if out.wrote {
+                "declared"
+            } else {
+                "already declared (unchanged)"
+            };
             println!(
                 "asset '{}' {state} under {prefix} (owner: {owner}, {} depicts)",
                 out.slug,
@@ -2104,8 +2248,8 @@ fn cmd_asset(args: &[String]) -> Result<(), String> {
             let all = args.iter().any(|a| a == "--all");
             let store = open_store()?;
             let index = build_index(&store)?;
-            let rows = brain_observe::assets::list(&store, &index, prefix)
-                .map_err(|e| e.to_string())?;
+            let rows =
+                brain_observe::assets::list(&store, &index, prefix).map_err(|e| e.to_string())?;
             let mut any = false;
             let mut hidden = 0usize;
             for row in rows {
@@ -2123,7 +2267,10 @@ fn cmd_asset(args: &[String]) -> Result<(), String> {
                 any = true;
             }
             if !any {
-                println!("no {}assets under {prefix}", if all { "" } else { "active " });
+                println!(
+                    "no {}assets under {prefix}",
+                    if all { "" } else { "active " }
+                );
             }
             if hidden > 0 {
                 println!("({hidden} non-active hidden — --all shows history)");
@@ -2184,8 +2331,8 @@ fn cmd_feature(args: &[String]) -> Result<(), String> {
                 }
             }
             let store = open_store()?;
-            let (_, wrote) = features::add(&store, prefix, slug, &title, &status)
-                .map_err(|e| e.to_string())?;
+            let (_, wrote) =
+                features::add(&store, prefix, slug, &title, &status).map_err(|e| e.to_string())?;
             let state = if wrote { "recorded" } else { "unchanged" };
             println!("feature '{slug}' {state} under {prefix} (status: {status})");
             Ok(())
@@ -2206,8 +2353,7 @@ fn cmd_feature(args: &[String]) -> Result<(), String> {
             // Advisory link vocabulary: warn (never refuse) when the
             // feature kind declares allowed predicates and this one is not
             // among them.
-            let reg = brain_observe::kinds::registry(&store, &index)
-                .map_err(|e| e.to_string())?;
+            let reg = brain_observe::kinds::registry(&store, &index).map_err(|e| e.to_string())?;
             if let Some(def) = reg.get("feature") {
                 if !def.links.is_empty() && !def.links.contains(predicate) {
                     eprintln!(
@@ -2294,7 +2440,11 @@ fn cmd_done(args: &[String]) -> Result<(), String> {
         let mark = if check.count > 0 { "✓" } else { "✗" };
         println!("{mark} {}  ({} link(s))", check.predicate, check.count);
     }
-    println!("{}: {}", slug, if report.done { "DONE" } else { "not done" });
+    println!(
+        "{}: {}",
+        slug,
+        if report.done { "DONE" } else { "not done" }
+    );
     features::record_done(&store, &index, prefix, slug, &report).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -2337,11 +2487,58 @@ fn cmd_watch(args: &[String]) -> Result<(), String> {
         }
         if docs {
             let _ = std::process::Command::new(&exe)
-                .args(["docs", "generate", dir.as_str(), "--prefix", prefix.as_str()])
+                .args([
+                    "docs",
+                    "generate",
+                    dir.as_str(),
+                    "--prefix",
+                    prefix.as_str(),
+                ])
                 .status();
         }
         std::thread::sleep(std::time::Duration::from_secs(interval));
     }
+}
+
+/// `brain eyes` — the read-only human projection served from this binary.
+fn cmd_eyes(args: &[String]) -> Result<(), String> {
+    let mut config = brain_eyes::Config {
+        store_root: std::env::var("BRAIN_STORE")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| std::path::PathBuf::from(".brain")),
+        ..brain_eyes::Config::default()
+    };
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--prefix" => {
+                config.prefix = it.next().cloned().ok_or("--prefix needs a value")?;
+            }
+            "--bind" => {
+                config.bind = it.next().cloned().ok_or("--bind needs an address")?;
+            }
+            "--port" => {
+                config.port = it
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("--port needs a number from 0 to 65535")?;
+            }
+            // Where file-backed bodies are read from. Defaults to the
+            // working directory, which is the repo the twin observes.
+            "--root" => {
+                config.content_root = it
+                    .next()
+                    .map(std::path::PathBuf::from)
+                    .ok_or("--root needs a directory")?;
+            }
+            other => {
+                return Err(format!(
+                    "unexpected argument '{other}'\nusage: brain eyes [--prefix P] [--bind IP] [--port N] [--root DIR]"
+                ));
+            }
+        }
+    }
+    brain_eyes::serve(config)
 }
 
 /// `brain bench index` — the earn-adoption gate: honest numbers, cold
@@ -2399,11 +2596,14 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
         edges += warm.relations_to(sid, "imports").len();
         edges += warm.relations_from(sid, "contains").len();
     }
-    let ins = brain_observe::twin::insights_with(&store, &warm, &prefix)
-        .map_err(|e| e.to_string())?;
+    let ins =
+        brain_observe::twin::insights_with(&store, &warm, &prefix).map_err(|e| e.to_string())?;
     let query_time = t2.elapsed();
 
-    println!("store: {objects} objects; probes: {} entities, {edges} edge answers", sids.len());
+    println!(
+        "store: {objects} objects; probes: {} entities, {edges} edge answers",
+        sids.len()
+    );
     println!("cold replay (BRAIN_INDEX=mem behavior): {cold_time:?}");
     println!(
         "warm cortex open (delta {} event(s)):   {warm_time:?}  ({:.1}x faster)",
@@ -2411,18 +2611,16 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
         cold_time.as_secs_f64() / warm_time.as_secs_f64().max(1e-9)
     );
     println!("query mix (edges + full insights):      {query_time:?}");
-    println!("answers: identical across backends ({} files in insights)", ins.files);
+    println!(
+        "answers: identical across backends ({} files in insights)",
+        ins.files
+    );
     Ok(())
 }
 
 /// Resolve a point in time: epoch ms, a relative `30m`/`2h`/`1d` ago, or
 /// a git commit hash looked up in the repo entity's observation timeline.
-fn resolve_when(
-    store: &Store,
-    index: &MemIndex,
-    prefix: &str,
-    when: &str,
-) -> Result<u64, String> {
+fn resolve_when(store: &Store, index: &MemIndex, prefix: &str, when: &str) -> Result<u64, String> {
     if when.chars().all(|c| c.is_ascii_digit()) && when.len() >= 12 {
         return when.parse().map_err(|e| format!("bad timestamp: {e}"));
     }
@@ -2440,15 +2638,21 @@ fn resolve_when(
     // A commit hash (prefix): when the twin observed that commit as HEAD.
     let repo = brain_core::ids::StableId::derive(&["repo", prefix]);
     for id in index.observations_of(&repo) {
-        if let Object::Observation { property, value, observed_at_ms, .. } =
-            store.get(&id).map_err(|e| e.to_string())?
+        if let Object::Observation {
+            property,
+            value,
+            observed_at_ms,
+            ..
+        } = store.get(&id).map_err(|e| e.to_string())?
         {
             if property == "git_commit" && value.starts_with(when) {
                 return Ok(observed_at_ms);
             }
         }
     }
-    Err(format!("cannot resolve '{when}' (epoch ms, 30m/2h/1d, or a twinned commit hash)"))
+    Err(format!(
+        "cannot resolve '{when}' (epoch ms, 30m/2h/1d, or a twinned commit hash)"
+    ))
 }
 
 /// `brain change ...` — governed mode: the motor system. Changes to
@@ -2460,7 +2664,9 @@ fn cmd_change(args: &[String]) -> Result<(), String> {
                  apply|revert <prefix> <slug> --cap fs [--dir d] | verify <prefix> <slug> [--dir d] | \
                  list <prefix> | show <prefix> <slug>";
     let flag = |key: &str| -> Option<String> {
-        args.iter().position(|a| a == key).and_then(|i| args.get(i + 1).cloned())
+        args.iter()
+            .position(|a| a == key)
+            .and_then(|i| args.get(i + 1).cloned())
     };
     let dir = flag("--dir").unwrap_or_else(|| ".".to_string());
     let root = std::path::Path::new(&dir);
@@ -2472,19 +2678,26 @@ fn cmd_change(args: &[String]) -> Result<(), String> {
             };
             let from = flag("--from").ok_or("propose needs --from <content-file>")?;
             let reason = flag("--reason").unwrap_or_else(|| "unstated".to_string());
-            let content = std::fs::read_to_string(&from)
-                .map_err(|e| format!("cannot read '{from}': {e}"))?;
+            let content =
+                std::fs::read_to_string(&from).map_err(|e| format!("cannot read '{from}': {e}"))?;
             let store = open_store()?;
             let p = govern::propose(&store, root, prefix, path, &content, &reason)
                 .map_err(|e| e.to_string())?;
-            let state = if p.wrote { "proposed" } else { "already proposed" };
+            let state = if p.wrote {
+                "proposed"
+            } else {
+                "already proposed"
+            };
             println!(
                 "change '{}' {state}: {} -> {} ({path})",
                 p.slug,
                 p.before_b3.as_deref().map(|h| &h[..8]).unwrap_or("absent"),
                 &p.after_b3[..8]
             );
-            println!("apply with: brain change apply {prefix} {} --cap fs", p.slug);
+            println!(
+                "apply with: brain change apply {prefix} {} --cap fs",
+                p.slug
+            );
             Ok(())
         }
         Some(op @ ("apply" | "revert")) => {
@@ -2539,7 +2752,9 @@ fn cmd_change(args: &[String]) -> Result<(), String> {
             let mut seen = BTreeSet::new();
             let mut any = false;
             for node in index.entities_by_kind("change") {
-                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+                let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                    continue;
+                };
                 if labels.get("prefix") != Some(prefix) || !seen.insert(id.clone()) {
                     continue;
                 }
@@ -2565,7 +2780,14 @@ fn cmd_change(args: &[String]) -> Result<(), String> {
             let store = open_store()?;
             let index = build_index(&store)?;
             let sid = brain_observe::govern::change_sid(prefix, slug);
-            for prop in ["status", "target", "reason", "before_b3", "after_b3", "intent"] {
+            for prop in [
+                "status",
+                "target",
+                "reason",
+                "before_b3",
+                "after_b3",
+                "intent",
+            ] {
                 if let Some(v) = brain_observe::twin::latest(&index, &store, &sid, prop)
                     .map_err(|e| e.to_string())?
                 {
@@ -2575,8 +2797,12 @@ fn cmd_change(args: &[String]) -> Result<(), String> {
             // Status timeline: the change's whole life, oldest first.
             let mut timeline = Vec::new();
             for id in index.observations_of(&sid) {
-                if let Object::Observation { property, value, observed_at_ms, .. } =
-                    store.get(&id).map_err(|e| e.to_string())?
+                if let Object::Observation {
+                    property,
+                    value,
+                    observed_at_ms,
+                    ..
+                } = store.get(&id).map_err(|e| e.to_string())?
                 {
                     if property == "status" {
                         timeline.push((observed_at_ms, value));
@@ -2609,14 +2835,17 @@ fn cmd_wake(args: &[String]) -> Result<(), String> {
     let full = args.iter().any(|a| a == "--full");
     let store = open_store()?;
     let index = build_index(&store)?;
-    let text = brain_observe::wake::wake(&store, &index, prefix, full)
-        .map_err(|e| e.to_string())?;
+    let text =
+        brain_observe::wake::wake(&store, &index, prefix, full).map_err(|e| e.to_string())?;
     println!("{text}");
     Ok(())
 }
 
 fn cmd_attend(args: &[String]) -> Result<(), String> {
-    let prefix = args.first().filter(|a| !a.starts_with("--")).ok_or("usage: brain attend <prefix> [--top N]")?;
+    let prefix = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .ok_or("usage: brain attend <prefix> [--top N]")?;
     let top = parse_top(args, 10)?;
     let store = open_store()?;
     let index = build_index(&store)?;
@@ -2626,7 +2855,14 @@ fn cmd_attend(args: &[String]) -> Result<(), String> {
         println!("nothing demands attention under {prefix}");
     }
     for (i, a) in ranked.iter().take(top).enumerate() {
-        println!("{:>2}. [{:>3}] {} ({})  — {}", i + 1, a.score, a.label, a.kind, a.reasons.join(", "));
+        println!(
+            "{:>2}. [{:>3}] {} ({})  — {}",
+            i + 1,
+            a.score,
+            a.label,
+            a.kind,
+            a.reasons.join(", ")
+        );
     }
     Ok(())
 }
@@ -2646,7 +2882,10 @@ fn cmd_sleep(args: &[String]) -> Result<(), String> {
 
 /// `brain related` — the association organ: soft, derived, disposable.
 fn cmd_related(args: &[String]) -> Result<(), String> {
-    let name = args.first().filter(|a| !a.starts_with("--")).ok_or("usage: brain related <name> [--top N]")?;
+    let name = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .ok_or("usage: brain related <name> [--top N]")?;
     let top = parse_top(args, 10)?;
     let store = open_store()?;
     let index = build_index(&store)?;
@@ -2682,7 +2921,10 @@ fn parse_top(args: &[String], default: usize) -> Result<usize, String> {
     let mut it = args.iter();
     while let Some(a) = it.next() {
         if a == "--top" {
-            return it.next().and_then(|v| v.parse().ok()).ok_or("--top needs a number".into());
+            return it
+                .next()
+                .and_then(|v| v.parse().ok())
+                .ok_or("--top needs a number".into());
         }
     }
     Ok(default)
@@ -2691,7 +2933,8 @@ fn parse_top(args: &[String], default: usize) -> Result<usize, String> {
 /// `brain testrun ...` — test protocols in the graph.
 fn cmd_testrun(args: &[String]) -> Result<(), String> {
     use brain_observe::testing;
-    let usage = "usage: brain testrun import <report-file|-> --prefix <p> | brain testrun list <prefix>";
+    let usage =
+        "usage: brain testrun import <report-file|-> --prefix <p> | brain testrun list <prefix>";
     match args.first().map(String::as_str) {
         Some("import") => {
             let mut file = None;
@@ -2709,20 +2952,28 @@ fn cmd_testrun(args: &[String]) -> Result<(), String> {
             let raw = if file == "-" {
                 use std::io::Read as _;
                 let mut buf = String::new();
-                std::io::stdin().read_to_string(&mut buf).map_err(|e| e.to_string())?;
+                std::io::stdin()
+                    .read_to_string(&mut buf)
+                    .map_err(|e| e.to_string())?;
                 buf
             } else {
                 std::fs::read_to_string(&file).map_err(|e| format!("cannot read '{file}': {e}"))?
             };
             let report = testing::parse_report(&raw);
             if report.cases.is_empty() {
-                return Err("no test cases recognized (expected cargo-test output or JUnit XML)"
-                    .to_string());
+                return Err(
+                    "no test cases recognized (expected cargo-test output or JUnit XML)"
+                        .to_string(),
+                );
             }
             let store = open_store()?;
             let out =
                 testing::record_run(&store, &prefix, &report, &raw).map_err(|e| e.to_string())?;
-            let state = if out.wrote { "recorded" } else { "already imported (unchanged)" };
+            let state = if out.wrote {
+                "recorded"
+            } else {
+                "already imported (unchanged)"
+            };
             println!(
                 "run {state}: {} total, {} passed, {} failed, {} skipped ({}); {} transition(s)",
                 out.total, out.passed, out.failed, out.skipped, report.format, out.transitions
@@ -2787,7 +3038,11 @@ fn kind_of(obj: &Object) -> &'static str {
     }
 }
 
-fn describe(store: &Store, names: &std::collections::BTreeMap<NodeId, Vec<String>>, id: &NodeId) -> String {
+fn describe(
+    store: &Store,
+    names: &std::collections::BTreeMap<NodeId, Vec<String>>,
+    id: &NodeId,
+) -> String {
     let kind = store.get(id).map(|o| kind_of(&o)).unwrap_or("missing");
     let bound = names
         .get(id)
@@ -2828,9 +3083,7 @@ fn cmd_refs(args: &[String]) -> Result<(), String> {
 }
 
 fn cmd_sync(args: &[String], pull: bool) -> Result<(), String> {
-    let other_root = args
-        .first()
-        .ok_or("usage: brain pull|push <store-root>")?;
+    let other_root = args.first().ok_or("usage: brain pull|push <store-root>")?;
     let local = open_store()?;
     let other = open_existing_store(other_root)?;
     let report = if pull {
@@ -2854,8 +3107,13 @@ fn cmd_evidence(args: &[String]) -> Result<(), String> {
         return Ok(());
     }
     for id in evidence {
-        if let Object::Evidence { level, method, passed, detail, .. } =
-            store.get(&id).map_err(|e| e.to_string())?
+        if let Object::Evidence {
+            level,
+            method,
+            passed,
+            detail,
+            ..
+        } = store.get(&id).map_err(|e| e.to_string())?
         {
             let mark = if passed { "pass" } else { "FAIL" };
             println!("{mark}  {level:?}  {method}  {detail}");
@@ -2887,13 +3145,23 @@ fn cmd_observations(args: &[String]) -> Result<(), String> {
     let node = resolve_arg(&store, arg)?;
     let stable = match store.get(&node).map_err(|e| e.to_string())? {
         Object::Entity { id, .. } => id,
-        other => return Err(format!("'{arg}' is not an entity (found {})", kind_of(&other))),
+        other => {
+            return Err(format!(
+                "'{arg}' is not an entity (found {})",
+                kind_of(&other)
+            ))
+        }
     };
     let index = build_index(&store)?;
     let mut rows = Vec::new();
     for obs_id in index.observations_of(&stable) {
-        if let Object::Observation { property, value, source, observed_at_ms, .. } =
-            store.get(&obs_id).map_err(|e| e.to_string())?
+        if let Object::Observation {
+            property,
+            value,
+            source,
+            observed_at_ms,
+            ..
+        } = store.get(&obs_id).map_err(|e| e.to_string())?
         {
             rows.push((observed_at_ms, property, value, source));
         }
@@ -2937,7 +3205,10 @@ fn cmd_task(args: &[String]) -> Result<(), String> {
         println!("  case {i}: {mark}  {}  (fuel {})", r.detail, r.fuel_used);
     }
     println!("code:      {}", report.code_id);
-    println!("evidence:  {}  (behavioral, passed={})", report.evidence_id, report.all_passed);
+    println!(
+        "evidence:  {}  (behavioral, passed={})",
+        report.evidence_id, report.all_passed
+    );
     println!("bound:     task/{}/latest", task.name);
     if !report.all_passed {
         return Err("task failed".to_string());
@@ -3036,8 +3307,8 @@ struct StoreEffects<'a> {
 
 impl EffectPort for StoreEffects<'_> {
     fn begin(&mut self, symbol: &str, arg: &Value) -> Result<String, String> {
-        let arg_hash = brain_core::canonical::hash_value(&value_to_json(arg))
-            .map_err(|e| e.to_string())?;
+        let arg_hash =
+            brain_core::canonical::hash_value(&value_to_json(arg)).map_err(|e| e.to_string())?;
         let intent = Object::Intent {
             action: symbol.to_string(),
             arg_hash,

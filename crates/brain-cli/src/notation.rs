@@ -46,13 +46,27 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
     let mut chars = src.chars().peekable();
     while let Some(&c) = chars.peek() {
         match c {
-            '(' => { chars.next(); out.push(Tok::L); }
-            ')' => { chars.next(); out.push(Tok::R); }
-            '{' => { chars.next(); out.push(Tok::LB); }
-            '}' => { chars.next(); out.push(Tok::RB); }
+            '(' => {
+                chars.next();
+                out.push(Tok::L);
+            }
+            ')' => {
+                chars.next();
+                out.push(Tok::R);
+            }
+            '{' => {
+                chars.next();
+                out.push(Tok::LB);
+            }
+            '}' => {
+                chars.next();
+                out.push(Tok::RB);
+            }
             ';' => {
                 for c2 in chars.by_ref() {
-                    if c2 == '\n' { break; }
+                    if c2 == '\n' {
+                        break;
+                    }
                 }
             }
             '"' => {
@@ -74,11 +88,15 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                 }
                 out.push(Tok::Str(s));
             }
-            c if c.is_whitespace() => { chars.next(); }
+            c if c.is_whitespace() => {
+                chars.next();
+            }
             _ => {
                 let mut a = String::new();
                 while let Some(&c2) = chars.peek() {
-                    if c2.is_whitespace() || "(){}\";".contains(c2) { break; }
+                    if c2.is_whitespace() || "(){}\";".contains(c2) {
+                        break;
+                    }
                     a.push(c2);
                     chars.next();
                 }
@@ -90,7 +108,10 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
 }
 
 pub fn parse_term(src: &str) -> Result<Term, String> {
-    let mut p = Parser { toks: tokenize(src)?, pos: 0 };
+    let mut p = Parser {
+        toks: tokenize(src)?,
+        pos: 0,
+    };
     let term = p.expr()?;
     if p.pos != p.toks.len() {
         return Err(format!("trailing input after term (token {})", p.pos));
@@ -105,7 +126,11 @@ struct Parser {
 
 impl Parser {
     fn next(&mut self) -> Result<Tok, String> {
-        let t = self.toks.get(self.pos).cloned().ok_or("unexpected end of input")?;
+        let t = self
+            .toks
+            .get(self.pos)
+            .cloned()
+            .ok_or("unexpected end of input")?;
         self.pos += 1;
         Ok(t)
     }
@@ -130,7 +155,9 @@ impl Parser {
 
     fn expr(&mut self) -> Result<Term, String> {
         match self.next()? {
-            Tok::Str(s) => Ok(Term::Lit { value: Literal::Str { value: s } }),
+            Tok::Str(s) => Ok(Term::Lit {
+                value: Literal::Str { value: s },
+            }),
             Tok::Atom(a) => atom_term(&a),
             Tok::L => self.form(),
             Tok::LB => self.record(),
@@ -142,7 +169,10 @@ impl Parser {
         let mut fields = BTreeMap::new();
         loop {
             match self.peek() {
-                Some(Tok::RB) => { self.pos += 1; break; }
+                Some(Tok::RB) => {
+                    self.pos += 1;
+                    break;
+                }
                 _ => {
                     let name = self.atom()?;
                     let value = self.expr()?;
@@ -159,32 +189,50 @@ impl Parser {
             "lam" => {
                 let param = self.atom()?;
                 let body = self.expr()?;
-                Term::Lam { param, body: Box::new(body) }
+                Term::Lam {
+                    param,
+                    body: Box::new(body),
+                }
             }
             "app" => {
                 let func = self.expr()?;
                 let arg = self.expr()?;
-                Term::App { func: Box::new(func), arg: Box::new(arg) }
+                Term::App {
+                    func: Box::new(func),
+                    arg: Box::new(arg),
+                }
             }
             "let" => {
                 let name = self.atom()?;
                 let value = self.expr()?;
                 let body = self.expr()?;
-                Term::Let { name, value: Box::new(value), body: Box::new(body) }
+                Term::Let {
+                    name,
+                    value: Box::new(value),
+                    body: Box::new(body),
+                }
             }
             "get" => {
                 let record = self.expr()?;
                 let field = self.atom()?;
-                Term::Field { record: Box::new(record), field }
+                Term::Field {
+                    record: Box::new(record),
+                    field,
+                }
             }
             "tag" => {
                 let tag = self.atom()?;
                 let payload = self.expr()?;
-                Term::Variant { tag, payload: Box::new(payload) }
+                Term::Variant {
+                    tag,
+                    payload: Box::new(payload),
+                }
             }
             "ref" => {
                 let id = self.atom()?;
-                Term::RefNode { node: NodeId::parse(&id).map_err(|e| e.to_string())? }
+                Term::RefNode {
+                    node: NodeId::parse(&id).map_err(|e| e.to_string())?,
+                }
             }
             "hole" => {
                 let id = self.atom()?;
@@ -201,7 +249,10 @@ impl Parser {
             "foreign" => {
                 let symbol = self.atom()?;
                 let arg = self.expr()?;
-                Term::Foreign { symbol, arg: Box::new(arg) }
+                Term::Foreign {
+                    symbol,
+                    arg: Box::new(arg),
+                }
             }
             "if" => {
                 let mut fields = BTreeMap::new();
@@ -244,17 +295,30 @@ impl Parser {
                                     self.close()?;
                                     default = Some(Box::new(body));
                                 }
-                                other => return Err(format!("expected case/else in match, found '{other}'")),
+                                other => {
+                                    return Err(format!(
+                                        "expected case/else in match, found '{other}'"
+                                    ))
+                                }
                             }
                         }
-                        other => return Err(format!("expected case/else in match, found {other:?}")),
+                        other => {
+                            return Err(format!("expected case/else in match, found {other:?}"))
+                        }
                     }
                 }
-                Term::Match { scrutinee: Box::new(scrutinee), arms, default }
+                Term::Match {
+                    scrutinee: Box::new(scrutinee),
+                    arms,
+                    default,
+                }
             }
             h if h.contains('/') => {
                 let arg = self.expr()?;
-                Term::Foreign { symbol: h.to_string(), arg: Box::new(arg) }
+                Term::Foreign {
+                    symbol: h.to_string(),
+                    arg: Box::new(arg),
+                }
             }
             other => return Err(format!("unknown form '{other}'")),
         };
@@ -265,16 +329,24 @@ impl Parser {
 
 fn atom_term(a: &str) -> Result<Term, String> {
     if let Ok(i) = a.parse::<i64>() {
-        return Ok(Term::Lit { value: Literal::Int { value: i } });
+        return Ok(Term::Lit {
+            value: Literal::Int { value: i },
+        });
     }
     match a {
-        "true" => Ok(Term::Lit { value: Literal::Bool { value: true } }),
-        "false" => Ok(Term::Lit { value: Literal::Bool { value: false } }),
-        "unit" => Ok(Term::Lit { value: Literal::Unit }),
-        _ if a.contains('/') => Err(format!(
-            "foreign symbol '{a}' must be applied: ({a} <arg>)"
-        )),
-        _ => Ok(Term::Var { name: a.to_string() }),
+        "true" => Ok(Term::Lit {
+            value: Literal::Bool { value: true },
+        }),
+        "false" => Ok(Term::Lit {
+            value: Literal::Bool { value: false },
+        }),
+        "unit" => Ok(Term::Lit {
+            value: Literal::Unit,
+        }),
+        _ if a.contains('/') => Err(format!("foreign symbol '{a}' must be applied: ({a} <arg>)")),
+        _ => Ok(Term::Var {
+            name: a.to_string(),
+        }),
     }
 }
 
@@ -329,11 +401,16 @@ fn render(t: &Term, ind: usize) -> String {
             Some(e) => format!("(hole {id} {e})"),
             None => format!("(hole {id})"),
         },
-        Term::Lam { param, body } => {
-            form(vec!["lam".to_string(), param.clone(), render(body, ind + 2)], ind)
-        }
+        Term::Lam { param, body } => form(
+            vec!["lam".to_string(), param.clone(), render(body, ind + 2)],
+            ind,
+        ),
         Term::App { func, arg } => form(
-            vec!["app".to_string(), render(func, ind + 2), render(arg, ind + 2)],
+            vec![
+                "app".to_string(),
+                render(func, ind + 2),
+                render(arg, ind + 2),
+            ],
             ind,
         ),
         Term::Let { name, value, body } => form(
@@ -366,7 +443,11 @@ fn render(t: &Term, ind: usize) -> String {
                 format!("{{{}}}", pieces.join(&format!("\n{pad}")))
             }
         }
-        Term::Match { scrutinee, arms, default } => {
+        Term::Match {
+            scrutinee,
+            arms,
+            default,
+        } => {
             let mut pieces = vec!["match".to_string(), render(scrutinee, ind + 2)];
             for (tag, arm) in arms {
                 pieces.push(form(
@@ -406,8 +487,7 @@ fn render_foreign(symbol: &str, arg: &Term, ind: usize) -> String {
             }
         }
         if let Some(short) = symbol.strip_prefix("core/") {
-            if matches!(short, "add" | "sub" | "mul" | "lt" | "eq" | "concat")
-                && fields.len() == 2
+            if matches!(short, "add" | "sub" | "mul" | "lt" | "eq" | "concat") && fields.len() == 2
             {
                 if let (Some(a), Some(b)) = (fields.get("a"), fields.get("b")) {
                     return form(
@@ -485,9 +565,15 @@ mod tests {
     #[test]
     fn holes_refs_and_errors() {
         roundtrip(&parse_term("(hole h0 int)").unwrap());
-        assert!(parse_term("(bogus 1)").unwrap_err().contains("unknown form"));
-        assert!(parse_term("core/add").unwrap_err().contains("must be applied"));
-        assert!(parse_term("(add 1 2) extra").unwrap_err().contains("trailing"));
+        assert!(parse_term("(bogus 1)")
+            .unwrap_err()
+            .contains("unknown form"));
+        assert!(parse_term("core/add")
+            .unwrap_err()
+            .contains("must be applied"));
+        assert!(parse_term("(add 1 2) extra")
+            .unwrap_err()
+            .contains("trailing"));
         assert!(parse_term("(add 1").unwrap_err().contains("end of input"));
     }
 }

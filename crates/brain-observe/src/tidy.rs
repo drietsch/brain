@@ -16,7 +16,7 @@ use crate::projection::{self, DriftKind};
 use crate::twin::{latest, live_from, live_to, observe_src, sid_label};
 use brain_core::ids::StableId;
 use brain_core::object::Object;
-use brain_index::{Index, MemIndex, replay};
+use brain_index::{replay, Index, MemIndex};
 use brain_store::{now_ms, Store, StoreError};
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -68,8 +68,17 @@ pub fn scan(
 
     // Read-only bit lost (metadata only — always safe to re-arm).
     for (name, node) in store.namespace()? {
-        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
-        let Ok(Object::Entity { id: sid, entity_kind, .. }) = store.get(&node) else { continue };
+        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
+            continue;
+        };
+        let Ok(Object::Entity {
+            id: sid,
+            entity_kind,
+            ..
+        }) = store.get(&node)
+        else {
+            continue;
+        };
         if entity_kind != "source_file" || latest(index, store, &sid, "expected_b3")?.is_none() {
             continue;
         }
@@ -91,9 +100,10 @@ pub fn scan(
     for kind in &doc_kinds {
         let mut seen = BTreeSet::new();
         for node in index.entities_by_kind(kind) {
-            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
-            if labels.get("prefix").map(String::as_str) != Some(prefix)
-                || !seen.insert(id.clone())
+            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                continue;
+            };
+            if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone())
             {
                 continue;
             }
@@ -123,7 +133,10 @@ pub fn scan(
                 // Misplaced: active, but outside the kind's home globs.
                 if let Some(def) = registry.get(kind.as_str()) {
                     if !def.home.is_empty()
-                        && !def.home.iter().any(|g| crate::templates::glob_match(g, &path))
+                        && !def
+                            .home
+                            .iter()
+                            .any(|g| crate::templates::glob_match(g, &path))
                         && latest(index, store, &file, "expected_b3")?.is_none()
                     {
                         let stem = path.rsplit('/').next().unwrap_or(&path);
@@ -163,7 +176,9 @@ pub fn scan(
     // Concluded prototypes: archive the whole directory.
     let mut seen = BTreeSet::new();
     for node in index.entities_by_kind("prototype") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
@@ -194,11 +209,20 @@ pub fn scan(
 
     // Untyped documents: ingested markdown no kind claims.
     for (name, node) in store.namespace()? {
-        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
+        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
+            continue;
+        };
         if !rel.ends_with(".md") {
             continue;
         }
-        let Ok(Object::Entity { id: sid, entity_kind, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity {
+            id: sid,
+            entity_kind,
+            ..
+        }) = store.get(&node)
+        else {
+            continue;
+        };
         if entity_kind != "source_file"
             || latest(index, store, &sid, "present")?.as_deref() == Some("false")
             || latest(index, store, &sid, "generated")?.as_deref() == Some("true")
@@ -270,7 +294,12 @@ pub fn remove_path(
         Ok(()) => format!("fs/remove {rel}"),
         Err(e) => format!("fs/remove {rel} failed: {e}"),
     };
-    let receipt = store.put(&Object::Receipt { intent, ok, detail, at_ms: now_ms() })?;
+    let receipt = store.put(&Object::Receipt {
+        intent,
+        ok,
+        detail,
+        at_ms: now_ms(),
+    })?;
     if ok {
         store.intents().confirm(intent, receipt)?;
     } else {
@@ -329,19 +358,23 @@ pub fn fix(
                 }
                 // Identify the projecting artifact and its kind.
                 let file_sid = StableId::derive(&["file", &f.path]);
-                let Some((_, artifact)) =
-                    live_to(&index, store, &file_sid, "projected_to")?.into_iter().next()
+                let Some((_, artifact)) = live_to(&index, store, &file_sid, "projected_to")?
+                    .into_iter()
+                    .next()
                 else {
                     skipped.push((f.path.clone(), "no projecting artifact".to_string()));
                     continue;
                 };
                 let mut kind_slug = None;
                 for anode in index.entity_nodes(&artifact) {
-                    if let Ok(Object::Entity { entity_kind, labels, .. }) = store.get(&anode) {
-                        kind_slug = Some((
-                            entity_kind,
-                            labels.get("slug").cloned().unwrap_or_default(),
-                        ));
+                    if let Ok(Object::Entity {
+                        entity_kind,
+                        labels,
+                        ..
+                    }) = store.get(&anode)
+                    {
+                        kind_slug =
+                            Some((entity_kind, labels.get("slug").cloned().unwrap_or_default()));
                         break;
                     }
                 }
@@ -383,7 +416,9 @@ pub fn fix(
                 projection::write_projection(store, &index, root, &artifact, &rel, &body)?;
                 fixed.push(format!("{} re-rendered from the graph", f.path));
             }
-            "retired-artifact-file" | "legacy-asset" | "misplaced-artifact"
+            "retired-artifact-file"
+            | "legacy-asset"
+            | "misplaced-artifact"
             | "concluded-prototype" => {
                 if !has_fs {
                     skipped.push((f.path.clone(), "needs --cap fs".to_string()));
@@ -410,15 +445,17 @@ pub fn fix(
                     &dest,
                     &format!("tidy: {}", f.category),
                 )?;
-                let applied =
-                    crate::govern::apply(store, root, prefix, &p.slug, caps)?;
+                let applied = crate::govern::apply(store, root, prefix, &p.slug, caps)?;
                 if applied.ok {
                     fixed.push(format!(
                         "{} -> {dest} (change '{}', revertible)",
                         f.path, p.slug
                     ));
                 } else {
-                    skipped.push((f.path.clone(), "move failed — see the change receipt".into()));
+                    skipped.push((
+                        f.path.clone(),
+                        "move failed — see the change receipt".into(),
+                    ));
                 }
             }
             _ => skipped.push((f.path.clone(), "advisory only".to_string())),
@@ -462,7 +499,8 @@ mod tests {
         .unwrap();
         let index = fresh_index(&store);
         let rel = "docs/brain/plans/sprint.md";
-        let body = projection::render_body(rel, "plan", "twin/app", "sprint", "# Sprint\n\nShip it.\n");
+        let body =
+            projection::render_body(rel, "plan", "twin/app", "sprint", "# Sprint\n\nShip it.\n");
         projection::write_projection(&store, &index, src.path(), &out.sid, rel, &body).unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
 
@@ -483,7 +521,9 @@ mod tests {
         let index = fresh_index(&store);
         let findings = scan(&store, &index, src.path(), "twin/app").unwrap();
         assert!(
-            findings.iter().any(|f| f.category == "hand-edited-projection" && f.path == rel),
+            findings
+                .iter()
+                .any(|f| f.category == "hand-edited-projection" && f.path == rel),
             "{findings:?}"
         );
 
@@ -500,16 +540,29 @@ mod tests {
         assert_eq!(fs::read_to_string(&target).unwrap(), body, "graph won");
         assert!(fs::metadata(&target).unwrap().permissions().readonly());
         let index = fresh_index(&store);
-        let rescued = latest(&index, &store, &out.sid, "hand_edit").unwrap().unwrap();
-        assert!(rescued.contains("sneaky"), "the edit is history, not a casualty");
+        let rescued = latest(&index, &store, &out.sid, "hand_edit")
+            .unwrap()
+            .unwrap();
+        assert!(
+            rescued.contains("sneaky"),
+            "the edit is history, not a casualty"
+        );
 
         // Conclude the plan: its projection file becomes archivable.
-        crate::lifecycle::set(&store, &index, &out.sid, crate::lifecycle::Lifecycle::Done, None)
-            .unwrap();
+        crate::lifecycle::set(
+            &store,
+            &index,
+            &out.sid,
+            crate::lifecycle::Lifecycle::Done,
+            None,
+        )
+        .unwrap();
         let index = fresh_index(&store);
         let findings = scan(&store, &index, src.path(), "twin/app").unwrap();
-        let retired: Vec<_> =
-            findings.iter().filter(|f| f.category == "retired-artifact-file").collect();
+        let retired: Vec<_> = findings
+            .iter()
+            .filter(|f| f.category == "retired-artifact-file")
+            .collect();
         assert_eq!(retired.len(), 1, "{findings:?}");
         // Not a git repo -> moves are allowed (nothing is dirty).
         let (fixed, skipped) = fix(
@@ -546,6 +599,8 @@ mod tests {
         // Without the capability, nothing content-touching happens.
         let findings = scan(&store, &fresh_index(&store), src.path(), "twin/app").unwrap();
         let (_, skipped) = fix(&store, src.path(), "twin/app", &findings, &[]).unwrap();
-        assert!(skipped.iter().all(|(_, why)| why.contains("cap fs") || why.contains("advisory")));
+        assert!(skipped
+            .iter()
+            .all(|(_, why)| why.contains("cap fs") || why.contains("advisory")));
     }
 }

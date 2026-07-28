@@ -86,7 +86,11 @@ fn term_refs(term: &Term, out: &mut Vec<NodeId>) {
         }
         Term::Field { record, .. } => term_refs(record, out),
         Term::Variant { payload, .. } => term_refs(payload, out),
-        Term::Match { scrutinee, arms, default } => {
+        Term::Match {
+            scrutinee,
+            arms,
+            default,
+        } => {
             term_refs(scrutinee, out);
             for arm in arms.values() {
                 term_refs(&arm.body, out);
@@ -186,7 +190,13 @@ pub fn edge_active_at(
     let sid = edge_sid(from, predicate, to);
     let mut best: Option<(u64, bool)> = None;
     for id in index.observations_of(&sid) {
-        if let Object::Observation { property, value, observed_at_ms, .. } = store.get(&id)? {
+        if let Object::Observation {
+            property,
+            value,
+            observed_at_ms,
+            ..
+        } = store.get(&id)?
+        {
             if property == "active"
                 && observed_at_ms <= t
                 && best.as_ref().is_none_or(|(b, _)| observed_at_ms >= *b)
@@ -237,7 +247,9 @@ impl MemIndex {
 
     pub fn snapshot(&self) -> IndexSnapshot {
         fn dump<K: Clone>(m: &BTreeMap<K, BTreeSet<NodeId>>) -> Vec<(K, Vec<NodeId>)> {
-            m.iter().map(|(k, v)| (k.clone(), v.iter().copied().collect())).collect()
+            m.iter()
+                .map(|(k, v)| (k.clone(), v.iter().copied().collect()))
+                .collect()
         }
         fn dump2(
             m: &BTreeMap<(StableId, String), BTreeSet<NodeId>>,
@@ -260,12 +272,16 @@ impl MemIndex {
 
     pub fn restore(snap: IndexSnapshot) -> MemIndex {
         fn load<K: Ord>(v: Vec<(K, Vec<NodeId>)>) -> BTreeMap<K, BTreeSet<NodeId>> {
-            v.into_iter().map(|(k, ids)| (k, ids.into_iter().collect())).collect()
+            v.into_iter()
+                .map(|(k, ids)| (k, ids.into_iter().collect()))
+                .collect()
         }
         fn load2(
             v: Vec<(StableId, String, Vec<NodeId>)>,
         ) -> BTreeMap<(StableId, String), BTreeSet<NodeId>> {
-            v.into_iter().map(|(s, p, ids)| ((s, p), ids.into_iter().collect())).collect()
+            v.into_iter()
+                .map(|(s, p, ids)| ((s, p), ids.into_iter().collect()))
+                .collect()
         }
         MemIndex {
             referrers: load(snap.referrers),
@@ -300,16 +316,31 @@ impl Index for MemIndex {
         }
         match obj {
             Object::Observation { subject, .. } => {
-                self.observations.entry(subject.clone()).or_default().insert(*id);
+                self.observations
+                    .entry(subject.clone())
+                    .or_default()
+                    .insert(*id);
             }
-            Object::Entity { id: stable, entity_kind, .. } => {
-                self.entity_nodes.entry(stable.clone()).or_default().insert(*id);
+            Object::Entity {
+                id: stable,
+                entity_kind,
+                ..
+            } => {
+                self.entity_nodes
+                    .entry(stable.clone())
+                    .or_default()
+                    .insert(*id);
                 self.entities_by_kind
                     .entry(entity_kind.clone())
                     .or_default()
                     .insert(*id);
             }
-            Object::Relation { from, predicate, to, .. } => {
+            Object::Relation {
+                from,
+                predicate,
+                to,
+                ..
+            } => {
                 self.relations_from
                     .entry((from.clone(), predicate.clone()))
                     .or_default()
@@ -363,7 +394,9 @@ mod tests {
     use std::collections::BTreeMap as Map;
 
     fn lit(i: i64) -> Term {
-        Term::Lit { value: Literal::Int { value: i } }
+        Term::Lit {
+            value: Literal::Int { value: i },
+        }
     }
 
     #[test]
@@ -377,7 +410,12 @@ mod tests {
                 arg: Box::new(Term::Record {
                     fields: {
                         let mut f = Map::new();
-                        f.insert("a".to_string(), Term::Var { name: "x".to_string() });
+                        f.insert(
+                            "a".to_string(),
+                            Term::Var {
+                                name: "x".to_string(),
+                            },
+                        );
                         f.insert("b".to_string(), Term::RefNode { node: target });
                         f
                     },
@@ -385,7 +423,10 @@ mod tests {
             }),
         };
         let edges = object_edges(&Object::Code { term });
-        assert_eq!(edges, vec![(EdgeKind::CodeRef, target), (EdgeKind::CodeRef, target)]);
+        assert_eq!(
+            edges,
+            vec![(EdgeKind::CodeRef, target), (EdgeKind::CodeRef, target)]
+        );
     }
 
     #[test]
@@ -396,7 +437,9 @@ mod tests {
         // A dependency, and code that refs it.
         let dep = store.put(&Object::Code { term: lit(7) }).unwrap();
         let code = store
-            .put(&Object::Code { term: Term::RefNode { node: dep } })
+            .put(&Object::Code {
+                term: Term::RefNode { node: dep },
+            })
             .unwrap();
         store.bind("lib/seven-plus", code).unwrap();
 
@@ -516,8 +559,14 @@ mod tests {
         assert!(edge_active(&index, &store, &file, "imports", &dep).unwrap());
 
         // Edge sids are distinct per (from, predicate, to).
-        assert_ne!(edge_sid(&file, "imports", &dep), edge_sid(&file, "covers", &dep));
-        assert_ne!(edge_sid(&file, "imports", &dep), edge_sid(&dep, "imports", &file));
+        assert_ne!(
+            edge_sid(&file, "imports", &dep),
+            edge_sid(&file, "covers", &dep)
+        );
+        assert_ne!(
+            edge_sid(&file, "imports", &dep),
+            edge_sid(&dep, "imports", &file)
+        );
     }
 
     #[test]

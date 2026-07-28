@@ -146,7 +146,9 @@ pub fn block_drift(
     let mut out = Vec::new();
     for target in TARGETS {
         let sid = StableId::derive(&["file", target]);
-        let Some(_) = latest(index, store, &sid, "instructions_b3")? else { continue };
+        let Some(_) = latest(index, store, &sid, "instructions_b3")? else {
+            continue;
+        };
         let existing = fs::read_to_string(root.join(target)).unwrap_or_default();
         let current_block = match (existing.find(BEGIN), existing.find(END)) {
             (Some(b), Some(e)) if e >= b => {
@@ -184,9 +186,15 @@ mod tests {
         assert!(results.iter().all(|(_, changed)| *changed));
 
         let claude = fs::read_to_string(root.path().join("CLAUDE.md")).unwrap();
-        assert!(claude.starts_with("# My project"), "prose preserved: {claude}");
+        assert!(
+            claude.starts_with("# My project"),
+            "prose preserved: {claude}"
+        );
         assert!(claude.contains(BEGIN) && claude.contains(END));
-        assert!(claude.contains("brain artifact new twin/app plan"), "{claude}");
+        assert!(
+            claude.contains("brain artifact new twin/app plan"),
+            "{claude}"
+        );
         let agents = fs::read_to_string(root.path().join("AGENTS.md")).unwrap();
         // Identical guardrails for every agent family.
         let block_of = |s: &str| {
@@ -203,7 +211,9 @@ mod tests {
         let results = generate(&store, &index, root.path(), "twin/app").unwrap();
         assert!(results.iter().all(|(_, changed)| !*changed));
         assert_eq!(store.count_objects().unwrap(), before);
-        assert!(block_drift(&store, &index, root.path(), "twin/app").unwrap().is_empty());
+        assert!(block_drift(&store, &index, root.path(), "twin/app")
+            .unwrap()
+            .is_empty());
 
         // An in-block hand edit is detected.
         let edited = claude.replace("read-only projections", "editable files");

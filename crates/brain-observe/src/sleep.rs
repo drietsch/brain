@@ -55,8 +55,17 @@ pub fn delta_since(
 
     let ns = store.namespace()?;
     for (name, node) in &ns {
-        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else { continue };
-        let Ok(Object::Entity { id: sid, entity_kind, .. }) = store.get(node) else { continue };
+        let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
+            continue;
+        };
+        let Ok(Object::Entity {
+            id: sid,
+            entity_kind,
+            ..
+        }) = store.get(node)
+        else {
+            continue;
+        };
         if entity_kind != "source_file" {
             continue;
         }
@@ -64,7 +73,12 @@ pub fn delta_since(
         let mut first_at = u64::MAX;
         let mut newest_change = 0u64;
         for oid in index.observations_of(&sid) {
-            if let Object::Observation { property, observed_at_ms, .. } = store.get(&oid)? {
+            if let Object::Observation {
+                property,
+                observed_at_ms,
+                ..
+            } = store.get(&oid)?
+            {
                 match property.as_str() {
                     "content_b3" => {
                         versions += 1;
@@ -87,7 +101,12 @@ pub fn delta_since(
     }
     // Repo-level notes count toward the delta too.
     for oid in index.observations_of(&repo_sid) {
-        if let Object::Observation { property, observed_at_ms, .. } = store.get(&oid)? {
+        if let Object::Observation {
+            property,
+            observed_at_ms,
+            ..
+        } = store.get(&oid)?
+        {
             if property == "note" && observed_at_ms > since {
                 delta.notes += 1;
             }
@@ -99,7 +118,9 @@ pub fn delta_since(
     for kind in &doc_kinds {
         let mut seen = std::collections::BTreeSet::new();
         for node in index.entities_by_kind(kind) {
-            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                continue;
+            };
             if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone())
             {
                 continue;
@@ -145,7 +166,11 @@ pub fn sleep(store: &Store, prefix: &str) -> Result<SleepReport, StoreError> {
             let declared: u32 = latest(&index, store, sid, "tests_declared")?
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0);
-            let tests = if declared > 0 { format!("; tests {declared}") } else { String::new() };
+            let tests = if declared > 0 {
+                format!("; tests {declared}")
+            } else {
+                String::new()
+            };
             let digest = format!("v{versions}; {symbols} symbol(s){tests}");
             if latest(&index, store, sid, "memory")?.as_deref() != Some(digest.as_str()) {
                 observe_src(store, sid, "memory", &digest, "sleep", now)?;
@@ -155,7 +180,13 @@ pub fn sleep(store: &Store, prefix: &str) -> Result<SleepReport, StoreError> {
     }
 
     let (added, changed) = (delta.added.len(), delta.changed.len());
-    let Delta { notes, doc_updates, new_runs, verdict, .. } = delta;
+    let Delta {
+        notes,
+        doc_updates,
+        new_runs,
+        verdict,
+        ..
+    } = delta;
     let activity = added + changed + doc_updates + new_runs + notes + memories;
     if activity == 0 {
         return Ok(SleepReport {
@@ -171,15 +202,29 @@ pub fn sleep(store: &Store, prefix: &str) -> Result<SleepReport, StoreError> {
         .take(3)
         .map(|a| a.label)
         .collect();
-    let attention =
-        if top.is_empty() { String::new() } else { format!("; attention: {}", top.join(", ")) };
+    let attention = if top.is_empty() {
+        String::new()
+    } else {
+        format!("; attention: {}", top.join(", "))
+    };
     let summary = format!(
         "{added} added, {changed} changed file(s); {doc_updates} doc update(s); \
          {new_runs} protocol(s){verdict}; {notes} note(s); {memories} memory digest(s){attention}"
     );
     observe_src(store, &repo_sid, "session_summary", &summary, "sleep", now)?;
-    observe_src(store, &repo_sid, "consolidated_until", &now.to_string(), "sleep", now)?;
-    Ok(SleepReport { summary, memories, wrote: true })
+    observe_src(
+        store,
+        &repo_sid,
+        "consolidated_until",
+        &now.to_string(),
+        "sleep",
+        now,
+    )?;
+    Ok(SleepReport {
+        summary,
+        memories,
+        wrote: true,
+    })
 }
 
 #[cfg(test)]
@@ -198,8 +243,11 @@ mod tests {
         refresh(&store, src.path(), "twin/app").unwrap();
         // Two edits -> three content versions: enough history for a memory.
         for i in 0..2 {
-            fs::write(src.path().join("src/main.rs"), format!("pub fn main() {{ /* {i} */ }}\n"))
-                .unwrap();
+            fs::write(
+                src.path().join("src/main.rs"),
+                format!("pub fn main() {{ /* {i} */ }}\n"),
+            )
+            .unwrap();
             refresh(&store, src.path(), "twin/app").unwrap();
         }
         crate::twin::add_note(
@@ -220,10 +268,14 @@ mod tests {
         let mut index = MemIndex::new();
         replay(&store, &mut index).unwrap();
         let main_sid = StableId::derive(&["file", "src/main.rs"]);
-        let memory = latest(&index, &store, &main_sid, "memory").unwrap().unwrap();
+        let memory = latest(&index, &store, &main_sid, "memory")
+            .unwrap()
+            .unwrap();
         assert!(memory.starts_with("v3;"), "{memory}");
         let repo = StableId::derive(&["repo", "twin/app"]);
-        assert!(latest(&index, &store, &repo, "session_summary").unwrap().is_some());
+        assert!(latest(&index, &store, &repo, "session_summary")
+            .unwrap()
+            .is_some());
 
         // A second sleep with no new activity writes nothing at all.
         std::thread::sleep(std::time::Duration::from_millis(5));
@@ -239,6 +291,10 @@ mod tests {
         refresh(&store, src.path(), "twin/app").unwrap();
         let report = sleep(&store, "twin/app").unwrap();
         assert!(report.wrote);
-        assert!(report.summary.contains("1 added, 0 changed"), "{}", report.summary);
+        assert!(
+            report.summary.contains("1 added, 0 changed"),
+            "{}",
+            report.summary
+        );
     }
 }

@@ -46,7 +46,14 @@ pub struct AgentDoc {
 /// Returns (kind, slug, agent, role). Path-only, no content read.
 pub fn path_agent_doc(rel_path: &str) -> Option<(AgentDocKind, String, String, String)> {
     let file = rel_path.rsplit('/').next().unwrap_or(rel_path);
-    let claude = |s: &str, r: &str| (AgentDocKind::Config, s.to_string(), "claude".into(), r.into());
+    let claude = |s: &str, r: &str| {
+        (
+            AgentDocKind::Config,
+            s.to_string(),
+            "claude".into(),
+            r.into(),
+        )
+    };
 
     // Skills: any <name>/SKILL.md — the skill's identity is its directory.
     if file == "SKILL.md" {
@@ -63,30 +70,65 @@ pub fn path_agent_doc(rel_path: &str) -> Option<(AgentDocKind, String, String, S
     match file {
         "CLAUDE.md" => return Some(claude(&path_slug, "instructions")),
         "AGENTS.md" => {
-            let agent = if rel_path.contains(".codex/") { "codex" } else { "generic" };
-            return Some((AgentDocKind::Config, path_slug, agent.into(), "instructions".into()));
+            let agent = if rel_path.contains(".codex/") {
+                "codex"
+            } else {
+                "generic"
+            };
+            return Some((
+                AgentDocKind::Config,
+                path_slug,
+                agent.into(),
+                "instructions".into(),
+            ));
         }
         "GEMINI.md" => {
-            return Some((AgentDocKind::Config, path_slug, "gemini".into(), "instructions".into()))
+            return Some((
+                AgentDocKind::Config,
+                path_slug,
+                "gemini".into(),
+                "instructions".into(),
+            ))
         }
         ".cursorrules" => {
-            return Some((AgentDocKind::Config, path_slug, "cursor".into(), "rules".into()))
+            return Some((
+                AgentDocKind::Config,
+                path_slug,
+                "cursor".into(),
+                "rules".into(),
+            ))
         }
         ".mcp.json" => return Some(claude(&path_slug, "mcp")),
         _ => {}
     }
     if rel_path == ".github/copilot-instructions.md" {
-        return Some((AgentDocKind::Config, path_slug, "copilot".into(), "instructions".into()));
+        return Some((
+            AgentDocKind::Config,
+            path_slug,
+            "copilot".into(),
+            "instructions".into(),
+        ));
     }
     if rel_path.contains(".cursor/rules/") && rel_path.ends_with(".mdc") {
-        return Some((AgentDocKind::Config, path_slug, "cursor".into(), "rules".into()));
+        return Some((
+            AgentDocKind::Config,
+            path_slug,
+            "cursor".into(),
+            "rules".into(),
+        ));
     }
     // Inside a .claude directory: subagents, commands, settings.
     if let Some(rest) = rel_path.split(".claude/").nth(1) {
-        if let Some(stem) = rest.strip_prefix("agents/").and_then(|f| f.strip_suffix(".md")) {
+        if let Some(stem) = rest
+            .strip_prefix("agents/")
+            .and_then(|f| f.strip_suffix(".md"))
+        {
             return Some(claude(&stem.to_lowercase(), "subagent"));
         }
-        if let Some(stem) = rest.strip_prefix("commands/").and_then(|f| f.strip_suffix(".md")) {
+        if let Some(stem) = rest
+            .strip_prefix("commands/")
+            .and_then(|f| f.strip_suffix(".md"))
+        {
             return Some(claude(&stem.to_lowercase(), "command"));
         }
         if rest == "settings.json" || rest == "settings.local.json" {
@@ -94,7 +136,12 @@ pub fn path_agent_doc(rel_path: &str) -> Option<(AgentDocKind, String, String, S
         }
     }
     if rel_path.contains(".codex/") {
-        return Some((AgentDocKind::Config, path_slug, "codex".into(), "settings".into()));
+        return Some((
+            AgentDocKind::Config,
+            path_slug,
+            "codex".into(),
+            "settings".into(),
+        ));
     }
     None
 }
@@ -155,22 +202,41 @@ mod tests {
     #[test]
     fn skill_and_instruction_conventions_detect() {
         let (kind, slug, agent, role) = path_agent_doc(".claude/skills/deploy/SKILL.md").unwrap();
-        assert_eq!((kind, slug.as_str(), agent.as_str(), role.as_str()),
-                   (AgentDocKind::Skill, "deploy", "claude", "skill"));
+        assert_eq!(
+            (kind, slug.as_str(), agent.as_str(), role.as_str()),
+            (AgentDocKind::Skill, "deploy", "claude", "skill")
+        );
         // Plugin-style skills without .claude/ still count.
-        assert_eq!(path_agent_doc("skills/review/SKILL.md").unwrap().1, "review");
+        assert_eq!(
+            path_agent_doc("skills/review/SKILL.md").unwrap().1,
+            "review"
+        );
 
         assert_eq!(
             path_agent_doc("CLAUDE.md").unwrap(),
-            (AgentDocKind::Config, "claude.md".into(), "claude".into(), "instructions".into())
+            (
+                AgentDocKind::Config,
+                "claude.md".into(),
+                "claude".into(),
+                "instructions".into()
+            )
         );
         // Nested instruction files keep distinct identities.
-        assert_eq!(path_agent_doc("crates/core/CLAUDE.md").unwrap().1, "crates/core/claude.md");
+        assert_eq!(
+            path_agent_doc("crates/core/CLAUDE.md").unwrap().1,
+            "crates/core/claude.md"
+        );
         assert_eq!(path_agent_doc("AGENTS.md").unwrap().2, "generic");
         assert_eq!(path_agent_doc("GEMINI.md").unwrap().2, "gemini");
         assert_eq!(path_agent_doc(".cursorrules").unwrap().3, "rules");
-        assert_eq!(path_agent_doc(".cursor/rules/style.mdc").unwrap().2, "cursor");
-        assert_eq!(path_agent_doc(".github/copilot-instructions.md").unwrap().2, "copilot");
+        assert_eq!(
+            path_agent_doc(".cursor/rules/style.mdc").unwrap().2,
+            "cursor"
+        );
+        assert_eq!(
+            path_agent_doc(".github/copilot-instructions.md").unwrap().2,
+            "copilot"
+        );
         assert_eq!(path_agent_doc(".mcp.json").unwrap().3, "mcp");
         assert_eq!(path_agent_doc(".codex/config.toml").unwrap().2, "codex");
         assert_eq!(path_agent_doc("src/main.rs"), None);
@@ -183,15 +249,25 @@ mod tests {
         assert_eq!((slug.as_str(), role.as_str()), ("reviewer", "subagent"));
         let (_, slug, _, role) = path_agent_doc(".claude/commands/deploy.md").unwrap();
         assert_eq!((slug.as_str(), role.as_str()), ("deploy", "command"));
-        assert_eq!(path_agent_doc(".claude/settings.json").unwrap().3, "settings");
-        assert_eq!(path_agent_doc(".claude/settings.local.json").unwrap().3, "settings");
+        assert_eq!(
+            path_agent_doc(".claude/settings.json").unwrap().3,
+            "settings"
+        );
+        assert_eq!(
+            path_agent_doc(".claude/settings.local.json").unwrap().3,
+            "settings"
+        );
         // Out-of-repo style absolute-ish paths work through the same rules.
-        assert_eq!(path_agent_doc("root/.claude/agents/fixer.md").unwrap().1, "fixer");
+        assert_eq!(
+            path_agent_doc("root/.claude/agents/fixer.md").unwrap().1,
+            "fixer"
+        );
     }
 
     #[test]
     fn frontmatter_supplies_name_and_description() {
-        let md = "---\nname: deploy\ndescription: Ship the thing safely\n---\n\n# Deploy\nsteps...\n";
+        let md =
+            "---\nname: deploy\ndescription: Ship the thing safely\n---\n\n# Deploy\nsteps...\n";
         let doc = parse_agent_doc(".claude/skills/deploy/SKILL.md", md).unwrap();
         assert_eq!(doc.name, "deploy");
         assert_eq!(doc.description.as_deref(), Some("Ship the thing safely"));

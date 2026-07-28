@@ -11,7 +11,7 @@
 //! versions stay comparable across brain generations.
 
 use crate::lifecycle;
-use crate::twin::{latest, latest_at, Severity};
+use crate::twin::{latest, Severity};
 use brain_core::ids::StableId;
 use brain_core::object::Object;
 use brain_index::{Index, MemIndex};
@@ -52,7 +52,13 @@ fn earliest(
 ) -> Result<Option<(u64, String)>, StoreError> {
     let mut best: Option<(u64, String)> = None;
     for id in index.observations_of(subject) {
-        if let Object::Observation { property: p, value, observed_at_ms, .. } = store.get(&id)? {
+        if let Object::Observation {
+            property: p,
+            value,
+            observed_at_ms,
+            ..
+        } = store.get(&id)?
+        {
             if p == property && best.as_ref().is_none_or(|(b, _)| observed_at_ms < *b) {
                 best = Some((observed_at_ms, value));
             }
@@ -86,9 +92,10 @@ pub fn fitness(
         let mut groups: BTreeMap<String, Vec<StableId>> = BTreeMap::new();
         let mut seen = BTreeSet::new();
         for node in index.entities_by_kind(kind) {
-            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
-            if labels.get("prefix").map(String::as_str) != Some(prefix)
-                || !seen.insert(id.clone())
+            let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+                continue;
+            };
+            if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone())
             {
                 continue;
             }
@@ -214,14 +221,20 @@ pub fn evolve(
     slug: &str,
 ) -> Result<Option<Evolution>, StoreError> {
     let all = fitness(store, index, prefix, Some(slug))?;
-    let Some(tf) = all.first() else { return Ok(None) };
-    let Some(current) = tf.versions.iter().find(|v| v.current) else { return Ok(None) };
+    let Some(tf) = all.first() else {
+        return Ok(None);
+    };
+    let Some(current) = tf.versions.iter().find(|v| v.current) else {
+        return Ok(None);
+    };
     let (_, total) = current.first_conform;
     if total < 2 {
         return Ok(None);
     }
     let registry = crate::kinds::registry(store, index)?;
-    let Some(def) = registry.values().find(|d| d.slug == slug) else { return Ok(None) };
+    let Some(def) = registry.values().find(|d| d.slug == slug) else {
+        return Ok(None);
+    };
     let demote: Vec<String> = def
         .requires
         .iter()
@@ -231,13 +244,16 @@ pub fn evolve(
     if demote.is_empty() {
         return Ok(None);
     }
-    let new_requires: Vec<String> =
-        def.requires.iter().filter(|f| !demote.contains(f)).cloned().collect();
+    let new_requires: Vec<String> = def
+        .requires
+        .iter()
+        .filter(|f| !demote.contains(f))
+        .cloned()
+        .collect();
     let mut new_recommended: Vec<String> = Vec::new();
     if let Some(tmpl) = &def.template {
         if let Some(existing) = latest(index, store, tmpl, "recommended")? {
-            new_recommended
-                .extend(existing.split(',').map(str::trim).map(str::to_string));
+            new_recommended.extend(existing.split(',').map(str::trim).map(str::to_string));
         }
     }
     for f in &demote {
@@ -245,7 +261,11 @@ pub fn evolve(
             new_recommended.push(f.clone());
         }
     }
-    Ok(Some(Evolution { demote, new_requires, new_recommended }))
+    Ok(Some(Evolution {
+        demote,
+        new_requires,
+        new_recommended,
+    }))
 }
 
 /// Apply an evolution: guarded writes of the new `requires` and
@@ -317,7 +337,11 @@ mod tests {
         }
 
         // Three runbooks; two keep forgetting the Service line.
-        fs::write(src.path().join("docs/runbooks/a.md"), "# A\n\nService: x\nsteps\n").unwrap();
+        fs::write(
+            src.path().join("docs/runbooks/a.md"),
+            "# A\n\nService: x\nsteps\n",
+        )
+        .unwrap();
         fs::write(src.path().join("docs/runbooks/b.md"), "# B\n\nsteps only\n").unwrap();
         fs::write(src.path().join("docs/runbooks/c.md"), "# C\n\nmore steps\n").unwrap();
         crate::twin::refresh(&store, src.path(), "twin/app").unwrap();
@@ -327,31 +351,51 @@ mod tests {
         assert_eq!(all.len(), 1);
         let current = all[0].versions.iter().find(|v| v.current).unwrap();
         assert_eq!(current.artifacts, 3);
-        assert_eq!(current.first_conform, (1, 3), "one of three conformed first try");
+        assert_eq!(
+            current.first_conform,
+            (1, 3),
+            "one of three conformed first try"
+        );
         assert_eq!(current.missing.get("service").copied(), Some(2));
         assert!(
-            all[0].verdicts.iter().any(|v| v.contains("'service' missed in 2/3")),
+            all[0]
+                .verdicts
+                .iter()
+                .any(|v| v.contains("'service' missed in 2/3")),
             "{:?}",
             all[0].verdicts
         );
 
         // Evolve: demote the field agents keep skipping.
-        let ev = evolve(&store, &index, "twin/app", "runbook").unwrap().unwrap();
+        let ev = evolve(&store, &index, "twin/app", "runbook")
+            .unwrap()
+            .unwrap();
         assert_eq!(ev.demote, vec!["service".to_string()]);
         assert_eq!(ev.new_requires, vec!["title".to_string()]);
-        let old_contract = latest(&index, &store, &tmpl, "contract_b3").unwrap().unwrap();
+        let old_contract = latest(&index, &store, &tmpl, "contract_b3")
+            .unwrap()
+            .unwrap();
         apply_evolution(&store, &index, "runbook", &ev).unwrap();
         let index = fresh_index(&store);
         assert_eq!(
-            latest(&index, &store, &tmpl, "requires").unwrap().as_deref(),
+            latest(&index, &store, &tmpl, "requires")
+                .unwrap()
+                .as_deref(),
             Some("title")
         );
         assert_eq!(
-            latest(&index, &store, &tmpl, "recommended").unwrap().as_deref(),
+            latest(&index, &store, &tmpl, "recommended")
+                .unwrap()
+                .as_deref(),
             Some("service")
         );
-        let new_contract = latest(&index, &store, &tmpl, "contract_b3").unwrap().unwrap();
-        assert_ne!(old_contract, new_contract, "a new measurement window opened");
+        let new_contract = latest(&index, &store, &tmpl, "contract_b3")
+            .unwrap()
+            .unwrap();
+        assert_ne!(
+            old_contract, new_contract,
+            "a new measurement window opened"
+        );
 
         // Old artifacts keep the version that judged them.
         let b = StableId::derive(&["runbook", "twin/app", "b"]);

@@ -57,14 +57,20 @@ pub fn propose(
     let existed = latest(&index, store, &sid, "status")?.is_some();
 
     let before = fs::read_to_string(root.join(rel_path)).ok();
-    let before_b3 = before.as_ref().map(|c| blake3::hash(c.as_bytes()).to_hex().to_string());
+    let before_b3 = before
+        .as_ref()
+        .map(|c| blake3::hash(c.as_bytes()).to_hex().to_string());
 
     let mut labels = BTreeMap::new();
     labels.insert("prefix".to_string(), prefix.to_string());
     labels.insert("slug".to_string(), slug.clone());
     labels.insert("target".to_string(), rel_path.to_string());
     labels.insert("title".to_string(), reason.to_string());
-    store.put(&Object::Entity { id: sid.clone(), entity_kind: "change".to_string(), labels })?;
+    store.put(&Object::Entity {
+        id: sid.clone(),
+        entity_kind: "change".to_string(),
+        labels,
+    })?;
 
     let mut props: Vec<(&str, &str)> = vec![
         ("target", rel_path),
@@ -89,9 +95,23 @@ pub fn propose(
     let file_sid = StableId::derive(&["file", rel_path]);
     relate(store, &index, &mut written, &sid, "changes", &file_sid, now)?;
     let repo_sid = StableId::derive(&["repo", prefix]);
-    relate(store, &index, &mut written, &sid, "concerns", &repo_sid, now)?;
+    relate(
+        store,
+        &index,
+        &mut written,
+        &sid,
+        "concerns",
+        &repo_sid,
+        now,
+    )?;
 
-    Ok(Proposal { slug, sid, before_b3, after_b3, wrote: !existed })
+    Ok(Proposal {
+        slug,
+        sid,
+        before_b3,
+        after_b3,
+        wrote: !existed,
+    })
 }
 
 /// Propose a governed move (tidy's archive path): rename `from_rel` to
@@ -109,7 +129,9 @@ pub fn propose_move(
     let mut index = MemIndex::new();
     replay(store, &mut index)?;
     let now = now_ms();
-    let key = blake3::hash(format!("{from_rel}->{to_rel}").as_bytes()).to_hex().to_string();
+    let key = blake3::hash(format!("{from_rel}->{to_rel}").as_bytes())
+        .to_hex()
+        .to_string();
     let stem = from_rel.rsplit('/').next().unwrap_or(from_rel);
     let slug = format!("{}-mv-{}", stem.to_lowercase(), &key[..8]);
     let sid = change_sid(prefix, &slug);
@@ -124,10 +146,17 @@ pub fn propose_move(
     labels.insert("slug".to_string(), slug.clone());
     labels.insert("target".to_string(), from_rel.to_string());
     labels.insert("title".to_string(), reason.to_string());
-    store.put(&Object::Entity { id: sid.clone(), entity_kind: "change".to_string(), labels })?;
+    store.put(&Object::Entity {
+        id: sid.clone(),
+        entity_kind: "change".to_string(),
+        labels,
+    })?;
 
-    let mut props: Vec<(&str, &str)> =
-        vec![("target", from_rel), ("move_to", to_rel), ("reason", reason)];
+    let mut props: Vec<(&str, &str)> = vec![
+        ("target", from_rel),
+        ("move_to", to_rel),
+        ("reason", reason),
+    ];
     let before_hash = before_b3.clone().unwrap_or_else(|| "dir".to_string());
     props.push(("before_b3", &before_hash));
     for (prop, value) in props {
@@ -142,7 +171,15 @@ pub fn propose_move(
     let file_sid = StableId::derive(&["file", from_rel]);
     relate(store, &index, &mut written, &sid, "changes", &file_sid, now)?;
     let repo_sid = StableId::derive(&["repo", prefix]);
-    relate(store, &index, &mut written, &sid, "concerns", &repo_sid, now)?;
+    relate(
+        store,
+        &index,
+        &mut written,
+        &sid,
+        "concerns",
+        &repo_sid,
+        now,
+    )?;
 
     Ok(Proposal {
         slug,
@@ -232,9 +269,8 @@ fn perform(
     };
 
     // 1. Intent, durably logged BEFORE the effect.
-    let arg_hash = brain_core::canonical::hash_bytes(
-        payload.as_deref().unwrap_or(&target).as_bytes(),
-    );
+    let arg_hash =
+        brain_core::canonical::hash_bytes(payload.as_deref().unwrap_or(&target).as_bytes());
     let intent = store.put(&Object::Intent {
         action: action.to_string(),
         arg_hash,
@@ -277,7 +313,12 @@ fn perform(
         Ok(()) => format!("{action} {target}"),
         Err(e) => format!("{action} {target} failed: {e}"),
     };
-    let receipt = store.put(&Object::Receipt { intent, ok, detail, at_ms: now_ms() })?;
+    let receipt = store.put(&Object::Receipt {
+        intent,
+        ok,
+        detail,
+        at_ms: now_ms(),
+    })?;
     if ok {
         store.intents().confirm(intent, receipt)?;
     } else {
@@ -289,7 +330,11 @@ fn perform(
         (false, _) => "failed",
     };
     observe_src(store, &sid, "status", new_status, "govern", now_ms())?;
-    Ok(Applied { intent, receipt, ok })
+    Ok(Applied {
+        intent,
+        receipt,
+        ok,
+    })
 }
 
 #[derive(Debug)]
@@ -326,13 +371,25 @@ pub fn verify(
     let report = crate::testing::parse_report(&raw);
     let outcome = crate::testing::record_run(store, prefix, &report, &raw)?;
     let mut written = BTreeSet::new();
-    relate(store, &index, &mut written, &sid, "verified_by", &outcome.run_sid, now)?;
+    relate(
+        store,
+        &index,
+        &mut written,
+        &sid,
+        "verified_by",
+        &outcome.run_sid,
+        now,
+    )?;
     let passed = outcome.failed == 0 && outcome.total > 0;
     let status = if passed { "verified" } else { "broken" };
     if latest(&index, store, &sid, "status")?.as_deref() != Some(status) {
         observe_src(store, &sid, "status", status, "govern", now)?;
     }
-    Ok(Verification { passed, total: outcome.total, failed: outcome.failed })
+    Ok(Verification {
+        passed,
+        total: outcome.total,
+        failed: outcome.failed,
+    })
 }
 
 /// Reconciliation after recovery: changes whose intent the log marked
@@ -347,11 +404,15 @@ pub fn reconcile(store: &Store, prefix: &str) -> Result<Vec<String>, StoreError>
     let mut marked = Vec::new();
     let mut seen = BTreeSet::new();
     for node in index.entities_by_kind("change") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
-        let Some(intent) = latest(&index, store, &id, "intent")? else { continue };
+        let Some(intent) = latest(&index, store, &id, "intent")? else {
+            continue;
+        };
         if states.get(&intent) == Some(&IntentState::Indeterminate)
             && latest(&index, store, &id, "status")?.as_deref() != Some("indeterminate")
         {
@@ -428,7 +489,10 @@ mod tests {
         // The trail: intent confirmed in the durable log, receipt stored,
         // status applied.
         let states = store.intents().states().unwrap();
-        assert_eq!(states.get(&a.intent.to_string()), Some(&IntentState::Confirmed));
+        assert_eq!(
+            states.get(&a.intent.to_string()),
+            Some(&IntentState::Confirmed)
+        );
         match store.get(&a.receipt).unwrap() {
             Object::Receipt { intent, ok, .. } => {
                 assert_eq!(intent, a.intent);
@@ -439,7 +503,10 @@ mod tests {
         let mut index = MemIndex::new();
         replay(&store, &mut index).unwrap();
         let sid = change_sid("twin/app", &p.slug);
-        assert_eq!(latest(&index, &store, &sid, "status").unwrap().as_deref(), Some("applied"));
+        assert_eq!(
+            latest(&index, &store, &sid, "status").unwrap().as_deref(),
+            Some("applied")
+        );
         // The twin sees the governed change as ordinary drift on refresh.
         let r = refresh(&store, src.path(), "twin/app").unwrap();
         assert_eq!(r.changed, vec!["src/main.rs".to_string()]);
@@ -453,7 +520,10 @@ mod tests {
         );
         let mut index = MemIndex::new();
         replay(&store, &mut index).unwrap();
-        assert_eq!(latest(&index, &store, &sid, "status").unwrap().as_deref(), Some("reverted"));
+        assert_eq!(
+            latest(&index, &store, &sid, "status").unwrap().as_deref(),
+            Some("reverted")
+        );
     }
 
     #[test]
@@ -470,23 +540,40 @@ mod tests {
             now_ms(),
         )
         .unwrap();
-        let p = propose(&store, src.path(), "twin/app", "src/main.rs", "pub fn main() { v2() }\n", "v2")
-            .unwrap();
+        let p = propose(
+            &store,
+            src.path(),
+            "twin/app",
+            "src/main.rs",
+            "pub fn main() { v2() }\n",
+            "v2",
+        )
+        .unwrap();
         apply(&store, src.path(), "twin/app", &p.slug, &["fs".to_string()]).unwrap();
         let v = verify(&store, src.path(), "twin/app", &p.slug).unwrap();
         assert!(v.passed);
         let mut index = MemIndex::new();
         replay(&store, &mut index).unwrap();
         let sid = change_sid("twin/app", &p.slug);
-        assert_eq!(latest(&index, &store, &sid, "status").unwrap().as_deref(), Some("verified"));
+        assert_eq!(
+            latest(&index, &store, &sid, "status").unwrap().as_deref(),
+            Some("verified")
+        );
         assert_eq!(index.relations_from(&sid, "verified_by").len(), 1);
     }
 
     #[test]
     fn crash_between_intent_and_receipt_reconciles_to_indeterminate() {
         let (src, _sd, store) = setup();
-        let p = propose(&store, src.path(), "twin/app", "src/main.rs", "pub fn main() { x() }\n", "x")
-            .unwrap();
+        let p = propose(
+            &store,
+            src.path(),
+            "twin/app",
+            "src/main.rs",
+            "pub fn main() { x() }\n",
+            "x",
+        )
+        .unwrap();
         // Simulate the crash window: intent begun and recorded on the
         // change, no receipt ever written.
         let now = now_ms();

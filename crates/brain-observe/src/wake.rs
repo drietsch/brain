@@ -23,6 +23,22 @@ pub fn wake(
     prefix: &str,
     full: bool,
 ) -> Result<String, StoreError> {
+    let insights = twin::insights_with(store, index, prefix)?;
+    let ranked = crate::attention::attend_with(store, index, prefix, &insights)?;
+    wake_with(store, index, prefix, full, &insights, &ranked)
+}
+
+/// Render wake from shared derived projections. This is semantically
+/// identical to [`wake`] but avoids recomputing insights and attention when
+/// a human surface needs the same material in structured and textual forms.
+pub fn wake_with(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    full: bool,
+    ins: &twin::Insights,
+    ranked: &[crate::attention::Attention],
+) -> Result<String, StoreError> {
     let cap = if full { usize::MAX } else { 5 };
     let now = now_ms();
     let mut out = String::new();
@@ -41,7 +57,6 @@ pub fn wake(
         }
     }
 
-    let ins = twin::insights_with(store, index, prefix)?;
     let delta = delta_since(store, index, prefix, since)?;
     writeln!(
         out,
@@ -65,16 +80,25 @@ pub fn wake(
         }
     }
 
-    let ranked = crate::attention::attend(store, index, prefix)?;
     if !ranked.is_empty() {
         writeln!(out, "attention:").ok();
         for a in ranked.iter().take(cap) {
-            writeln!(out, "  {:>3}  {} ({})", a.score, a.label, a.reasons.join(", ")).ok();
+            writeln!(
+                out,
+                "  {:>3}  {} ({})",
+                a.score,
+                a.label,
+                a.reasons.join(", ")
+            )
+            .ok();
         }
     }
 
-    let warns: Vec<_> =
-        ins.stale_docs.iter().filter(|d| d.severity == Severity::Warn).collect();
+    let warns: Vec<_> = ins
+        .stale_docs
+        .iter()
+        .filter(|d| d.severity == Severity::Warn)
+        .collect();
     let infos = ins.stale_docs.len() - warns.len();
     if !warns.is_empty() || infos > 0 {
         writeln!(
@@ -84,7 +108,14 @@ pub fn wake(
         )
         .ok();
         for d in warns.iter().take(cap.min(3)) {
-            writeln!(out, "  [warn] {} ({}): {}", d.slug, d.kind, d.changed.join(", ")).ok();
+            writeln!(
+                out,
+                "  [warn] {} ({}): {}",
+                d.slug,
+                d.kind,
+                d.changed.join(", ")
+            )
+            .ok();
         }
     }
 
@@ -95,7 +126,9 @@ pub fn wake(
     }
     let mut seen = BTreeSet::new();
     for node in index.entities_by_kind("change") {
-        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else { continue };
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
         if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
             continue;
         }
@@ -172,8 +205,11 @@ mod tests {
         fs::create_dir_all(src.path().join("src")).unwrap();
         fs::create_dir_all(src.path().join("docs/plans")).unwrap();
         fs::write(src.path().join("src/main.rs"), "pub fn main() {}\n").unwrap();
-        fs::write(src.path().join("docs/plans/build-x.md"), "# Build X\n\nsrc/main.rs.\n")
-            .unwrap();
+        fs::write(
+            src.path().join("docs/plans/build-x.md"),
+            "# Build X\n\nsrc/main.rs.\n",
+        )
+        .unwrap();
         let store_dir = tempfile::tempdir().unwrap();
         let store = brain_store::Store::open(store_dir.path()).unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
@@ -181,7 +217,11 @@ mod tests {
 
         // Post-sleep activity: one edit, one note.
         std::thread::sleep(std::time::Duration::from_millis(5));
-        fs::write(src.path().join("src/main.rs"), "pub fn main() { /* v2 */ }\n").unwrap();
+        fs::write(
+            src.path().join("src/main.rs"),
+            "pub fn main() { /* v2 */ }\n",
+        )
+        .unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         crate::twin::add_note(
             &store,
@@ -195,9 +235,16 @@ mod tests {
         let text = wake(&store, &index, "twin/app", false).unwrap();
         assert!(text.contains("last sleep"), "{text}");
         assert!(text.contains("0 added, 1 changed file(s)"), "{text}");
-        assert!(text.contains("plan build-x"), "active plan in flight: {text}");
+        assert!(
+            text.contains("plan build-x"),
+            "active plan in flight: {text}"
+        );
         assert!(text.contains("picked up where we left off"), "{text}");
-        assert!(text.lines().count() <= 40, "budgeted: {} lines", text.lines().count());
+        assert!(
+            text.lines().count() <= 40,
+            "budgeted: {} lines",
+            text.lines().count()
+        );
 
         // A finished plan leaves the in-flight list.
         crate::lifecycle::set(

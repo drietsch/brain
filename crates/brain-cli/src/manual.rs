@@ -119,6 +119,7 @@ pub const COMMANDS: &[Cmd] = &[
     Cmd { group: "Brain functions", name: "attend", args: "<prefix> [--top N]", summary: "attention: what deserves attention now, ranked with reasons" },
     Cmd { group: "Brain functions", name: "sleep", args: "<prefix>", summary: "consolidation: distill activity since last sleep into durable memory" },
     Cmd { group: "Brain functions", name: "related", args: "<name> [--top N]", summary: "association: what is related (co-change, co-mention, shared imports)" },
+    Cmd { group: "Brain functions", name: "eyes", args: "[--prefix P] [--bind IP] [--port N] [--root DIR]", summary: "the visual layer for people: judgments as sentences, content you can read, a map of the system \u{2014} read-only, on localhost" },
 
     Cmd { group: "Governed changes", name: "change propose", args: "<prefix> <path> --from <file> [--reason R]", summary: "propose a change: pure graph write, disk untouched" },
     Cmd { group: "Governed changes", name: "change apply|revert", args: "<prefix> <slug> --cap fs", summary: "through intent -> write -> receipt; refused without the capability" },
@@ -153,11 +154,23 @@ pub const ENVIRONMENT: &[(&str, &str)] = &[
 ];
 
 pub const FILES: &[(&str, &str)] = &[
-    (".brain/objects/", "immutable content-addressed objects (canonical JSON; identity = BLAKE3 of bytes)"),
-    (".brain/events.jsonl", "append-only event log — the WAL every derived index replays"),
-    (".brain/intents.jsonl", "durable intent/receipt state for the effect boundary"),
+    (
+        ".brain/objects/",
+        "immutable content-addressed objects (canonical JSON; identity = BLAKE3 of bytes)",
+    ),
+    (
+        ".brain/events.jsonl",
+        "append-only event log — the WAL every derived index replays",
+    ),
+    (
+        ".brain/intents.jsonl",
+        "durable intent/receipt state for the effect boundary",
+    ),
     (".brain/HEAD", "NodeId of the current namespace object"),
-    (".brain/cortex.json", "the cortex checkpoint — derived, disposable, rebuilt if missing"),
+    (
+        ".brain/cortex.json",
+        "the cortex checkpoint — derived, disposable, rebuilt if missing",
+    ),
 ];
 
 /// The `--help`/usage projection.
@@ -176,18 +189,26 @@ pub fn usage_text() -> String {
             let _ = writeln!(out, "    {left:<58} {}", c.summary);
         }
     }
-    out.push_str("\nFull manual: brain man | man -l -    (or: brain man --install; then: man brain)\n");
+    out.push_str(
+        "\nFull manual: brain man | man -l -    (or: brain man --install; then: man brain)\n",
+    );
     out
 }
 
 fn troff_escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('—', "\\(em").replace('-', "\\-")
+    s.replace('\\', "\\\\")
+        .replace('—', "\\(em")
+        .replace('-', "\\-")
 }
 
 /// The man(1) projection.
 pub fn man_page() -> String {
     let mut o = String::new();
-    let _ = writeln!(o, ".TH BRAIN 1 \"\" \"brain {}\" \"User Commands\"", env!("CARGO_PKG_VERSION"));
+    let _ = writeln!(
+        o,
+        ".TH BRAIN 1 \"\" \"brain {}\" \"User Commands\"",
+        env!("CARGO_PKG_VERSION")
+    );
     o.push_str(".SH NAME\nbrain \\- agent\\-native semantic substrate: one graph for code, twin, decisions, tests, and docs\n");
     o.push_str(".SH SYNOPSIS\n.B brain\n.I command\n.RI [ args ]\n");
     o.push_str(".SH DESCRIPTION\n");
@@ -202,7 +223,12 @@ pub fn man_page() -> String {
             if c.args.is_empty() {
                 let _ = writeln!(o, ".B brain {}", troff_escape(c.name));
             } else {
-                let _ = writeln!(o, ".B brain {} \\fI{}\\fR", troff_escape(c.name), troff_escape(c.args));
+                let _ = writeln!(
+                    o,
+                    ".B brain {} \\fI{}\\fR",
+                    troff_escape(c.name),
+                    troff_escape(c.args)
+                );
             }
             let _ = writeln!(o, "{}", troff_escape(c.summary));
         }
@@ -236,7 +262,11 @@ mod tests {
         names.dedup();
         assert_eq!(names.len(), before, "duplicate command names");
         for c in COMMANDS {
-            assert!(GROUPS.iter().any(|(g, _)| g == &c.group), "unknown group {}", c.group);
+            assert!(
+                GROUPS.iter().any(|(g, _)| g == &c.group),
+                "unknown group {}",
+                c.group
+            );
             assert!(!c.summary.is_empty());
         }
 
