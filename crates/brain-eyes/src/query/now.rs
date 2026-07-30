@@ -14,7 +14,9 @@ use brain_core::ids::StableId;
 use brain_index::Index;
 use brain_observe::{attention, sleep, twin};
 
-pub fn build(loaded: &Loaded) -> Result<NowView, String> {
+/// `seen` is the event cursor the viewer's browser remembered from their
+/// last visit — per-viewer state the server never stores.
+pub fn build(loaded: &Loaded, seen: Option<usize>) -> Result<NowView, String> {
     let store = &loaded.store;
     let index = &loaded.index;
     let prefix = loaded.prefix();
@@ -164,8 +166,12 @@ pub fn build(loaded: &Loaded) -> Result<NowView, String> {
     let since = since_last_session(loaded, now)?;
     let attention_cards = attention_cards(loaded, ranked);
 
+    let since_you_looked = seen.map(|seen| {
+        say::since_you_looked(loaded.snapshot.cursor.saturating_sub(seen) as u64)
+    });
     Ok(NowView {
         snapshot: loaded.snapshot.clone(),
+        since_you_looked,
         headline,
         subhead,
         needs_you,

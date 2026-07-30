@@ -40,7 +40,8 @@ a path (ADR-030).
 | | Question it answers |
 |---|---|
 | **Now** | Should I worry, and what changed since I left? |
-| **Work** | Who is working here, and what is unfinished? |
+| **Next** | What should happen now, worst first — the same queue agents read? |
+| **Work** | Who is working here, what became of it, and what is unfinished? |
 | **Roadmap** | What is planned, what is moving, and what is done? |
 | **Features** | What do we claim, and what actually backs it? |
 | **Tests** | What passed, what failed, and what did the failure look like? |
@@ -144,7 +145,15 @@ version. Freshness is a `stat` on the append-only event log. Everything
 derived — insights, attention, coherence findings, the kind registry,
 fitness, the event scan, the MRI layout — is computed once per version
 through the existing `brain_observe` functions and shared, never
-re-implemented. Every response names the snapshot it was computed from.
+re-implemented. Every response names the snapshot it was computed from —
+including how the working tree relates to it: uncommitted files the graph
+has not seen yet are counted in a topbar badge, re-measured on a short
+leash, so no number quietly poses as current.
+
+The personal layer never moves state to the server: the browser keeps the
+viewer's last-visit cursor and week-scoped acknowledgements (restorable),
+and sends the cursor back as a query parameter so the "since you last
+looked" sentence is still composed in the one voice, server-side.
 
 Eyes binds to `127.0.0.1`, answers only GET, serves file bytes only
 through a graph-recorded path that resolves inside the workspace, sends

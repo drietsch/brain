@@ -130,6 +130,63 @@ function readRoute() {
 
 const views = {};
 
+/* Per-viewer memory, in this browser only: the previous visit's cursor
+   and acknowledged concerns. The server never stores who looked — the
+   marker rides back as a query parameter so the sentence about it is
+   still composed server-side, in the one voice. */
+const previousVisit = (() => {
+  try { return JSON.parse(localStorage.getItem("eyes-visit")); } catch { return null; }
+})();
+function rememberVisit(snapshot) {
+  if (!snapshot || rememberVisit.done) return;
+  rememberVisit.done = true;
+  localStorage.setItem("eyes-visit", JSON.stringify({ cursor: snapshot.cursor, at_ms: Date.now() }));
+}
+function loadAcks() {
+  let acks;
+  try { acks = JSON.parse(localStorage.getItem("eyes-acks")) ?? {}; } catch { acks = {}; }
+  /* Acknowledgements expire after a week: a concern that persists that
+     long deserves to be seen again. */
+  const cutoff = Date.now() - 7 * 86400 * 1000;
+  for (const key of Object.keys(acks)) if (acks[key] < cutoff) delete acks[key];
+  return acks;
+}
+function saveAcks(acks) { localStorage.setItem("eyes-acks", JSON.stringify(acks)); }
+function ackId(item) { return `${item.severity}|${item.title}|${item.reason}`; }
+function ackButton(item) {
+  return h("button", {
+    class: "ack", text: "noted", title: "Acknowledge — hidden here for a week, in this browser only",
+    onclick: (event) => {
+      event.stopPropagation();
+      const acks = loadAcks();
+      acks[ackId(item)] = Date.now();
+      saveAcks(acks);
+      render();
+    },
+  });
+}
+function splitAcked(items) {
+  const acks = loadAcks();
+  const shown = [], acked = [];
+  for (const item of items) (acks[ackId(item)] ? acked : shown).push(item);
+  return { shown, acked };
+}
+function ackedToggle(acked) {
+  if (!acked.length) return null;
+  return h("details", { class: "also" },
+    h("summary", { text: `${acked.length} acknowledged — show` }),
+    h("ul", {}, acked.map((item) => h("li", {
+      class: "restore", title: "Click to bring it back",
+      text: `${item.title} — ${item.reason}`,
+      onclick: () => {
+        const acks = loadAcks();
+        delete acks[ackId(item)];
+        saveAcks(acks);
+        render();
+      },
+    }))));
+}
+
 async function render() {
   const route = readRoute();
   state.view = route.view;
@@ -163,22 +220,54 @@ async function render() {
   stage.scrollTop = 0;
 }
 
-/* -------------------------------------------------------------------- now */
+/* ------------------------------------------------------------------- next */
 
-views.now = async () => {
-  const data = await api("/api/now");
+views.next = async () => {
+  const data = await api("/api/next");
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
 
   const parts = [
     h("h1", { class: "hero", text: data.headline }),
     h("p", { class: "hero-sub", text: data.subhead }),
-    census(data.proof),
   ];
+  const inbox = splitAcked(data.queue);
+  if (inbox.shown.length) {
+    parts.push(h("div", { class: "concerns" }, inbox.shown.map((item) =>
+      h("div", { class: `concern ${item.severity}` },
+        h("i", { class: `mark ${({ act: "bad", watch: "watch" })[item.severity] ?? "quiet"}` }),
+        h("div", {},
+          h("h3", { text: item.title }),
+          h("p", { text: item.reason }),
+          item.fix_command ? commandLine(item.fix_command) : null,
+          ackButton(item))))));
+  }
+  const toggle = ackedToggle(inbox.acked);
+  if (toggle) parts.push(toggle);
+  stage.replaceChildren(h("div", { class: "page" }, ...parts));
+};
 
-  if (data.needs_you.length) {
+/* -------------------------------------------------------------------- now */
+
+views.now = async () => {
+  const seen = previousVisit && Number.isInteger(previousVisit.cursor) ? previousVisit.cursor : null;
+  const data = await api("/api/now" + (seen === null ? "" : `?seen=${seen}`));
+  state.snapshot = data.snapshot;
+  paintChrome(data.snapshot);
+
+  const parts = [
+    h("h1", { class: "hero", text: data.headline }),
+    h("p", { class: "hero-sub", text: data.subhead }),
+  ];
+  if (data.since_you_looked) {
+    parts.push(h("p", { class: "visit-note", text: data.since_you_looked }));
+  }
+  parts.push(census(data.proof));
+
+  const inbox = splitAcked(data.needs_you);
+  if (inbox.shown.length || inbox.acked.length) {
     parts.push(h("h2", { class: "section", text: "Needs you" }));
-    parts.push(h("div", { class: "concerns" }, data.needs_you.map((concern) => {
+    parts.push(h("div", { class: "concerns" }, inbox.shown.map((concern) => {
       const node = h("div", { class: `concern ${concern.severity}` },
         h("i", { class: `mark ${({ act: "bad", watch: "watch" })[concern.severity] ?? "quiet"}` }),
         h("div", {},
@@ -198,13 +287,16 @@ views.now = async () => {
                     ? h("li", { class: "faint", text: `${concern.repeats - 1 - concern.also.length} more are not listed here` })
                     : null))
             : null,
-          fixLine(concern.fix_command)));
+          fixLine(concern.fix_command),
+          ackButton(concern)));
       if (concern.target) {
         node.style.cursor = "pointer";
         node.addEventListener("click", () => openThing(concern.target.id));
       }
       return node;
     })));
+    const toggle = ackedToggle(inbox.acked);
+    if (toggle) parts.push(toggle);
   }
 
   parts.push(h("h2", { class: "section", text: data.since.known ? `Since your last session, ${data.since.when}` : "Recently" }));
@@ -630,6 +722,17 @@ views.thing = async (params) => {
         h("span", {}, h("strong", { text: item.target.label }), " — ", item.because)))));
   }
 
+  if (data.extras.briefing.length) {
+    parts.push(h("h2", { class: "section", text: "Before you edit" }));
+    parts.push(h("div", { class: "concerns" }, data.extras.briefing.map((item) =>
+      h("div", { class: `concern ${item.severity}` },
+        h("i", { class: `mark ${({ act: "bad", watch: "watch" })[item.severity] ?? "quiet"}` }),
+        h("div", {},
+          h("h3", { text: item.title }),
+          item.reason ? h("p", { text: item.reason }) : null,
+          item.fix_command ? commandLine(item.fix_command) : null)))));
+  }
+
   if (data.facts.length) {
     parts.push(h("h2", { class: "section", text: "What Eyes can tell you" }));
     parts.push(h("div", { class: "facts" }, data.facts.map((fact) =>
@@ -863,6 +966,7 @@ document.addEventListener("keydown", (event) => {
 
 function paintChrome(snapshot) {
   if (!snapshot) return;
+  rememberVisit(snapshot);
   document.getElementById("project").textContent = snapshot.prefix;
   const seconds = Math.max(0, Math.round((snapshot.generated_at_ms - snapshot.changed_at_ms) / 1000));
   const freshness = seconds < 90 ? "updated just now"
@@ -870,6 +974,17 @@ function paintChrome(snapshot) {
     : seconds < 172800 ? `updated ${Math.round(seconds / 3600)} hours ago`
     : `updated ${Math.round(seconds / 86400)} days ago`;
   document.getElementById("freshness").textContent = freshness;
+  const drift = document.getElementById("drift");
+  if (drift) {
+    const tree = snapshot.working_tree;
+    if (tree && tree.state !== "in_step") {
+      drift.textContent = tree.sentence;
+      drift.hidden = false;
+    } else {
+      drift.hidden = true;
+      drift.textContent = "";
+    }
+  }
 }
 
 for (const button of document.querySelectorAll("[data-go]")) {
@@ -912,6 +1027,14 @@ views.work = async () => {
     parts.push(sessionCard(session));
   }
 
+  if (data.rework.length) {
+    parts.push(h("h2", { class: "section", text: "Handed back and forth" }));
+    parts.push(h("div", { class: "facts" }, data.rework.map((fact) =>
+      h("button", { class: "fact watch", onclick: () => fact.target && openThing(fact.target.id) },
+        h("i", { class: "mark" }),
+        h("span", {}, h("strong", { text: fact.text }), fact.reason ? ` — ${fact.reason}` : "")))));
+  }
+
   if (data.changes.length) {
     parts.push(h("h2", { class: "section", text: "Governed changes" }));
     parts.push(h("div", { class: "items" }, data.changes.map(workItem)));
@@ -939,6 +1062,9 @@ function sessionCard(session) {
       session.touched.length + session.more_touched === 1 ? "" : "s"} edited` }));
 
   const body = [head, h("p", { class: "session-objective", text: session.objective }), meta];
+  if (session.outcome) {
+    body.push(h("p", { class: "pill-row" }, h("span", { text: session.outcome })));
+  }
 
   if (session.tools.length) {
     body.push(h("div", { class: "chips" }, session.tools.map((tool) =>
@@ -1653,9 +1779,9 @@ themeButton.addEventListener("click", () => {
 /* Counts on the rail, so the nav says where the trouble is. */
 async function paintRail() {
   try {
-    const [now, work, tests, evidence, roadmap] = await Promise.all([
-      api("/api/now"), api("/api/work"), api("/api/tests"), api("/api/evidence"),
-      api("/api/roadmap"),
+    const [now, next, work, tests, evidence, roadmap] = await Promise.all([
+      api("/api/now"), api("/api/next"), api("/api/work"), api("/api/tests"),
+      api("/api/evidence"), api("/api/roadmap"),
     ]);
     const set = (key, value, tone) => {
       const node = document.querySelector(`[data-count="${key}"]`);
@@ -1668,6 +1794,8 @@ async function paintRail() {
     // still stands for four, and the headline counts it that way.
     const notes = now.needs_you.reduce((sum, concern) => sum + concern.repeats, 0);
     set("now", notes, notes ? "watch" : null);
+    const urgent = next.queue.filter((item) => item.severity === "act").length;
+    set("next", next.queue.length, urgent ? "bad" : next.queue.length ? "watch" : null);
     set("work", work.sessions.filter((s) => s.live).length + work.changes.length,
       work.changes.length ? "watch" : null);
     set("tests", tests.failing.length, tests.failing.length ? "bad" : null);

@@ -103,7 +103,11 @@ fn handle(request: Request, state: &Arc<AppState>) {
         "/assets/styles.css" => text(request, 200, STYLES_CSS, "text/css; charset=utf-8"),
 
         "/api/snapshot" => json_result(request, state.snapshot()),
-        "/api/now" => json_result(request, state.read(query::now::build)),
+        "/api/now" => {
+            let seen = param("seen").and_then(|value| value.parse().ok());
+            json_result(request, state.read(|loaded| query::now::build(loaded, seen)))
+        }
+        "/api/next" => json_result(request, state.read(query::next::build)),
         "/api/timeline" => {
             let limit = param("limit")
                 .and_then(|value| value.parse().ok())

@@ -18,6 +18,21 @@ pub struct Snapshot {
     /// When the graph last changed (event-log mtime).
     pub changed_at_ms: u64,
     pub generated_at_ms: u64,
+    /// The working tree measured against the graph, when the graph
+    /// recorded where it looked. The graph cannot see uncommitted work,
+    /// but it can say what it has not seen — every view carries this so
+    /// no number quietly poses as current.
+    pub working_tree: Option<WorkingTree>,
+}
+
+/// How the working tree relates to what the graph last observed.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WorkingTree {
+    /// `in_step` | `ahead` | `unavailable`
+    pub state: String,
+    /// Files that changed since the graph last looked (`ahead` only).
+    pub files: usize,
+    pub sentence: String,
 }
 
 /// A pointer to something Eyes can open.
@@ -39,6 +54,20 @@ pub struct Fact {
     pub reason: Option<String>,
     pub tone: String,
     pub target: Option<Ref>,
+}
+
+// ---------------------------------------------------------------------------
+// Next
+// ---------------------------------------------------------------------------
+
+/// The work queue: what should happen now, ranked worst-first — the same
+/// queue the agents read, in the human voice.
+#[derive(Debug, Clone, Serialize)]
+pub struct NextView {
+    pub snapshot: Snapshot,
+    pub headline: String,
+    pub subhead: String,
+    pub queue: Vec<Concern>,
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +145,10 @@ pub struct NowView {
     pub headline: String,
     pub subhead: String,
     pub needs_you: Vec<Concern>,
+    /// Personal: what the graph recorded since this viewer's last visit.
+    /// The viewer's marker lives in their browser; the sentence is still
+    /// composed here — the voice never moves to the client.
+    pub since_you_looked: Option<String>,
     pub since: SinceLastSession,
     pub attention: Vec<AttentionCard>,
     /// The state of every claim in the graph, at a glance.
@@ -352,6 +385,9 @@ pub struct Session {
     pub tools: Vec<ToolUse>,
     pub live: bool,
     pub state: String,
+    /// What became of its work, once someone judged it — a sentence,
+    /// present only when an outcome was recorded.
+    pub outcome: Option<String>,
     pub touched: Vec<Ref>,
     pub more_touched: usize,
     /// Artifacts this session produced, derived from what it edited.
@@ -400,6 +436,9 @@ pub struct WorkView {
     /// being read out loud.
     pub sessions_hint: Option<String>,
     pub sessions_hint_command: Option<String>,
+    /// Files edited by more than one session — handed back and forth, a
+    /// smell of thrash or of a spec that did not survive first contact.
+    pub rework: Vec<Fact>,
 }
 
 // ---------------------------------------------------------------------------
@@ -668,6 +707,10 @@ pub struct ThingExtras {
     pub reach: Option<FeatureReachView>,
     /// Any kind: the features this thing serves, and how Eyes knows.
     pub serves: Vec<Attribution>,
+    /// Source file: the pre-edit briefing — whether the file may be
+    /// written, what an edit reaches, what covers it, what past sessions
+    /// learned here. The same answer agents get from `brain before`.
+    pub briefing: Vec<Concern>,
 }
 
 /// What a feature reaches: what it declares, and what the graph already

@@ -133,7 +133,7 @@ fn queries_never_write_and_every_view_names_its_snapshot() {
     let store = Store::open(f.state.config.store_root.clone()).unwrap();
     let before = store.count_objects().unwrap();
 
-    let now = f.state.read(crate::query::now::build).unwrap();
+    let now = f.state.read(|loaded| crate::query::now::build(loaded, None)).unwrap();
     let library = f
         .state
         .read(|loaded| crate::query::library::build(loaded, "decisions", ""))
@@ -163,7 +163,7 @@ fn queries_never_write_and_every_view_names_its_snapshot() {
 #[test]
 fn now_speaks_in_sentences_and_names_the_fix() {
     let f = fixture();
-    let now = f.state.read(crate::query::now::build).unwrap();
+    let now = f.state.read(|loaded| crate::query::now::build(loaded, None)).unwrap();
 
     assert!(now.headline.ends_with('.'), "headline: {}", now.headline);
     // README mentions the file that changed underneath it.
@@ -205,7 +205,7 @@ fn now_speaks_in_sentences_and_names_the_fix() {
 #[test]
 fn attention_cards_drop_reasons_a_person_cannot_use() {
     let f = fixture();
-    let now = f.state.read(crate::query::now::build).unwrap();
+    let now = f.state.read(|loaded| crate::query::now::build(loaded, None)).unwrap();
     for card in &now.attention {
         assert!(!card.reasons.is_empty(), "a card with nothing to say is noise");
         for reason in &card.reasons {
@@ -669,7 +669,14 @@ fn the_view_refreshes_only_when_the_graph_moves() {
 /// check the whole vocabulary at once.
 fn prose_of(f: &Fixture) -> String {
     let mut prose = Vec::new();
-    let now = f.state.read(crate::query::now::build).unwrap();
+    let next = f.state.read(crate::query::next::build).unwrap();
+    prose.push(next.headline.clone());
+    prose.push(next.subhead.clone());
+    for item in &next.queue {
+        prose.push(item.title.clone());
+        prose.push(item.reason.clone());
+    }
+    let now = f.state.read(|loaded| crate::query::now::build(loaded, None)).unwrap();
     prose.push(now.headline.clone());
     prose.push(now.subhead.clone());
     for concern in &now.needs_you {
@@ -1050,7 +1057,7 @@ fn every_surface_is_a_read() {
     let root = f.state.config.content_root.clone();
 
     // A crawl of everything a person can open.
-    f.state.read(crate::query::now::build).unwrap();
+    f.state.read(|loaded| crate::query::now::build(loaded, None)).unwrap();
     f.state.read(crate::query::work::build).unwrap();
     f.state.read(crate::query::roadmap::build).unwrap();
     f.state.read(crate::query::tests::build).unwrap();
@@ -1157,7 +1164,7 @@ fn a_part_that_is_not_ready_sinks_its_parent() {
 #[test]
 fn the_headline_never_claims_all_clear_while_something_needs_you() {
     let f = fixture();
-    let now = f.state.read(crate::query::now::build).unwrap();
+    let now = f.state.read(|loaded| crate::query::now::build(loaded, None)).unwrap();
 
     // The fixture has a drifted document, so something does need a person.
     assert!(!now.needs_you.is_empty());
@@ -1419,4 +1426,181 @@ fn no_component_takes_a_name_the_application_frame_uses() {
         stolen.is_empty(),
         "these rules restyle the application frame rather than a component: {stolen:?}"
     );
+}
+
+/// The snapshot is honest about uncommitted work: a file edited after the
+/// graph last looked shows up on the stamp every view carries — the tree
+/// can move without the graph moving, and that is exactly the case a
+/// person must not miss.
+#[test]
+fn the_snapshot_says_when_the_working_tree_moved_on() {
+    let fx = fixture();
+    let before = fx.state.snapshot().unwrap();
+    let tree = before
+        .working_tree
+        .expect("the graph recorded where it looked");
+    assert_eq!(tree.state, "in_step", "{tree:?}");
+
+    fs::write(
+        fx._workspace.path().join("crates/app/src/lib.rs"),
+        "use core_lib::core_thing;\npub fn app_thing() { /* v2 */ }\n",
+    )
+    .unwrap();
+    fx.state.measure_drift().unwrap();
+    let after = fx.state.snapshot().unwrap();
+    let tree = after.working_tree.expect("still measured");
+    assert_eq!(tree.state, "ahead", "{tree:?}");
+    assert_eq!(tree.files, 1);
+    assert!(
+        tree.sentence.contains("1 file has changed"),
+        "{}",
+        tree.sentence
+    );
+}
+
+/// The queue ranks worst-first, speaks the human voice, and every row
+/// names the command that acts on it — the same queue the agents read.
+#[test]
+fn the_queue_ranks_worst_first_and_speaks() {
+    let f = fixture();
+    let view = f.state.read(crate::query::next::build).unwrap();
+    assert!(!view.queue.is_empty());
+    assert_eq!(view.queue[0].severity, "act", "{:?}", view.queue[0].title);
+    let prose: String = view
+        .queue
+        .iter()
+        .map(|c| format!("{} — {}\n", c.title, c.reason))
+        .collect();
+    assert!(prose.contains("rejects a bad password"), "{prose}");
+    assert!(!prose.contains("tested_by"), "humanized: {prose}");
+    assert!(prose.contains("not yet tested"), "{prose}");
+    assert!(
+        view.queue.iter().all(|c| c.fix_command.is_some()),
+        "every row acts"
+    );
+}
+
+/// A source file's dossier answers the pre-edit questions: may I write
+/// it, what does an edit reach, what covers it, and what past sessions
+/// learned here — the same answer agents get from `brain before`.
+#[test]
+fn a_file_dossier_briefs_before_an_edit() {
+    let f = fixture();
+    let sid = StableId::derive(&["file", "crates/core-lib/src/lib.rs"]);
+    let store = Store::open(f._store_dir.path()).unwrap();
+    brain_observe::twin::add_note_kinded(
+        &store,
+        &sid,
+        "dead-end",
+        "the loop that failed: caching per request",
+    )
+    .unwrap();
+
+    let root = f._workspace.path().to_path_buf();
+    let view = f
+        .state
+        .read(|loaded| crate::query::thing::build(loaded, &sid.to_string(), Some(&root)))
+        .unwrap();
+    let text: String = view
+        .extras
+        .briefing
+        .iter()
+        .map(|c| format!("{} — {}\n", c.title, c.reason))
+        .collect();
+    assert!(text.contains("editable"), "{text}");
+    assert!(text.contains("an edit here reaches 1 other file"), "{text}");
+    assert!(text.contains("no test covers this file"), "{text}");
+    assert!(text.contains("a dead end was recorded here"), "{text}");
+    assert!(text.contains("the loop that failed"), "{text}");
+}
+
+/// Work shows what became of a session's work, and names the files that
+/// were handed back and forth between sessions — the rework smell.
+#[test]
+fn work_shows_outcomes_and_files_handed_back_and_forth() {
+    let workspace = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let store_dir = tempfile::tempdir().unwrap();
+    let root = workspace.path().canonicalize().unwrap();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(root.join("src/login.rs"), "pub fn login() {}\n").unwrap();
+    let cwd = root.to_str().unwrap();
+
+    let transcripts = home.path().join(".claude/projects/-Users-x-app");
+    fs::create_dir_all(&transcripts).unwrap();
+    for (id, when) in [
+        ("sess-a", "2026-07-29T06:00:00.000Z"),
+        ("sess-b", "2026-07-29T08:00:00.000Z"),
+    ] {
+        let lines = [
+            format!(
+                r#"{{"type":"user","sessionId":"{id}","cwd":"{cwd}","timestamp":"{when}","message":{{"role":"user","content":[{{"type":"text","text":"Fix the login flow."}}]}}}}"#
+            ),
+            format!(
+                r#"{{"type":"assistant","sessionId":"{id}","cwd":"{cwd}","timestamp":"{when}","message":{{"role":"assistant","model":"claude-fable-5","content":[{{"type":"tool_use","name":"Edit","input":{{"file_path":"{cwd}/src/login.rs"}}}}]}}}}"#
+            ),
+        ];
+        fs::write(transcripts.join(format!("{id}.jsonl")), lines.join("\n")).unwrap();
+    }
+
+    let store = Store::open(store_dir.path()).unwrap();
+    twin::refresh(&store, &root, "twin/app").unwrap();
+    let out = brain_observe::sessions::import(&store, home.path(), &root, "twin/app", None, 0)
+        .unwrap();
+    assert_eq!(out.imported, 2);
+    brain_observe::sessions::annotate(&store, "twin/app", "sess-a", None, Some("shipped"))
+        .unwrap();
+
+    let state = AppState::new(Config {
+        store_root: store_dir.path().to_path_buf(),
+        content_root: root.to_path_buf(),
+        prefix: "twin/app".to_string(),
+        ..Config::default()
+    })
+    .unwrap();
+    let view = state.read(crate::query::work::build).unwrap();
+
+    assert!(
+        view.sessions
+            .iter()
+            .any(|s| s.outcome.as_deref() == Some("its work shipped")),
+        "the judged session says so"
+    );
+    assert_eq!(view.rework.len(), 1, "{:?}", view.rework);
+    assert!(
+        view.rework[0]
+            .text
+            .contains("src/login.rs was edited by 2 different sessions"),
+        "{}",
+        view.rework[0].text
+    );
+}
+
+/// The personal delta: the browser remembers the viewer's cursor, the
+/// server composes the sentence — per-viewer state without a write.
+#[test]
+fn now_speaks_the_personal_delta_from_the_seen_cursor() {
+    let f = fixture();
+    let cursor = f.state.snapshot().unwrap().cursor;
+    let view = f
+        .state
+        .read(|loaded| crate::query::now::build(loaded, Some(cursor)))
+        .unwrap();
+    assert_eq!(
+        view.since_you_looked.as_deref(),
+        Some("nothing new since you last looked")
+    );
+    let view = f
+        .state
+        .read(|loaded| crate::query::now::build(loaded, Some(cursor.saturating_sub(5))))
+        .unwrap();
+    assert_eq!(
+        view.since_you_looked.as_deref(),
+        Some("5 new facts recorded since you last looked")
+    );
+    let view = f
+        .state
+        .read(|loaded| crate::query::now::build(loaded, None))
+        .unwrap();
+    assert!(view.since_you_looked.is_none());
 }

@@ -12,6 +12,7 @@ pub mod library;
 pub mod map;
 pub mod media;
 pub mod mri;
+pub mod next;
 pub mod now;
 pub mod roadmap;
 pub mod tests;

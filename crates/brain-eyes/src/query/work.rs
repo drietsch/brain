@@ -29,10 +29,17 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
 
     let rows = sessions::list(store, index, prefix).map_err(|e| e.to_string())?;
     let mut sessions_out = Vec::new();
+    let mut editors: std::collections::BTreeMap<
+        brain_core::ids::StableId,
+        std::collections::BTreeSet<brain_core::ids::StableId>,
+    > = std::collections::BTreeMap::new();
     for row in rows.iter().take(25) {
         let live = now.saturating_sub(row.ended_at_ms) < LIVE_WITHIN_MS;
         let touched_all = twin::live_from(index, store, &row.sid, "touched")
             .map_err(|e| e.to_string())?;
+        for (_, file) in &touched_all {
+            editors.entry(file.clone()).or_default().insert(row.sid.clone());
+        }
         let touched: Vec<Ref> = touched_all
             .iter()
             .take(8)
@@ -105,6 +112,7 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
             tools,
             live,
             state,
+            outcome: row.outcome.as_deref().map(|o| say::outcome(o).to_string()),
             more_touched: touched_all.len().saturating_sub(touched.len()),
             touched,
             produced,
@@ -139,6 +147,31 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
         .is_some()
         .then(|| format!("brain sessions import . --prefix {prefix}"));
 
+    // Handed back and forth: the same file edited by more than one
+    // session. Derived from the touched edges the surface already reads.
+    let mut rework_ranked: Vec<(usize, crate::dto::Fact)> = Vec::new();
+    for (file, who) in &editors {
+        if who.len() < 2 {
+            continue;
+        }
+        let reference = query::make_ref(index, store, file);
+        rework_ranked.push((
+            who.len(),
+            Fact {
+                text: format!(
+                    "{} was edited by {}",
+                    reference.label,
+                    say::count(who.len() as u64, "session", "different sessions")
+                ),
+                reason: Some("handed back and forth — worth asking why".to_string()),
+                tone: "watch".to_string(),
+                target: Some(reference),
+            },
+        ));
+    }
+    rework_ranked.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.text.cmp(&b.1.text)));
+    let rework: Vec<Fact> = rework_ranked.into_iter().take(6).map(|(_, f)| f).collect();
+
     Ok(WorkView {
         snapshot: loaded.snapshot.clone(),
         headline,
@@ -147,6 +180,7 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
         plans,
         sessions_hint,
         sessions_hint_command,
+        rework,
     })
 }
 

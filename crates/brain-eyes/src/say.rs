@@ -48,6 +48,47 @@ pub fn count(n: u64, singular: &str, plural: &str) -> String {
     }
 }
 
+/// The working tree measured against the graph. Honest about what the
+/// graph has not seen, without machine vocabulary.
+/// Personal delta: what the graph recorded since this viewer last
+/// looked. Zero is said as quiet reassurance, not omitted — a returning
+/// person deserves to know that nothing moved.
+pub fn since_you_looked(records: u64) -> String {
+    if records == 0 {
+        "nothing new since you last looked".to_string()
+    } else {
+        format!(
+            "{} recorded since you last looked",
+            count(records, "new fact", "new facts")
+        )
+    }
+}
+
+/// What became of a session's work, once someone judged it.
+pub fn outcome(outcome: &str) -> &'static str {
+    match outcome {
+        "shipped" => "its work shipped",
+        "abandoned" => "its work was abandoned",
+        "superseded" => "its work was superseded by later work",
+        _ => "its outcome was recorded",
+    }
+}
+
+pub fn working_tree_ahead(files: u64) -> String {
+    format!(
+        "{} changed since the graph last looked",
+        count(files, "file has", "files have")
+    )
+}
+
+pub fn working_tree_in_step() -> String {
+    "in step with the working tree".to_string()
+}
+
+pub fn working_tree_unavailable() -> String {
+    "the folder the graph was reading is not reachable from here".to_string()
+}
+
 /// The human noun for an entity kind. The graph's kind strings are
 /// implementation vocabulary; these are what a person would say.
 pub fn kind_noun(kind: &str) -> &'static str {

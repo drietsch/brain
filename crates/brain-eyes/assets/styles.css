@@ -121,6 +121,23 @@ a:hover { text-decoration: underline; }
   font: 500 10px/1 var(--ui); text-transform: uppercase; letter-spacing: .08em;
   color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px;
 }
+.tree-drift {
+  font: 500 10.5px/1.3 var(--ui);
+  color: var(--signal); background: var(--signal-fill);
+  border: 1px solid var(--signal-edge); border-radius: 999px; padding: 5px 10px;
+}
+.visit-note {
+  font: 400 13px/1.5 var(--judgment); color: var(--trace);
+  border-left: 2px solid var(--trace-edge); padding-left: 10px; margin: 4px 0 2px;
+}
+.ack {
+  align-self: flex-start; margin-top: 6px;
+  font: 500 10px/1 var(--ui); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px;
+}
+.ack:hover { color: var(--body); border-color: var(--control); }
+.restore { cursor: pointer; }
+.restore:hover { color: var(--trace); }
 .ghost {
   color: var(--body); border: 1px solid var(--control); border-radius: var(--radius-sm);
   padding: 7px 11px; font: 500 11.5px/1 var(--ui); white-space: nowrap;

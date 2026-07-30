@@ -1951,7 +1951,7 @@ pub fn add_doc(
     replay(store, &mut index)?;
     let candidates = twinned_paths(store, prefix)?;
     let mut written = BTreeSet::new();
-    record_doc(
+    let out = record_doc(
         store,
         &index,
         prefix,
@@ -1962,7 +1962,24 @@ pub fn add_doc(
         &candidates,
         &mut written,
         now_ms(),
-    )
+    )?;
+    // Re-registering a document is a statement that it is being worked
+    // again: a plan re-added under a slug that was marked done would
+    // otherwise stay invisible in every active list, with nothing saying
+    // why. Supersession is left alone — it points at a successor, and
+    // reviving past it would contradict that edge.
+    if out.wrote {
+        let sid = StableId::derive(&[meta.kind.as_str(), prefix, &meta.slug]);
+        let (state, _) = crate::lifecycle::of(&index, store, &sid)?;
+        use crate::lifecycle::Lifecycle;
+        if matches!(
+            state,
+            Lifecycle::Done | Lifecycle::Abandoned | Lifecycle::Retired
+        ) {
+            crate::lifecycle::set(store, &index, &sid, Lifecycle::Active, Some("re-registered"))?;
+        }
+    }
+    Ok(out)
 }
 
 /// Explicit ingestion for agent skills/configuration outside the observed
@@ -2040,6 +2057,41 @@ mod tests {
         let mut index = MemIndex::new();
         replay(store, &mut index).unwrap();
         index
+    }
+
+    #[test]
+    fn re_adding_a_done_plan_reactivates_it() {
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = Store::open(store_dir.path()).unwrap();
+        let meta = crate::docs::parse_content(
+            crate::docs::DocKind::Plan,
+            "sprint",
+            "# Sprint\n\nv1.\n",
+            None,
+            None,
+        );
+        add_doc(&store, "twin/app", &meta, "# Sprint\n\nv1.\n", "test").unwrap();
+
+        let sid = StableId::derive(&["plan", "twin/app", "sprint"]);
+        let index = fresh_index(&store);
+        crate::lifecycle::set(&store, &index, &sid, crate::lifecycle::Lifecycle::Done, None)
+            .unwrap();
+
+        // Re-registering with new content is a statement of intent: the
+        // plan is being worked again, so it returns to the active lists.
+        let meta = crate::docs::parse_content(
+            crate::docs::DocKind::Plan,
+            "sprint",
+            "# Sprint\n\nv2 — reopened.\n",
+            None,
+            None,
+        );
+        let out = add_doc(&store, "twin/app", &meta, "# Sprint\n\nv2 — reopened.\n", "test")
+            .unwrap();
+        assert!(out.wrote);
+        let index = fresh_index(&store);
+        let (state, _) = crate::lifecycle::of(&index, &store, &sid).unwrap();
+        assert_eq!(state, crate::lifecycle::Lifecycle::Active);
     }
 
     #[test]

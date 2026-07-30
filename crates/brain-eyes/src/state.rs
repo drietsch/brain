@@ -7,7 +7,8 @@
 //! freshness is a `stat` on `events.jsonl`: the log is append-only, so a
 //! changed byte length is exactly the signal that the graph advanced.
 
-use crate::dto::Snapshot;
+use crate::dto::{Snapshot, WorkingTree};
+use crate::say;
 use brain_core::ids::StableId;
 use brain_core::object::Object;
 use brain_observe::attention::{self, Attention};
@@ -239,6 +240,45 @@ fn scan_events(store: &Store) -> Vec<EventRow> {
 pub struct AppState {
     pub config: Config,
     loaded: RwLock<Loaded>,
+    /// When the working tree was last measured (ms). The tree can move
+    /// without the graph moving — exactly the case the snapshot must not
+    /// miss — so it is re-measured on a short leash rather than per
+    /// graph version.
+    drift_measured_at: std::sync::Mutex<u64>,
+}
+
+/// How often the working tree is re-measured, at most.
+const DRIFT_TTL_MS: u64 = 10_000;
+
+/// Measure the working tree against the graph, when the graph recorded
+/// where it looked. Read-only; a missing recording yields `None`.
+fn working_tree(loaded: &Loaded) -> Option<WorkingTree> {
+    use brain_observe::wake::TreeDrift;
+    match brain_observe::wake::tree_drift(&loaded.store, &loaded.index, loaded.prefix()).ok()? {
+        Some(TreeDrift::InSync) => Some(WorkingTree {
+            state: "in_step".to_string(),
+            files: 0,
+            sentence: say::working_tree_in_step(),
+        }),
+        Some(TreeDrift::Ahead {
+            added,
+            changed,
+            deleted,
+        }) => {
+            let files = added.len() + changed.len() + deleted.len();
+            Some(WorkingTree {
+                state: "ahead".to_string(),
+                files,
+                sentence: say::working_tree_ahead(files as u64),
+            })
+        }
+        Some(TreeDrift::Unavailable { .. }) => Some(WorkingTree {
+            state: "unavailable".to_string(),
+            files: 0,
+            sentence: say::working_tree_unavailable(),
+        }),
+        None => None,
+    }
 }
 
 impl AppState {
@@ -248,6 +288,7 @@ impl AppState {
         Ok(AppState {
             config,
             loaded: RwLock::new(loaded),
+            drift_measured_at: std::sync::Mutex::new(now_ms()),
         })
     }
 
@@ -257,12 +298,42 @@ impl AppState {
     pub fn read<T>(&self, f: impl FnOnce(&Loaded) -> Result<T, String>) -> Result<T, String> {
         if self.is_stale()? {
             self.refresh()?;
+        } else if self.drift_expired() {
+            self.measure_drift()?;
         }
         let guard = self
             .loaded
             .read()
             .map_err(|_| "graph view is unavailable".to_string())?;
         f(&guard)
+    }
+
+    fn drift_expired(&self) -> bool {
+        self.drift_measured_at
+            .lock()
+            .map(|at| now_ms().saturating_sub(*at) >= DRIFT_TTL_MS)
+            .unwrap_or(false)
+    }
+
+    /// Re-measure the working tree and stamp it onto the held snapshot.
+    /// The walk runs against a read view so readers are not blocked by it.
+    pub(crate) fn measure_drift(&self) -> Result<(), String> {
+        let measured = {
+            let guard = self
+                .loaded
+                .read()
+                .map_err(|_| "graph view is unavailable".to_string())?;
+            working_tree(&guard)
+        };
+        let mut guard = self
+            .loaded
+            .write()
+            .map_err(|_| "graph view is unavailable".to_string())?;
+        guard.snapshot.working_tree = measured;
+        if let Ok(mut at) = self.drift_measured_at.lock() {
+            *at = now_ms();
+        }
+        Ok(())
     }
 
     /// The current snapshot identity, refreshing first when the log grew.
@@ -305,8 +376,9 @@ fn build(config: &Config) -> Result<Loaded, String> {
         objects: store.count_objects().map_err(|e| e.to_string())?,
         changed_at_ms: events_mtime_ms(&config.store_root),
         generated_at_ms: now_ms(),
+        working_tree: None,
     };
-    Ok(Loaded {
+    let mut loaded = Loaded {
         store,
         index,
         snapshot,
@@ -320,7 +392,9 @@ fn build(config: &Config) -> Result<Loaded, String> {
         mri: OnceLock::new(),
         evidence: OnceLock::new(),
         spine: OnceLock::new(),
-    })
+    };
+    loaded.snapshot.working_tree = working_tree(&loaded);
+    Ok(loaded)
 }
 
 fn events_path(root: &std::path::Path) -> PathBuf {
