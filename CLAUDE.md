@@ -1,9 +1,11 @@
 # Working on brain
 
-An agent-native semantic substrate: the graph is authoritative, files exist
-only below the semantic line. Read `README.md` first, then
-`docs/architecture.md`; the twin (reflective mode) is documented in
-`docs/twin.md`.
+An agent-native semantic substrate: the graph is the authoritative semantic
+layer above the code. Code lives in files under git; deliverables (plans,
+ADRs, features, test protocols, agent sessions) live only in the graph,
+authored through the `brain` CLI, with read-only file projections for
+reference. Read `README.md` first, then `docs/architecture.md`; the twin
+(reflective mode) is documented in `docs/twin.md`.
 
 ## Build and test
 

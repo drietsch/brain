@@ -1,8 +1,13 @@
 # brain
 
-An agent-native semantic substrate: one content-addressed graph that holds
-code, specs, capabilities, intents, receipts, entities and observations — with
-no files above the semantic line.
+An agent-native semantic substrate: one content-addressed graph that is the
+authoritative semantic layer above a codebase — decisions, plans, features,
+symbols, test evidence, observations — while the code itself lives where it
+always has: in files, under git. Everything semantic is authored through the
+governed `brain` CLI and persisted only in the graph; the filesystem carries
+read-only projections of it, for reference, never for editing. Programs can
+also live natively in the graph as content-addressed terms; that mode runs
+end to end and remains the founding experiment.
 
 **Status: scaffold.** The kernel compiles, is tested, and exercises the full
 governed loop end to end, but everything here is deliberately minimal.
@@ -26,20 +31,67 @@ gracefully when not).
 
 ## The idea in three sentences
 
-Software is not stored as files; it lives as immutable, content-addressed
-nodes in a graph, and "the codebase" is a chain of namespace objects mapping
-names to node hashes. Programs are terms of a tiny calculus in which the only
-gate to the outside world is a capability-checked foreign call wrapped in a
-durable intent (before) and a receipt (after), so a crash mid-effect leaves an
-explicit *indeterminate* state that is reconciled, never blindly retried. The
-same graph can also *twin* external file-based software as entities and
-observations, sharing one identity scheme so twinned things can later gain
-native implementations without re-modeling.
+The graph *twins* file-based software: code stays on the filesystem under
+git, and the graph holds the semantic layer above it — symbols, relations,
+decisions, plans, test evidence — as sourced, time-bound observations rather
+than eternal truths. The same graph can also hold programs natively, as
+immutable terms of a tiny calculus whose only gate to the outside world is a
+capability-checked foreign call wrapped in a durable intent (before) and a
+receipt (after), so a crash mid-effect leaves an explicit *indeterminate*
+state that is reconciled, never blindly retried. One identity scheme spans
+both modes, so migration is a gradient — describe, observe, govern, absorb —
+and a twinned thing that later gains a native implementation is the same
+node, no re-modeling.
+
+## The ambition
+
+That the graph always reflects the actual state of the application it
+supports: every feature, every capability, every test, every plan, every
+coding session — present, current, and interconnected. Freshness is worked
+for, not assumed: hooks refresh the twin on every commit, observations carry
+sources and timestamps, staleness is surfaced (`brain twin stale`) and drift
+is repaired under governance (`brain tidy`). And because it is one graph, the
+connections are queryable — which tests cover which feature, which decision
+shaped which file, which session touched what — with `brain eyes` as the
+visualization layer on top: the state of the application, rendered for
+people, with judgments, evidence and media. For developers, eyes doubles as
+observability over the agentic work itself — sessions, plans, protocols,
+in-flight intents — so everybody stays constantly up to date and the
+orchestrating developer knows exactly what happened, what is going on now,
+and what comes next.
+
+## Where things live
+
+- **Code** — on the filesystem, under git, as ever. The twin observes it:
+  symbols, imports, churn, blast radius.
+- **Deliverables** — plans, ADRs, features, task lists, test protocols,
+  agent sessions, notes — are persisted only in the graph. Agents (Claude
+  Code, Codex, ...) author and modify them exclusively through the `brain`
+  CLI (`brain artifact new|edit`, `brain plan add`, `brain testrun import`,
+  `brain note`, ...), never by writing documents into the repository.
+- **Projections** — the graph renders deliverables to files (e.g. under
+  `docs/brain/`) so people and tools can read them in place. They are
+  read-only by contract: no mutations through the file layer — a change goes
+  through the CLI or it doesn't happen, and the opt-in pre-commit gate
+  refuses hand-edited projections.
+
+## One contract for many agents
+
+Deliverables are authored against templates that live in the graph itself:
+plan templates, ADR templates, briefing/concept templates, UX/UI design
+templates, test templates — one standardized registry (`brain template set`,
+scaffolding via `brain deliverable new`), so agents from different vendors
+(Claude Code, Codex, ...) produce the same shapes and can pick up each
+other's work. The same registry projects the guardrails agents read (`brain
+instructions generate`). And the templates are not static: they evolve on
+evidence — `brain template fitness` scores contract versions by conformance,
+outcomes and verdicts, so past learnings reshape what the next agent is
+asked to produce.
 
 ## Quickstart
 
 ```bash
-cargo test                 # 90 tests, including crash recovery
+cargo test                 # 178 tests, including crash recovery
 cargo run -p brain -- init
 cargo run -p brain -- demo            # author -> store -> bind -> run
 cargo run -p brain -- twin refresh . --prefix twin/self   # the brain twins itself
@@ -73,6 +125,13 @@ cargo run -p brain -- wake twin/self            # orientation: last sleep, the d
 cargo run -p brain -- attend twin/self          # attention: what matters now, ranked with reasons
 cargo run -p brain -- spine twin/self           # what each feature reaches, what nothing claims, what nothing corroborates
 cargo run -p brain -- related twin/self/crates/brain-observe/src/twin.rs  # association, with why
+cargo run -p brain -- before twin/self/crates/brain-core/src/object.rs  # pre-edit briefing: write access, blast radius, tests, docs, churn, notes
+cargo run -p brain -- next twin/self            # the future leg: ranked work queue — failing, unsettled, rotting, unfinished
+cargo run -p brain -- find twin/self "effect boundary"   # where is the thing that does X — symbols, docs, notes, ranked by centrality
+cargo run -p brain -- can-i docs/brain/plans/sprint.md   # the gate as a question: exit 0 = write the file, exit 3 = the graph owns it
+cargo run -p brain -- wake twin/self --json     # orientation queries speak JSON too — same data, machine shape
+cargo run -p brain -- note twin/self/src/ui.rs "tried X, failed because Y" --kind dead-end  # negative knowledge, queryable
+cargo run -p brain -- sessions annotate twin/self <id> --outcome shipped  # did the session's work survive?
 cargo run -p brain -- sleep twin/self           # consolidation: distill the session into memory
 cargo run -p brain -- plan done twin/self <slug>   # lifecycle: finished plans stop rotting and leave the lists
 cargo run -p brain -- adr ack twin/self <slug>     # reviewed, still accurate — staleness clock reset, file untouched
@@ -113,7 +172,7 @@ leaves the intent/receipt trail in the store for inspection.
 | `brain-runtime` | Fuel-metered interpreter; capabilities checked before effects; effects only through the intent/receipt boundary. |
 | `brain-observe` | Reflective mode — the twin: drift-aware observation of external software with symbols, import relations, agent notes, decisions/plans (ADRs), skills and agent configuration. See `docs/twin.md`. |
 | `brain-index` | The system-of-query seam: derived, disposable indexes rebuilt by replaying the event log. `MemIndex` is the reference backend. |
-| `cortex` | Our own persistent graph-query engine on that seam: checkpoint + event-log delta-replay (O(new events) warm opens), recursive traversal (`--transitive`), bi-temporal reads (`twin at`). Disposable by contract. |
+| `brain-cortex` | Our own persistent graph-query engine on that seam: checkpoint + event-log delta-replay (O(new events) warm opens), recursive traversal (`--transitive`), bi-temporal reads (`twin at`). Disposable by contract. |
 | `brain` (in `crates/brain-cli`) | The monolithic binary: projection instrument plus the embedded docs pipeline; holds no state of its own. |
 
 ## Invariants the scaffold already enforces

@@ -16,7 +16,7 @@ use brain_observe::fitness::{self, TemplateFitness};
 use brain_observe::kinds::{self, KindDef};
 use brain_observe::twin::{self, Insights};
 use brain_store::{now_ms, Store};
-use cortex::Cortex;
+use brain_cortex::Cortex;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{OnceLock, RwLock};

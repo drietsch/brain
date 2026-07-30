@@ -67,9 +67,9 @@ brain feature link twin/self store documented_in architecture --kind doc
 brain feature add twin/self index-and-cortex \
   --title "Index and cortex — replay, and reads that stay warm" --status active --part-of brain
 brain feature link twin/self index-and-cortex implemented_by crates/brain-index/src/lib.rs
-brain feature link twin/self index-and-cortex implemented_by crates/cortex/src/lib.rs
+brain feature link twin/self index-and-cortex implemented_by crates/brain-cortex/src/lib.rs
 brain feature link twin/self index-and-cortex tested_by crates/brain-index/src/lib.rs
-brain feature link twin/self index-and-cortex tested_by crates/cortex/src/lib.rs
+brain feature link twin/self index-and-cortex tested_by crates/brain-cortex/src/lib.rs
 brain feature link twin/self index-and-cortex decided_by adr-011-cortex --kind decision
 brain feature link twin/self index-and-cortex documented_in architecture --kind doc
 ```

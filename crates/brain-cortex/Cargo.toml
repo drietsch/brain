@@ -1,5 +1,5 @@
 [package]
-name = "cortex"
+name = "brain-cortex"
 version.workspace = true
 edition.workspace = true
 description = "brain's own persistent graph-query engine: checkpoint + event-log delta-replay, recursive traversal"

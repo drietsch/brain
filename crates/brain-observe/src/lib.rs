@@ -22,14 +22,17 @@
 //! Observers are sense organs, meant to run continuously; re-ingesting
 //! refreshes observations and surfaces drift as new nodes, never overwrites.
 
+pub mod agenda;
 pub mod agents;
 pub mod assets;
 pub mod assoc;
 pub mod attention;
 pub mod backfill;
+pub mod briefing;
 pub mod coherence;
 pub mod docs;
 pub mod features;
+pub mod find;
 pub mod fitness;
 pub mod govern;
 pub mod instructions;

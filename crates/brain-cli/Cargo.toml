@@ -14,7 +14,7 @@ brain-store = { workspace = true }
 brain-runtime = { workspace = true }
 brain-observe = { workspace = true }
 brain-index = { workspace = true }
-cortex = { workspace = true }
+brain-cortex = { workspace = true }
 brain-eyes = { workspace = true }
 blake3 = { workspace = true }
 serde = { workspace = true }

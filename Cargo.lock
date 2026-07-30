@@ -46,12 +46,12 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "brain-core",
+ "brain-cortex",
  "brain-eyes",
  "brain-index",
  "brain-observe",
  "brain-runtime",
  "brain-store",
- "cortex",
  "libc",
  "serde",
  "serde_json",
@@ -69,14 +69,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "brain-eyes"
+name = "brain-cortex"
 version = "0.1.0"
 dependencies = [
  "brain-core",
  "brain-index",
+ "brain-store",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "brain-eyes"
+version = "0.1.0"
+dependencies = [
+ "brain-core",
+ "brain-cortex",
+ "brain-index",
  "brain-observe",
  "brain-store",
- "cortex",
  "serde",
  "serde_json",
  "tempfile",
@@ -101,6 +113,7 @@ dependencies = [
  "brain-core",
  "brain-index",
  "brain-store",
+ "serde",
  "serde_json",
  "tempfile",
 ]
@@ -152,18 +165,6 @@ name = "constant_time_eq"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
-
-[[package]]
-name = "cortex"
-version = "0.1.0"
-dependencies = [
- "brain-core",
- "brain-index",
- "brain-store",
- "serde",
- "serde_json",
- "tempfile",
-]
 
 [[package]]
 name = "cpufeatures"

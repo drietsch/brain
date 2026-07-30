@@ -23,7 +23,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, serde::Serialize)]
 pub struct TwinReport {
     pub added: Vec<String>,
     pub changed: Vec<String>,
@@ -509,6 +509,16 @@ fn run(
                 observe(store, &repo_sid, &prop, &value, now)?;
             }
         }
+        // Where this twin was observed from, so read-side queries (wake)
+        // can compare the working tree against the graph without guessing.
+        // An observation, not a truth: the path is machine-local and
+        // consumers must tolerate it no longer existing.
+        if let Ok(abs) = fs::canonicalize(root) {
+            let abs = abs.to_string_lossy().to_string();
+            if latest(&index, store, &repo_sid, "root")?.as_deref() != Some(abs.as_str()) {
+                observe(store, &repo_sid, "root", &abs, now)?;
+            }
+        }
         if !bindings.is_empty() {
             store.bind_many(bindings)?;
         }
@@ -561,7 +571,7 @@ fn run(
 /// links. Reading the score off the link count made every parent report
 /// what it happened to be linked to directly — the root of the spine said
 /// `1/4` while its thirteen parts were all ready.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct FeatureProgress {
     pub slug: String,
     pub status: String,
@@ -572,7 +582,7 @@ pub struct FeatureProgress {
     pub by_parts: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize)]
 pub struct Insights {
     pub files: usize,
     pub deleted_files: usize,
@@ -629,7 +639,8 @@ pub struct Insights {
 /// How loudly a stale document should speak. Warn = the doc describes
 /// the present and is now wrong somewhere; info = a record whose context
 /// moved on — visible, never nagging.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     Warn,
     Info,
@@ -644,7 +655,7 @@ impl Severity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct StaleDoc {
     pub slug: String,
     pub kind: String,
@@ -1515,6 +1526,29 @@ fn git_info(root: &Path) -> Vec<(String, String)> {
 // ---------------------------------------------------------------------------
 // Notes: durable agent memory attached to any entity
 // ---------------------------------------------------------------------------
+
+/// The classifications a note may carry. Dead ends are the expensive
+/// knowledge: what was tried and failed, so no session walks it twice.
+pub const NOTE_KINDS: &[&str] = &["learning", "dead-end", "gap", "decision-pending"];
+
+/// A note's classification, when its text carries one (`[dead-end] ...`).
+/// Encoding the kind in the value keeps every existing consumer working —
+/// the tag reads as prose and parses as data.
+pub fn note_kind(text: &str) -> Option<(&str, &str)> {
+    let rest = text.strip_prefix('[')?;
+    let (kind, body) = rest.split_once("] ")?;
+    NOTE_KINDS.contains(&kind).then_some((kind, body))
+}
+
+/// Add a classified note: `[kind] text`, with `kind` from [`NOTE_KINDS`].
+pub fn add_note_kinded(
+    store: &Store,
+    subject: &StableId,
+    kind: &str,
+    text: &str,
+) -> Result<NodeId, StoreError> {
+    add_note(store, subject, &format!("[{kind}] {text}"))
+}
 
 pub fn add_note(store: &Store, subject: &StableId, text: &str) -> Result<NodeId, StoreError> {
     store.put(&Object::Observation {

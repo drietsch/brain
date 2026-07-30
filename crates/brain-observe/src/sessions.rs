@@ -507,6 +507,33 @@ pub fn session_sid(prefix: &str, id: &str) -> StableId {
     StableId::derive(&["session", prefix, id])
 }
 
+/// The outcomes a session can carry once the fate of its work is known.
+/// A note from an abandoned approach deserves different weight than one
+/// that shipped — this is where that weight comes from.
+pub const OUTCOMES: &[&str] = &["shipped", "abandoned", "superseded"];
+
+/// Annotate a session after the fact: the distilled objective (what it
+/// was really about) and the outcome (whether its work survived). New
+/// observations supersede the import-time guess; the guess stays in the
+/// timeline.
+pub fn annotate(
+    store: &Store,
+    prefix: &str,
+    id: &str,
+    objective: Option<&str>,
+    outcome: Option<&str>,
+) -> Result<StableId, StoreError> {
+    let sid = session_sid(prefix, id);
+    let now = now_ms();
+    if let Some(o) = objective {
+        observe_src(store, &sid, "objective", o, "agent", now)?;
+    }
+    if let Some(o) = outcome {
+        observe_src(store, &sid, "outcome", o, "agent", now)?;
+    }
+    Ok(sid)
+}
+
 /// Write one session. Returns false when the transcript has not grown
 /// since the last import, in which case nothing is read or written.
 #[allow(clippy::too_many_arguments)]
@@ -588,12 +615,14 @@ fn relative_to(root: &Path, absolute: &str) -> Option<String> {
 // Reading
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SessionRow {
     pub sid: StableId,
     pub id: String,
     pub agent: String,
     pub objective: String,
+    /// shipped | abandoned | superseded, once someone judged it.
+    pub outcome: Option<String>,
     pub model: Option<String>,
     pub started_at_ms: u64,
     pub ended_at_ms: u64,
@@ -624,6 +653,7 @@ pub fn list(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Session
             id: labels.get("session_id").cloned().unwrap_or_default(),
             agent: labels.get("agent").cloned().unwrap_or_default(),
             objective: latest(index, store, &id, "objective")?.unwrap_or_default(),
+            outcome: latest(index, store, &id, "outcome")?,
             model: latest(index, store, &id, "model")?,
             started_at_ms: number("started_at"),
             ended_at_ms: number("ended_at"),
@@ -645,6 +675,35 @@ mod tests {
         let mut index = MemIndex::new();
         replay(store, &mut index).unwrap();
         index
+    }
+
+    #[test]
+    fn annotate_supersedes_objective_and_records_outcome() {
+        let work = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let root = work.path().canonicalize().unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("src/login.rs"), "pub fn login() {}\n").unwrap();
+        claude_transcript(home.path(), root.to_str().unwrap());
+        let store = Store::open(root.join(".brain")).unwrap();
+        crate::twin::refresh(&store, &root, "twin/app").unwrap();
+        import(&store, home.path(), &root, "twin/app", None, 0).unwrap();
+
+        annotate(
+            &store,
+            "twin/app",
+            "sess-1",
+            Some("Debounce the login redraw loop"),
+            Some("shipped"),
+        )
+        .unwrap();
+
+        let index = fresh_index(&store);
+        let rows = list(&store, &index, "twin/app").unwrap();
+        assert_eq!(rows[0].objective, "Debounce the login redraw loop");
+        assert_eq!(rows[0].outcome.as_deref(), Some("shipped"));
+        // The import-time guess is history, not gone: the observation
+        // timeline keeps both.
     }
 
     fn claude_transcript(home: &Path, cwd: &str) -> PathBuf {

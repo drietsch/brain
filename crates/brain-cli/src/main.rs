@@ -88,6 +88,10 @@ fn main() -> ExitCode {
         Some("spine") => cmd_spine(&args[1..]),
         Some("sleep") => cmd_sleep(&args[1..]),
         Some("related") => cmd_related(&args[1..]),
+        Some("before") => cmd_before(&args[1..]),
+        Some("next") => cmd_next(&args[1..]),
+        Some("find") => cmd_find(&args[1..]),
+        Some("can-i") => cmd_can_i(&args[1..]),
         Some("eyes") => cmd_eyes(&args[1..]),
         Some("docs") => docsgen::cmd_docs(&args[1..], open_store),
         Some("hook") => hooks::cmd_hook(&args[1..], open_store),
@@ -365,7 +369,7 @@ fn cmd_twin_refresh(args: &[String], write: bool) -> Result<(), String> {
     let dir = args
         .first()
         .filter(|a| !a.starts_with("--"))
-        .ok_or("usage: brain twin refresh|status <dir> [--prefix <p>] [--full]")?;
+        .ok_or("usage: brain twin refresh|status <dir> [--prefix <p>] [--full] [--json]")?;
     let prefix = parse_prefix(&args[1..]);
     let full = args.iter().any(|a| a == "--full");
     let store = open_store()?;
@@ -378,6 +382,12 @@ fn cmd_twin_refresh(args: &[String], write: bool) -> Result<(), String> {
         brain_observe::twin::status(&store, path, &prefix)
     }
     .map_err(|e| e.to_string())?;
+    if wants_json(args) {
+        let mut v = serde_json::to_value(&report).map_err(|e| e.to_string())?;
+        v["wrote"] = serde_json::Value::Bool(write);
+        println!("{v}");
+        return Ok(());
+    }
     print_twin_report(&report, write);
     Ok(())
 }
@@ -444,7 +454,11 @@ fn positional(args: &[String]) -> Vec<&String> {
         }
         if let Some(flag) = arg.strip_prefix("--") {
             // Only value-taking flags swallow the next argument.
-            skip = matches!(flag, "prefix" | "why" | "note" | "title" | "kind" | "file");
+            skip = matches!(
+                flag,
+                "prefix" | "why" | "note" | "title" | "kind" | "file" | "top" | "objective"
+                    | "outcome"
+            );
             continue;
         }
         out.push(arg);
@@ -587,10 +601,14 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("symbols") => {
-            let name = args.get(1).ok_or("usage: brain twin symbols <file-name>")?;
+            let name = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .ok_or("usage: brain twin symbols <file-name> [--json]")?;
             let store = open_store()?;
             let index = build_index(&store)?;
             let sid = entity_sid(&store, name)?;
+            let mut rows: Vec<(String, String, String)> = Vec::new();
             for target in relation_targets(&store, &index, &sid, "contains")? {
                 let line = brain_observe::twin::latest(&index, &store, &target, "line")
                     .map_err(|e| e.to_string())?
@@ -599,10 +617,23 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     if let Ok(Object::Entity { labels, .. }) = store.get(&node) {
                         let kind = labels.get("kind").cloned().unwrap_or_default();
                         let sym = labels.get("name").cloned().unwrap_or_default();
-                        println!("{kind:<10} {sym}  (line {line})");
+                        rows.push((kind, sym, line.clone()));
                         break;
                     }
                 }
+            }
+            if wants_json(args) {
+                let rows: Vec<serde_json::Value> = rows
+                    .iter()
+                    .map(|(kind, name, line)| {
+                        serde_json::json!({"kind": kind, "name": name, "line": line})
+                    })
+                    .collect();
+                println!("{}", serde_json::Value::Array(rows));
+                return Ok(());
+            }
+            for (kind, sym, line) in rows {
+                println!("{kind:<10} {sym}  (line {line})");
             }
             Ok(())
         }
@@ -610,7 +641,7 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             let name = args
                 .get(1)
                 .filter(|a| !a.starts_with("--"))
-                .ok_or("usage: brain twin imports|rdeps <file-name> [--transitive]")?;
+                .ok_or("usage: brain twin imports|rdeps <file-name> [--transitive] [--json]")?;
             let reverse = op == "rdeps";
             let store = open_store()?;
             let index = build_index(&store)?;
@@ -620,6 +651,19 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                 let reached = index
                     .reach(&store, &sid, "imports", reverse, 64)
                     .map_err(|e| e.to_string())?;
+                if wants_json(args) {
+                    let rows: Vec<serde_json::Value> = reached
+                        .iter()
+                        .map(|(target, depth)| {
+                            serde_json::json!({
+                                "label": entity_label(&store, &index, target),
+                                "depth": depth,
+                            })
+                        })
+                        .collect();
+                    println!("{}", serde_json::Value::Array(rows));
+                    return Ok(());
+                }
                 if reached.is_empty() {
                     println!("nothing, transitively");
                 }
@@ -643,6 +687,14 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                 if !targets.contains(&t) {
                     targets.push(t);
                 }
+            }
+            if wants_json(args) {
+                let rows: Vec<String> = targets
+                    .iter()
+                    .map(|t| entity_label(&store, &index, t))
+                    .collect();
+                println!("{}", serde_json::to_string(&rows).map_err(|e| e.to_string())?);
+                return Ok(());
             }
             if targets.is_empty() {
                 println!(
@@ -699,9 +751,16 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("insights") => {
-            let prefix = args.get(1).ok_or("usage: brain twin insights <prefix>")?;
+            let prefix = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .ok_or("usage: brain twin insights <prefix> [--json]")?;
             let store = open_store()?;
             let ins = brain_observe::twin::insights(&store, prefix).map_err(|e| e.to_string())?;
+            if wants_json(args) {
+                println!("{}", serde_json::to_string(&ins).map_err(|e| e.to_string())?);
+                return Ok(());
+            }
             let now = now_ms();
             println!("== twin insights: {prefix} ==");
             {
@@ -885,9 +944,13 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("tests") => {
-            let prefix = args.get(1).ok_or("usage: brain twin tests <prefix>")?;
+            let prefix = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .ok_or("usage: brain twin tests <prefix> [--json]")?;
             let store = open_store()?;
             let index = build_index(&store)?;
+            let mut files: Vec<(String, String, String, String, Vec<String>)> = Vec::new();
             for (name, node) in store.namespace().map_err(|e| e.to_string())? {
                 let Some(rel) = name.strip_prefix(&format!("{prefix}/")) else {
                     continue;
@@ -908,23 +971,41 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
                     .map_err(|e| e.to_string())?
                     .map(|_| "test file")
                     .unwrap_or("inline tests");
-                let covers = relation_targets(&store, &index, &sid, "covers")?;
-                let covering = if covers.is_empty() {
-                    String::new()
-                } else {
-                    format!(
-                        "  covers {}",
-                        covers
-                            .iter()
-                            .map(|t| entity_label(&store, &index, t))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
-                };
-                println!("{rel}  [{framework}] {declared} test(s), {role}{covering}");
+                let covers: Vec<String> = relation_targets(&store, &index, &sid, "covers")?
+                    .iter()
+                    .map(|t| entity_label(&store, &index, t))
+                    .collect();
+                files.push((rel.to_string(), framework, declared, role.to_string(), covers));
             }
             let failing = brain_observe::testing::failing_cases(&store, &index, prefix)
                 .map_err(|e| e.to_string())?;
+            if wants_json(args) {
+                let rows: Vec<serde_json::Value> = files
+                    .iter()
+                    .map(|(file, framework, declared, role, covers)| {
+                        serde_json::json!({
+                            "file": file,
+                            "framework": framework,
+                            "declared": declared,
+                            "role": role,
+                            "covers": covers,
+                        })
+                    })
+                    .collect();
+                println!(
+                    "{}",
+                    serde_json::json!({"files": rows, "failing": failing})
+                );
+                return Ok(());
+            }
+            for (rel, framework, declared, role, covers) in files {
+                let covering = if covers.is_empty() {
+                    String::new()
+                } else {
+                    format!("  covers {}", covers.join(", "))
+                };
+                println!("{rel}  [{framework}] {declared} test(s), {role}{covering}");
+            }
             if !failing.is_empty() {
                 println!("failing now:");
                 for name in failing {
@@ -934,9 +1015,19 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("stale") => {
-            let prefix = args.get(1).ok_or("usage: brain twin stale <prefix>")?;
+            let prefix = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .ok_or("usage: brain twin stale <prefix> [--json]")?;
             let store = open_store()?;
             let ins = brain_observe::twin::insights(&store, prefix).map_err(|e| e.to_string())?;
+            if wants_json(args) {
+                println!(
+                    "{}",
+                    serde_json::to_string(&ins.stale_docs).map_err(|e| e.to_string())?
+                );
+                return Ok(());
+            }
             if ins.stale_docs.is_empty() {
                 println!("no stale docs under {prefix}");
             }
@@ -1008,23 +1099,73 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
 }
 
 fn cmd_note(args: &[String]) -> Result<(), String> {
-    let (name, text) = match args {
-        [name, rest @ ..] if !rest.is_empty() => (name, rest.join(" ")),
-        _ => return Err("usage: brain note <name> <text...>".to_string()),
+    let usage = "usage: brain note <name> <text...> [--kind learning|dead-end|gap|decision-pending]";
+    let kind = args
+        .iter()
+        .position(|a| a == "--kind")
+        .map(|i| args.get(i + 1).cloned().ok_or("--kind needs a value"))
+        .transpose()?;
+    if let Some(k) = kind.as_deref() {
+        if !brain_observe::twin::NOTE_KINDS.contains(&k) {
+            return Err(format!(
+                "unknown note kind '{k}' ({})\n{usage}",
+                brain_observe::twin::NOTE_KINDS.join("|")
+            ));
+        }
+    }
+    let pos = positional(args);
+    let (name, rest) = match pos.as_slice() {
+        [name, rest @ ..] if !rest.is_empty() => (*name, rest),
+        _ => return Err(usage.to_string()),
     };
+    let text = rest
+        .iter()
+        .map(|s| s.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
     let store = open_store()?;
     let sid = entity_sid(&store, name)?;
-    brain_observe::twin::add_note(&store, &sid, &text).map_err(|e| e.to_string())?;
-    println!("noted on {name}");
+    match kind {
+        Some(k) => {
+            brain_observe::twin::add_note_kinded(&store, &sid, &k, &text)
+                .map_err(|e| e.to_string())?;
+            println!("noted on {name} [{k}]");
+        }
+        None => {
+            brain_observe::twin::add_note(&store, &sid, &text).map_err(|e| e.to_string())?;
+            println!("noted on {name}");
+        }
+    }
     Ok(())
 }
 
 fn cmd_notes(args: &[String]) -> Result<(), String> {
-    let name = args.first().ok_or("usage: brain notes <name>")?;
+    let name = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .ok_or("usage: brain notes <name> [--top N] [--json]")?;
+    let top = parse_top(args, usize::MAX)?;
     let store = open_store()?;
     let index = build_index(&store)?;
     let sid = entity_sid(&store, name)?;
-    let notes = brain_observe::twin::notes(&index, &store, &sid).map_err(|e| e.to_string())?;
+    let mut notes = brain_observe::twin::notes(&index, &store, &sid).map_err(|e| e.to_string())?;
+    // `--top N` keeps the newest N, still in true (oldest-first) order.
+    if notes.len() > top {
+        notes.drain(..notes.len() - top);
+    }
+    if wants_json(args) {
+        let rows: Vec<serde_json::Value> = notes
+            .iter()
+            .map(|(at, text)| match brain_observe::twin::note_kind(text) {
+                Some((kind, body)) => {
+                    serde_json::json!({"at_ms": at, "kind": kind, "text": body})
+                }
+                None => serde_json::json!({"at_ms": at, "text": text}),
+            })
+            .collect();
+        println!("{}", serde_json::Value::Array(rows));
+        return Ok(());
+    }
     if notes.is_empty() {
         println!("no notes on {name}");
     }
@@ -2441,6 +2582,28 @@ fn cmd_feature(args: &[String]) -> Result<(), String> {
                 println!("no features under {prefix}");
                 return Ok(());
             }
+            if wants_json(args) {
+                let mut out = Vec::new();
+                for slug in &roots {
+                    let report = features::evaluate(&store, &index, prefix, slug)
+                        .map_err(|e| e.to_string())?;
+                    let title = features::list(&store, &index, prefix)
+                        .map_err(|e| e.to_string())?
+                        .into_iter()
+                        .find(|r| r.slug == *slug)
+                        .map(|r| r.title)
+                        .unwrap_or_else(|| slug.clone());
+                    let (met, total) = report.score();
+                    let mut v = serde_json::to_value(&report).map_err(|e| e.to_string())?;
+                    v["slug"] = serde_json::Value::String(slug.clone());
+                    v["title"] = serde_json::Value::String(title);
+                    v["met"] = serde_json::Value::from(met);
+                    v["total"] = serde_json::Value::from(total);
+                    out.push(v);
+                }
+                println!("{}", serde_json::Value::Array(out));
+                return Ok(());
+            }
             for slug in roots {
                 let report =
                     features::evaluate(&store, &index, prefix, &slug).map_err(|e| e.to_string())?;
@@ -2718,15 +2881,15 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
     let objects = store.count_objects().map_err(|e| e.to_string())?;
 
     let t0 = std::time::Instant::now();
-    let cold = cortex::Cortex::open_ephemeral(&store).map_err(|e| e.to_string())?;
+    let cold = brain_cortex::Cortex::open_ephemeral(&store).map_err(|e| e.to_string())?;
     let cold_time = t0.elapsed();
 
     // Ensure a checkpoint exists, then measure the warm path.
-    cortex::Cortex::open(&store)
+    brain_cortex::Cortex::open(&store)
         .and_then(|g| g.checkpoint().map(|_| ()))
         .map_err(|e| e.to_string())?;
     let t1 = std::time::Instant::now();
-    let warm = cortex::Cortex::open(&store).map_err(|e| e.to_string())?;
+    let warm = brain_cortex::Cortex::open(&store).map_err(|e| e.to_string())?;
     let warm_time = t1.elapsed();
 
     // Correctness first: identical answers over real probes, or no bench.
@@ -2738,7 +2901,7 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    if !cortex::answers_match(
+    if !brain_cortex::answers_match(
         &*cold,
         &*warm,
         &[],
@@ -2757,7 +2920,7 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
     // command opens a checkpoint and then reads the objects it needs; this
     // reproduces that.
     let query_store = open_store()?;
-    let query_index = cortex::Cortex::open(&query_store).map_err(|e| e.to_string())?;
+    let query_index = brain_cortex::Cortex::open(&query_store).map_err(|e| e.to_string())?;
     let t2 = std::time::Instant::now();
     let mut edges = 0usize;
     for sid in &sids {
@@ -3012,10 +3175,16 @@ fn cmd_wake(args: &[String]) -> Result<(), String> {
     let prefix = args
         .first()
         .filter(|a| !a.starts_with("--"))
-        .ok_or("usage: brain wake <prefix> [--full]")?;
+        .ok_or("usage: brain wake <prefix> [--full] [--json]")?;
     let full = args.iter().any(|a| a == "--full");
     let store = open_store()?;
     let index = build_index(&store)?;
+    if wants_json(args) {
+        let o = brain_observe::wake::orientation(&store, &index, prefix)
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string(&o).map_err(|e| e.to_string())?);
+        return Ok(());
+    }
     let text =
         brain_observe::wake::wake(&store, &index, prefix, full).map_err(|e| e.to_string())?;
     println!("{text}");
@@ -3026,12 +3195,17 @@ fn cmd_attend(args: &[String]) -> Result<(), String> {
     let prefix = args
         .first()
         .filter(|a| !a.starts_with("--"))
-        .ok_or("usage: brain attend <prefix> [--top N]")?;
+        .ok_or("usage: brain attend <prefix> [--top N] [--json]")?;
     let top = parse_top(args, 10)?;
     let store = open_store()?;
     let index = build_index(&store)?;
     let ranked =
         brain_observe::attention::attend(&store, &index, prefix).map_err(|e| e.to_string())?;
+    if wants_json(args) {
+        let rows: Vec<_> = ranked.iter().take(top).collect();
+        println!("{}", serde_json::to_string(&rows).map_err(|e| e.to_string())?);
+        return Ok(());
+    }
     if ranked.is_empty() {
         println!("nothing demands attention under {prefix}");
     }
@@ -3053,7 +3227,7 @@ fn cmd_spine(args: &[String]) -> Result<(), String> {
     let prefix = args
         .first()
         .filter(|a| !a.starts_with("--"))
-        .ok_or("usage: brain spine <prefix> [--unclaimed <kind>]")?;
+        .ok_or("usage: brain spine <prefix> [--unclaimed <kind>] [--json]")?;
     let want = args
         .iter()
         .position(|a| a == "--unclaimed")
@@ -3061,6 +3235,61 @@ fn cmd_spine(args: &[String]) -> Result<(), String> {
     let store = open_store()?;
     let index = build_index(&store)?;
     let spine = brain_observe::spine::build(&store, &index, prefix).map_err(|e| e.to_string())?;
+
+    if wants_json(args) {
+        if let Some(kind) = want {
+            let rows: Vec<String> = spine
+                .unclaimed(kind)
+                .iter()
+                .map(|sid| brain_observe::twin::sid_label(&index, &store, sid))
+                .collect();
+            println!("{}", serde_json::to_string(&rows).map_err(|e| e.to_string())?);
+            return Ok(());
+        }
+        let features: Vec<serde_json::Value> = spine
+            .slugs()
+            .map(|slug| {
+                let reach = spine.reach(slug).expect("just listed");
+                let by_kind: serde_json::Map<String, serde_json::Value> = reach
+                    .by_kind
+                    .iter()
+                    .map(|(kind, rows)| (kind.clone(), serde_json::Value::from(rows.len())))
+                    .collect();
+                serde_json::json!({
+                    "slug": slug,
+                    "files": reach.files.len(),
+                    "reaches": by_kind,
+                })
+            })
+            .collect();
+        let (claimed, total) = spine.claimed_total();
+        let census: Vec<serde_json::Value> = spine
+            .census()
+            .iter()
+            .map(|r| serde_json::json!({"kind": r.kind, "claimed": r.claimed, "total": r.total}))
+            .collect();
+        let uncorroborated: Vec<serde_json::Value> = spine
+            .uncorroborated()
+            .iter()
+            .map(|r| {
+                serde_json::json!({
+                    "slug": r.slug,
+                    "predicate": r.predicate,
+                    "targets": r.targets.len(),
+                    "why": r.why,
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({
+                "features": features,
+                "coverage": {"claimed": claimed, "total": total, "census": census},
+                "uncorroborated": uncorroborated,
+            })
+        );
+        return Ok(());
+    }
 
     if !spine.asked() {
         println!("no feature under {prefix} declares anything yet");
@@ -3133,29 +3362,26 @@ fn cmd_related(args: &[String]) -> Result<(), String> {
     let name = args
         .first()
         .filter(|a| !a.starts_with("--"))
-        .ok_or("usage: brain related <name> [--top N]")?;
+        .ok_or("usage: brain related <name> [--top N] [--json]")?;
     let top = parse_top(args, 10)?;
     let store = open_store()?;
     let index = build_index(&store)?;
     let sid = entity_sid(&store, name)?;
-    // The prefix is the longest bound repo entity whose name prefixes ours
-    // (twin/self/src/main.rs -> twin/self).
-    let mut prefix = String::new();
-    for (n, node) in store.namespace().map_err(|e| e.to_string())? {
-        if name.starts_with(&format!("{n}/")) && n.len() > prefix.len() {
-            if let Ok(Object::Entity { entity_kind, .. }) = store.get(&node) {
-                if entity_kind == "repo" {
-                    prefix = n;
-                }
-            }
-        }
-    }
-    if prefix.is_empty() {
-        return Err(format!("cannot find a twin prefix for '{name}'"));
-    }
+    let prefix = twin_prefix_of(&store, name)?;
     let assoc = brain_observe::assoc::AssocIndex::build(&store, &index, &prefix)
         .map_err(|e| e.to_string())?;
     let related = assoc.related(&sid);
+    if wants_json(args) {
+        let rows: Vec<serde_json::Value> = related
+            .into_iter()
+            .take(top)
+            .map(|(label, score, reasons)| {
+                serde_json::json!({"label": label, "score": score, "reasons": reasons})
+            })
+            .collect();
+        println!("{}", serde_json::Value::Array(rows));
+        return Ok(());
+    }
     if related.is_empty() {
         println!("no associations for {name} (yet — associations grow with history)");
     }
@@ -3178,10 +3404,168 @@ fn parse_top(args: &[String], default: usize) -> Result<usize, String> {
     Ok(default)
 }
 
+/// `--json`: the same answer as data. Queries render prose for people and
+/// serialize the identical structure for agents — one projection each,
+/// never a second source of truth.
+fn wants_json(args: &[String]) -> bool {
+    args.iter().any(|a| a == "--json")
+}
+
+/// The prefix is the longest bound repo entity whose name prefixes ours
+/// (twin/self/src/main.rs -> twin/self).
+fn twin_prefix_of(store: &Store, name: &str) -> Result<String, String> {
+    let mut prefix = String::new();
+    for (n, node) in store.namespace().map_err(|e| e.to_string())? {
+        if name.starts_with(&format!("{n}/")) && n.len() > prefix.len() {
+            if let Ok(Object::Entity { entity_kind, .. }) = store.get(&node) {
+                if entity_kind == "repo" {
+                    prefix = n;
+                }
+            }
+        }
+    }
+    if prefix.is_empty() {
+        return Err(format!("cannot find a twin prefix for '{name}'"));
+    }
+    Ok(prefix)
+}
+
+/// `brain before` — the pre-edit briefing: what depends on this, what
+/// covers it, what constrains it, what past sessions learned here, and
+/// whether it may be written at all. One command instead of five.
+fn cmd_before(args: &[String]) -> Result<(), String> {
+    let name = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .ok_or("usage: brain before <name> [--json]")?;
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let sid = entity_sid(&store, name)?;
+    let prefix = twin_prefix_of(&store, name)?;
+    let briefing = brain_observe::briefing::before(&store, &index, &prefix, name, &sid)
+        .map_err(|e| e.to_string())?;
+    if wants_json(args) {
+        println!(
+            "{}",
+            serde_json::to_string(&briefing).map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
+    println!("{}", brain_observe::briefing::render(&briefing));
+    Ok(())
+}
+
+/// `brain next` — the future leg: the ranked work queue, derived from
+/// everything the graph knows is failing, unsettled, rotting, or open.
+fn cmd_next(args: &[String]) -> Result<(), String> {
+    let prefix = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .ok_or("usage: brain next <prefix> [--top N] [--json]")?;
+    let top = parse_top(args, 10)?;
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let items =
+        brain_observe::agenda::queue(&store, &index, prefix).map_err(|e| e.to_string())?;
+    if wants_json(args) {
+        let rows: Vec<_> = items.iter().take(top).collect();
+        println!("{}", serde_json::to_string(&rows).map_err(|e| e.to_string())?);
+        return Ok(());
+    }
+    println!("{}", brain_observe::agenda::render(&items, prefix, top));
+    Ok(())
+}
+
+/// `brain find` — where is the thing that does X: lexical match over
+/// paths, symbol names, doc titles, and notes, ranked by graph centrality.
+fn cmd_find(args: &[String]) -> Result<(), String> {
+    let usage = "usage: brain find <prefix> <query...> [--top N] [--json]";
+    let pos = positional(args);
+    let (prefix, terms) = match pos.as_slice() {
+        [prefix, terms @ ..] if !terms.is_empty() => (*prefix, terms),
+        _ => return Err(usage.to_string()),
+    };
+    let query = terms
+        .iter()
+        .map(|s| s.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let top = parse_top(args, 10)?;
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    let hits = brain_observe::find::find(&store, &index, prefix, &query)
+        .map_err(|e| e.to_string())?;
+    if wants_json(args) {
+        let rows: Vec<_> = hits.iter().take(top).collect();
+        println!("{}", serde_json::to_string(&rows).map_err(|e| e.to_string())?);
+        return Ok(());
+    }
+    println!("{}", brain_observe::find::render(&hits, &query, prefix, top));
+    Ok(())
+}
+
+/// `brain can-i` — the authoring gate as a question. Exit 0 = write the
+/// file; exit 3 = the graph owns it, and the answer names the command
+/// that edits it. Works for paths the twin has never seen.
+fn cmd_can_i(args: &[String]) -> Result<(), String> {
+    let name = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .ok_or("usage: brain can-i <name-or-path> [--prefix <p>] [--json]")?;
+    let store = open_store()?;
+    let index = build_index(&store)?;
+    // A bound name carries its own prefix; a bare repo path gets one from
+    // --prefix (default twin) and is judged by capture rules alone.
+    let (prefix, sid, rel) = match entity_sid(&store, name) {
+        Ok(sid) => {
+            let prefix = twin_prefix_of(&store, name)?;
+            let rel = name
+                .strip_prefix(&format!("{prefix}/"))
+                .unwrap_or(name)
+                .to_string();
+            (prefix, sid, rel)
+        }
+        Err(_) => {
+            let prefix = parse_prefix(&args[1..]);
+            let sid = brain_core::ids::StableId::derive(&["file", name]);
+            (prefix, sid, name.clone())
+        }
+    };
+    let access = brain_observe::briefing::write_access(&store, &index, &prefix, &sid, &rel)
+        .map_err(|e| e.to_string())?;
+    if wants_json(args) {
+        let mut v = serde_json::to_value(&access).map_err(|e| e.to_string())?;
+        v["name"] = serde_json::Value::String(name.clone());
+        println!("{v}");
+    }
+    use brain_observe::briefing::WriteAccess;
+    match access {
+        WriteAccess::File => {
+            if !wants_json(args) {
+                println!("yes — a plain file; the twin observes changes on refresh");
+            }
+            Ok(())
+        }
+        WriteAccess::Captured { kind } => {
+            if !wants_json(args) {
+                println!("yes — captured as {kind} on refresh (file-first)");
+            }
+            Ok(())
+        }
+        WriteAccess::Projection {
+            kind,
+            slug,
+            edit_via,
+        } => Err(format!(
+            "refused: {name} is a read-only projection of {kind}/{slug} — edit via `{edit_via}`"
+        )),
+    }
+}
+
 /// `brain sessions ...` — the coding agents that worked here.
 fn cmd_sessions(args: &[String]) -> Result<(), String> {
     use brain_observe::sessions;
-    let usage = "usage: brain sessions import [dir] [--prefix <p>] [--agent claude|codex] [--since <ms|30m|2h|7d>] | brain sessions list <prefix>";
+    let usage = "usage: brain sessions import [dir] [--prefix <p>] [--agent claude|codex] [--since <ms|30m|2h|7d>] | brain sessions list <prefix> [--json] | brain sessions annotate <prefix> <session-id> [--objective <text>] [--outcome shipped|abandoned|superseded]";
     match args.first().map(String::as_str) {
         Some("import") => {
             let mut dir = ".".to_string();
@@ -3227,12 +3611,66 @@ fn cmd_sessions(args: &[String]) -> Result<(), String> {
             );
             Ok(())
         }
+        Some("annotate") => {
+            let pos = positional(&args[1..]);
+            let (prefix, id) = match pos.as_slice() {
+                [p, i] => (*p, *i),
+                _ => return Err(usage.to_string()),
+            };
+            let flag = |key: &str| -> Option<String> {
+                args.iter()
+                    .position(|a| a == key)
+                    .and_then(|i| args.get(i + 1).cloned())
+            };
+            let objective = flag("--objective");
+            let outcome = flag("--outcome");
+            if objective.is_none() && outcome.is_none() {
+                return Err(format!("nothing to annotate\n{usage}"));
+            }
+            if let Some(o) = outcome.as_deref() {
+                if !sessions::OUTCOMES.contains(&o) {
+                    return Err(format!(
+                        "unknown outcome '{o}' ({})",
+                        sessions::OUTCOMES.join("|")
+                    ));
+                }
+            }
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let rows = sessions::list(&store, &index, prefix).map_err(|e| e.to_string())?;
+            let matched: Vec<&sessions::SessionRow> =
+                rows.iter().filter(|r| r.id.starts_with(id)).collect();
+            let full_id = match matched.as_slice() {
+                [one] => one.id.clone(),
+                [] => return Err(format!("no session under {prefix} with id starting '{id}'")),
+                many => {
+                    return Err(format!(
+                        "{} sessions match '{id}' — be more specific",
+                        many.len()
+                    ))
+                }
+            };
+            sessions::annotate(
+                &store,
+                prefix,
+                &full_id,
+                objective.as_deref(),
+                outcome.as_deref(),
+            )
+            .map_err(|e| e.to_string())?;
+            println!("annotated session {full_id}");
+            Ok(())
+        }
         Some("list") => {
             let prefix = args.get(1).ok_or(usage)?;
             let store = open_store()?;
             let index = build_index(&store)?;
             let now = now_ms();
             let rows = sessions::list(&store, &index, prefix).map_err(|e| e.to_string())?;
+            if wants_json(args) {
+                println!("{}", serde_json::to_string(&rows).map_err(|e| e.to_string())?);
+                return Ok(());
+            }
             if rows.is_empty() {
                 println!("no agent sessions under {prefix} (try: brain sessions import)");
                 return Ok(());
@@ -3240,8 +3678,14 @@ fn cmd_sessions(args: &[String]) -> Result<(), String> {
             for row in rows {
                 let ago = now.saturating_sub(row.ended_at_ms) / 1000;
                 let minutes = row.ended_at_ms.saturating_sub(row.started_at_ms) / 60_000;
+                let short: String = row.id.chars().take(8).collect();
+                let outcome = row
+                    .outcome
+                    .as_deref()
+                    .map(|o| format!(" [{o}]"))
+                    .unwrap_or_default();
                 println!(
-                    "[{ago:>6}s ago] {} ({}) {}min, {} turn(s), {} file(s): {}",
+                    "[{ago:>6}s ago] {} ({}) {}min, {} turn(s), {} file(s) #{short}{outcome}: {}",
                     row.agent,
                     row.model.as_deref().unwrap_or("model unrecorded"),
                     minutes,
@@ -3426,11 +3870,11 @@ fn describe(
 /// event-log delta replay, O(new events) on a warm open. It derefs to
 /// MemIndex, so every query path below is written against the reference
 /// backend. `BRAIN_INDEX=mem` forces a cold, non-persisting rebuild.
-pub(crate) fn build_index(store: &Store) -> Result<cortex::Cortex, String> {
+pub(crate) fn build_index(store: &Store) -> Result<brain_cortex::Cortex, String> {
     if std::env::var("BRAIN_INDEX").as_deref() == Ok("mem") {
-        return cortex::Cortex::open_ephemeral(store).map_err(|e| e.to_string());
+        return brain_cortex::Cortex::open_ephemeral(store).map_err(|e| e.to_string());
     }
-    let graf = cortex::Cortex::open(store).map_err(|e| e.to_string())?;
+    let graf = brain_cortex::Cortex::open(store).map_err(|e| e.to_string())?;
     // Best-effort persistence: a failed checkpoint costs only warmth.
     let _ = graf.checkpoint();
     // The object pack keeps the same bargain one level down: reading the

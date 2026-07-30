@@ -219,7 +219,7 @@ pub fn link(
     )
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct DoneCheck {
     pub predicate: String,
     /// Distinct linked targets satisfying the predicate.
@@ -227,7 +227,7 @@ pub struct DoneCheck {
 }
 
 /// One part of a feature, already evaluated.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct PartReport {
     pub slug: String,
     pub title: String,
@@ -239,7 +239,7 @@ pub struct PartReport {
     pub parts: Vec<PartReport>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct DoneReport {
     pub checks: Vec<DoneCheck>,
     pub done: bool,

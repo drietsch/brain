@@ -13,7 +13,7 @@ use brain_index::{Index, MemIndex};
 use brain_store::{Store, StoreError};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Attention {
     pub label: String,
     pub kind: String,

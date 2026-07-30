@@ -6,6 +6,9 @@
 //! unfinished features) into a single token-budgeted orientation. A fresh
 //! session runs `brain wake <prefix>` instead of spelunking the repo;
 //! nothing here is stored, everything is a query (ADR-009, ADR-016).
+//!
+//! The orientation is data first ([`Orientation`], serializable for
+//! `--json` and other consumers) and text second ([`render`]).
 
 use crate::sleep::delta_since;
 use crate::twin::{self, latest, latest_at, Severity};
@@ -13,116 +16,214 @@ use brain_core::ids::StableId;
 use brain_core::object::Object;
 use brain_index::{Index, MemIndex};
 use brain_store::{now_ms, Store, StoreError};
+use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
-/// Render the orientation. `full` lifts the per-section caps.
-pub fn wake(
-    store: &Store,
-    index: &MemIndex,
-    prefix: &str,
-    full: bool,
-) -> Result<String, StoreError> {
-    let insights = twin::insights_with(store, index, prefix)?;
-    let ranked = crate::attention::attend_with(store, index, prefix, &insights)?;
-    wake_with(store, index, prefix, full, &insights, &ranked)
+/// How the working tree relates to what the twin last observed. `None`
+/// upstream means the twin never recorded where it looked (older stores).
+#[derive(Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum TreeDrift {
+    InSync,
+    Ahead {
+        added: Vec<String>,
+        changed: Vec<String>,
+        deleted: Vec<String>,
+    },
+    /// The recorded root no longer exists on this machine.
+    Unavailable { root: String },
 }
 
-/// Render wake from shared derived projections. This is semantically
-/// identical to [`wake`] but avoids recomputing insights and attention when
-/// a human surface needs the same material in structured and textual forms.
-pub fn wake_with(
+/// Compare the working tree at the twin's recorded root against the graph,
+/// read-only. This is what makes wake honest about uncommitted work: the
+/// graph only learns on refresh, but it can still say what it has not seen.
+pub fn tree_drift(
     store: &Store,
     index: &MemIndex,
     prefix: &str,
-    full: bool,
-    ins: &twin::Insights,
-    ranked: &[crate::attention::Attention],
-) -> Result<String, StoreError> {
-    let cap = if full { usize::MAX } else { 5 };
-    let now = now_ms();
-    let mut out = String::new();
+) -> Result<Option<TreeDrift>, StoreError> {
     let repo_sid = StableId::derive(&["repo", prefix]);
-    writeln!(out, "== wake: {prefix} ==").ok();
+    let Some(root) = latest(index, store, &repo_sid, "root")? else {
+        return Ok(None);
+    };
+    let path = std::path::Path::new(&root);
+    if !path.is_dir() {
+        return Ok(Some(TreeDrift::Unavailable { root }));
+    }
+    let report = twin::status(store, path, prefix)?;
+    if report.added.is_empty() && report.changed.is_empty() && report.deleted.is_empty() {
+        Ok(Some(TreeDrift::InSync))
+    } else {
+        Ok(Some(TreeDrift::Ahead {
+            added: report.added,
+            changed: report.changed,
+            deleted: report.deleted,
+        }))
+    }
+}
+
+/// The whole present, as data: everything `brain wake` says, uncapped.
+/// Rendering truncates; the data never does.
+#[derive(Serialize)]
+pub struct Orientation {
+    pub prefix: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_sleep: Option<Sleep>,
+    pub since: Delta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub git: Option<Git>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub working_tree: Option<TreeDrift>,
+    pub failing: Vec<String>,
+    pub attention: Vec<AttentionRow>,
+    pub stale: Stale,
+    pub in_flight: Vec<InFlight>,
+    pub notes_since_sleep: Vec<Note>,
+    pub coherence: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct Sleep {
+    pub at_ms: u64,
+    pub summary: String,
+}
+
+#[derive(Serialize)]
+pub struct Delta {
+    pub since_ms: u64,
+    pub added: usize,
+    pub changed: usize,
+    pub doc_updates: usize,
+    pub protocols: usize,
+    pub verdict: String,
+    pub notes: usize,
+}
+
+#[derive(Serialize)]
+pub struct Git {
+    pub branch: String,
+    pub commit: String,
+}
+
+#[derive(Serialize)]
+pub struct AttentionRow {
+    pub score: u32,
+    pub label: String,
+    pub kind: String,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct Stale {
+    pub warn: usize,
+    pub info: usize,
+    pub warn_docs: Vec<StaleDocRow>,
+}
+
+#[derive(Serialize)]
+pub struct StaleDocRow {
+    pub slug: String,
+    pub kind: String,
+    pub changed: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum InFlight {
+    Plan {
+        slug: String,
+        title: String,
+    },
+    Change {
+        slug: String,
+        status: String,
+    },
+    Feature {
+        slug: String,
+        status: String,
+        counted: String,
+        fraction: String,
+    },
+}
+
+#[derive(Serialize)]
+pub struct Note {
+    pub at_ms: u64,
+    pub entity: String,
+    pub text: String,
+}
+
+/// Compose the orientation from the graph (and the working tree, when the
+/// twin recorded where it looked).
+pub fn orientation(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+) -> Result<Orientation, StoreError> {
+    let ins = twin::insights_with(store, index, prefix)?;
+    let ranked = crate::attention::attend_with(store, index, prefix, &ins)?;
+    let drift = tree_drift(store, index, prefix)?;
+    let repo_sid = StableId::derive(&["repo", prefix]);
 
     let since: u64 = latest(index, store, &repo_sid, "consolidated_until")?
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
-    match latest_at(index, store, &repo_sid, "session_summary")? {
-        Some((at, summary)) => {
-            writeln!(out, "last sleep {}: {summary}", age(now, at)).ok();
-        }
-        None => {
-            writeln!(out, "never slept — everything below counts as new").ok();
-        }
-    }
+    let last_sleep = latest_at(index, store, &repo_sid, "session_summary")?
+        .map(|(at, summary)| Sleep { at_ms: at, summary });
 
     let delta = delta_since(store, index, prefix, since)?;
-    writeln!(
-        out,
-        "since then: {} added, {} changed file(s); {} doc update(s); {} protocol(s){}; {} note(s)",
-        delta.added.len(),
-        delta.changed.len(),
-        delta.doc_updates,
-        delta.new_runs,
-        delta.verdict,
-        delta.notes
-    )
-    .ok();
-    if let (Some(branch), Some(commit)) = (&ins.git_branch, &ins.git_commit) {
-        writeln!(out, "git: {branch} @ {}", &commit[..commit.len().min(12)]).ok();
-    }
+    let since = Delta {
+        since_ms: since,
+        added: delta.added.len(),
+        changed: delta.changed.len(),
+        doc_updates: delta.doc_updates,
+        protocols: delta.new_runs,
+        verdict: delta.verdict,
+        notes: delta.notes,
+    };
 
-    if !ins.failing.is_empty() {
-        writeln!(out, "FAILING: {} test case(s)", ins.failing.len()).ok();
-        for name in ins.failing.iter().take(cap.min(3)) {
-            writeln!(out, "  ✗ {name}").ok();
-        }
-    }
+    let git = match (&ins.git_branch, &ins.git_commit) {
+        (Some(branch), Some(commit)) => Some(Git {
+            branch: branch.clone(),
+            commit: commit.clone(),
+        }),
+        _ => None,
+    };
 
-    if !ranked.is_empty() {
-        writeln!(out, "attention:").ok();
-        for a in ranked.iter().take(cap) {
-            writeln!(
-                out,
-                "  {:>3}  {} ({})",
-                a.score,
-                a.label,
-                a.reasons.join(", ")
-            )
-            .ok();
-        }
-    }
+    let attention = ranked
+        .iter()
+        .map(|a| AttentionRow {
+            score: a.score,
+            label: a.label.clone(),
+            kind: a.kind.clone(),
+            reasons: a.reasons.clone(),
+        })
+        .collect();
 
-    let warns: Vec<_> = ins
+    let warn_docs: Vec<StaleDocRow> = ins
         .stale_docs
         .iter()
         .filter(|d| d.severity == Severity::Warn)
+        .map(|d| StaleDocRow {
+            slug: d.slug.clone(),
+            kind: d.kind.clone(),
+            changed: d.changed.clone(),
+        })
         .collect();
-    let infos = ins.stale_docs.len() - warns.len();
-    if !warns.is_empty() || infos > 0 {
-        writeln!(
-            out,
-            "stale: {} warn, {infos} info — `brain twin stale {prefix}`",
-            warns.len()
-        )
-        .ok();
-        for d in warns.iter().take(cap.min(3)) {
-            writeln!(
-                out,
-                "  [warn] {} ({}): {}",
-                d.slug,
-                d.kind,
-                d.changed.join(", ")
-            )
-            .ok();
-        }
-    }
+    let stale = Stale {
+        warn: warn_docs.len(),
+        info: ins.stale_docs.len() - warn_docs.len(),
+        warn_docs,
+    };
 
     // In-flight: active plans, unsettled governed changes, open features.
-    let mut inflight: Vec<String> = Vec::new();
-    for (slug, title) in ins.plans.iter().take(cap) {
-        inflight.push(format!("plan {slug}: {title}"));
+    let mut in_flight: Vec<InFlight> = Vec::new();
+    for (slug, title) in &ins.plans {
+        in_flight.push(InFlight::Plan {
+            slug: slug.clone(),
+            title: title.clone(),
+        });
     }
     let mut seen = BTreeSet::new();
     for node in index.entities_by_kind("change") {
@@ -134,52 +235,205 @@ pub fn wake_with(
         }
         if let Some(status) = latest(index, store, &id, "status")? {
             if ["proposed", "applied", "indeterminate", "broken"].contains(&status.as_str()) {
-                let slug = labels.get("slug").cloned().unwrap_or_default();
-                inflight.push(format!("change {slug} [{status}]"));
+                in_flight.push(InFlight::Change {
+                    slug: labels.get("slug").cloned().unwrap_or_default(),
+                    status,
+                });
             }
         }
     }
     for feature in &ins.features {
         if !feature.done {
-            let counted = if feature.by_parts { "parts" } else { "DoD" };
-            inflight.push(format!(
-                "feature {} [{}] {counted} {}",
-                feature.slug, feature.status, feature.fraction
-            ));
-        }
-    }
-    if !inflight.is_empty() {
-        writeln!(out, "in flight ({}):", inflight.len()).ok();
-        for item in inflight.iter().take(cap) {
-            writeln!(out, "  {item}").ok();
-        }
-        if inflight.len() > cap {
-            writeln!(out, "  … {} more", inflight.len() - cap).ok();
+            in_flight.push(InFlight::Feature {
+                slug: feature.slug.clone(),
+                status: feature.status.clone(),
+                counted: if feature.by_parts { "parts" } else { "DoD" }.to_string(),
+                fraction: feature.fraction.clone(),
+            });
         }
     }
 
-    let fresh_notes: Vec<_> = ins.notes.iter().filter(|(at, _, _)| *at > since).collect();
-    if !fresh_notes.is_empty() {
+    let notes_since_sleep = ins
+        .notes
+        .iter()
+        .filter(|(at, _, _)| *at > since.since_ms)
+        .map(|(at, entity, text)| Note {
+            at_ms: *at,
+            entity: entity.clone(),
+            text: text.clone(),
+        })
+        .collect();
+
+    let coherence = crate::coherence::check(store, index, prefix)?
+        .iter()
+        .map(|f| f.to_string())
+        .collect();
+
+    Ok(Orientation {
+        prefix: prefix.to_string(),
+        last_sleep,
+        since,
+        git,
+        working_tree: drift,
+        failing: ins.failing.clone(),
+        attention,
+        stale,
+        in_flight,
+        notes_since_sleep,
+        coherence,
+    })
+}
+
+/// Render the orientation. `full` lifts the per-section caps.
+pub fn wake(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    full: bool,
+) -> Result<String, StoreError> {
+    Ok(render(&orientation(store, index, prefix)?, full))
+}
+
+/// The textual projection of an [`Orientation`].
+pub fn render(o: &Orientation, full: bool) -> String {
+    let cap = if full { usize::MAX } else { 5 };
+    let now = now_ms();
+    let mut out = String::new();
+    writeln!(out, "== wake: {} ==", o.prefix).ok();
+
+    match &o.last_sleep {
+        Some(s) => {
+            writeln!(out, "last sleep {}: {}", age(now, s.at_ms), s.summary).ok();
+        }
+        None => {
+            writeln!(out, "never slept — everything below counts as new").ok();
+        }
+    }
+
+    writeln!(
+        out,
+        "since then: {} added, {} changed file(s); {} doc update(s); {} protocol(s){}; {} note(s)",
+        o.since.added, o.since.changed, o.since.doc_updates, o.since.protocols, o.since.verdict,
+        o.since.notes
+    )
+    .ok();
+    if let Some(git) = &o.git {
+        writeln!(
+            out,
+            "git: {} @ {}",
+            git.branch,
+            &git.commit[..git.commit.len().min(12)]
+        )
+        .ok();
+    }
+    match &o.working_tree {
+        Some(TreeDrift::InSync) => {
+            writeln!(out, "working tree: in sync with the twin").ok();
+        }
+        Some(TreeDrift::Ahead {
+            added,
+            changed,
+            deleted,
+        }) => {
+            writeln!(
+                out,
+                "working tree ahead of twin: {} added, {} changed, {} deleted — answers about these files may be stale",
+                added.len(),
+                changed.len(),
+                deleted.len()
+            )
+            .ok();
+            for path in changed.iter().chain(added).chain(deleted).take(cap.min(3)) {
+                writeln!(out, "  ~ {path}").ok();
+            }
+        }
+        Some(TreeDrift::Unavailable { root }) => {
+            writeln!(out, "working tree: {root} not found — drift unknown").ok();
+        }
+        None => {}
+    }
+
+    if !o.failing.is_empty() {
+        writeln!(out, "FAILING: {} test case(s)", o.failing.len()).ok();
+        for name in o.failing.iter().take(cap.min(3)) {
+            writeln!(out, "  ✗ {name}").ok();
+        }
+    }
+
+    if !o.attention.is_empty() {
+        writeln!(out, "attention:").ok();
+        for a in o.attention.iter().take(cap) {
+            writeln!(
+                out,
+                "  {:>3}  {} ({})",
+                a.score,
+                a.label,
+                a.reasons.join(", ")
+            )
+            .ok();
+        }
+    }
+
+    if o.stale.warn + o.stale.info > 0 {
+        writeln!(
+            out,
+            "stale: {} warn, {} info — `brain twin stale {}`",
+            o.stale.warn, o.stale.info, o.prefix
+        )
+        .ok();
+        for d in o.stale.warn_docs.iter().take(cap.min(3)) {
+            writeln!(
+                out,
+                "  [warn] {} ({}): {}",
+                d.slug,
+                d.kind,
+                d.changed.join(", ")
+            )
+            .ok();
+        }
+    }
+
+    if !o.in_flight.is_empty() {
+        writeln!(out, "in flight ({}):", o.in_flight.len()).ok();
+        for item in o.in_flight.iter().take(cap) {
+            let line = match item {
+                InFlight::Plan { slug, title } => format!("plan {slug}: {title}"),
+                InFlight::Change { slug, status } => format!("change {slug} [{status}]"),
+                InFlight::Feature {
+                    slug,
+                    status,
+                    counted,
+                    fraction,
+                } => format!("feature {slug} [{status}] {counted} {fraction}"),
+            };
+            writeln!(out, "  {line}").ok();
+        }
+        if o.in_flight.len() > cap {
+            writeln!(out, "  … {} more", o.in_flight.len() - cap).ok();
+        }
+    }
+
+    if !o.notes_since_sleep.is_empty() {
         writeln!(out, "notes since sleep:").ok();
-        for (at, entity, text) in fresh_notes.iter().take(cap) {
-            writeln!(out, "  [{}] {entity}: {text}", age(now, *at)).ok();
+        for n in o.notes_since_sleep.iter().take(cap) {
+            writeln!(out, "  [{}] {}: {}", age(now, n.at_ms), n.entity, n.text).ok();
         }
     }
 
-    let findings = crate::coherence::check(store, index, prefix)?;
-    if !findings.is_empty() {
-        writeln!(out, "coherence ({} finding(s)):", findings.len()).ok();
-        for f in findings.iter().take(cap.min(3)) {
+    if !o.coherence.is_empty() {
+        writeln!(out, "coherence ({} finding(s)):", o.coherence.len()).ok();
+        for f in o.coherence.iter().take(cap.min(3)) {
             writeln!(out, "  {f}").ok();
         }
     }
 
     write!(
         out,
-        "next: brain attend {prefix} | brain twin stale {prefix} | brain sleep {prefix} before you go"
+        "next: brain attend {p} | brain twin stale {p} | brain sleep {p} before you go",
+        p = o.prefix
     )
     .ok();
-    Ok(out)
+    out
 }
 
 fn age(now: u64, at: u64) -> String {
@@ -238,6 +492,7 @@ mod tests {
         let text = wake(&store, &index, "twin/app", false).unwrap();
         assert!(text.contains("last sleep"), "{text}");
         assert!(text.contains("0 added, 1 changed file(s)"), "{text}");
+        assert!(text.contains("working tree: in sync with the twin"), "{text}");
         assert!(
             text.contains("plan build-x"),
             "active plan in flight: {text}"
@@ -248,6 +503,16 @@ mod tests {
             "budgeted: {} lines",
             text.lines().count()
         );
+
+        // The same present, as data: the JSON projection carries the
+        // uncapped structure the text renders.
+        let o = orientation(&store, &index, "twin/app").unwrap();
+        let v = serde_json::to_value(&o).unwrap();
+        assert_eq!(v["prefix"], "twin/app");
+        assert_eq!(v["working_tree"]["state"], "in_sync");
+        assert_eq!(v["in_flight"][0]["kind"], "plan");
+        assert_eq!(v["in_flight"][0]["slug"], "build-x");
+        assert!(v["last_sleep"]["at_ms"].as_u64().unwrap() > 0);
 
         // A finished plan leaves the in-flight list.
         crate::lifecycle::set(
@@ -265,5 +530,19 @@ mod tests {
 
         // Determinism: identical recompute (age strings share the same second).
         assert_eq!(text, wake(&store, &index, "twin/app", false).unwrap());
+
+        // Uncommitted work: the tree drifts and wake says so — the graph
+        // only learns on refresh, but it can still name what it has not seen.
+        fs::write(
+            src.path().join("src/main.rs"),
+            "pub fn main() { /* v3 */ }\n",
+        )
+        .unwrap();
+        let text = wake(&store, &index, "twin/app", false).unwrap();
+        assert!(
+            text.contains("working tree ahead of twin: 0 added, 1 changed, 0 deleted"),
+            "{text}"
+        );
+        assert!(text.contains("~ src/main.rs"), "{text}");
     }
 }
