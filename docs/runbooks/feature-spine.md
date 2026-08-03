@@ -57,6 +57,7 @@ brain feature link twin/self store implemented_by crates/brain-store/src/sync.rs
 brain feature link twin/self store tested_by crates/brain-store/src/lib.rs
 brain feature link twin/self store tested_by crates/brain-store/src/intents.rs
 brain feature link twin/self store tested_by crates/brain-store/src/sync.rs
+brain feature link twin/self store decided_by adr-002-alpha-normalization-at-store-boundary --kind decision
 brain feature link twin/self semantic-twin decided_by adr-014-relation-currency-via-edge-tombstones --kind decision
 brain feature link twin/self store documented_in architecture --kind doc
 ```
