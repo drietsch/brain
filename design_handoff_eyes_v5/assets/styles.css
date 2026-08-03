@@ -167,13 +167,9 @@ body.in-now .readonly { display: none; }
 .rail button {
   display: flex; align-items: center; gap: 10px; padding: 9px 11px;
   border-radius: var(--radius-sm); color: var(--body); text-align: left;
-  transition: background-color var(--t-nudge);
 }
 .rail button:hover { background: var(--wash); }
-.rail button.on {
-  background: var(--trace-fill); color: var(--trace); font-weight: 500;
-  box-shadow: inset 2.5px 0 0 var(--trace);
-}
+.rail button.on { background: var(--trace-fill); color: var(--trace); font-weight: 500; }
 .rail-mark { width: 15px; display: inline-flex; opacity: .8; }
 .rail-count {
   margin-left: auto; font: 400 11px/1 var(--record); font-variant-numeric: tabular-nums;
@@ -1087,9 +1083,11 @@ body.in-mri { --page: #070b10; }
   margin: 14px 10px 4px; font: 700 9.5px/1 var(--ui);
   letter-spacing: .12em; text-transform: uppercase; color: var(--faint);
 }
-.rail-group:first-child { margin-top: 2px; }
+.rail .rail-group:first-child { margin-top: 2px; }
 body.plain .rail-group { display: none; }
 @media (max-width: 700px) { .rail-group { display: none; } }
+.rail button { transition: background-color var(--t-nudge); }
+.rail button.on { box-shadow: inset 2.5px 0 0 var(--trace); }
 
 /* Every affordance answers in the same tempo. */
 .chip-ref, .row-link, .linky, .pressure-row, .trow, .command, .fix, .ghost,
@@ -1104,6 +1102,14 @@ button:active { transform: translateY(.5px); }
   .spark-path { stroke-dasharray: 1; stroke-dashoffset: 1; animation: eyes-dash .9s ease-out .15s forwards; }
 }
 @keyframes eyes-dash { to { stroke-dashoffset: 0; } }
+
+/* The protocol bar in views.tests renders with class "bar"; keep the
+   alias so the split bar shows regardless of which name the JS uses. */
+.bar { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; display: flex; }
+.bar span { display: block; height: 100%; }
+.bar .pass { background: var(--proof); }
+.bar .fail { background: var(--fault); }
+.bar .skip { background: var(--faint); }
 
 /* Dark theme: deeper shadow ring + brighter accent gradient. */
 @media (prefers-color-scheme: dark) {

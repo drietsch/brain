@@ -129,4 +129,22 @@
     <ellipse cx="17" cy="17" rx="12" ry="5"/>
     <circle cx="17" cy="17" r="2.6"/>
   </symbol>
+
+  <!-- Interface marks (v5 handoff): actions and modes, never kinds. -->
+  <!-- a bolt: something ran, or can -->
+  <symbol id="i-bolt" viewBox="0 0 34 34"><polygon points="19,4 9,19 16,19 14,30 25,14 18,14" stroke-linejoin="round"></polygon></symbol>
+  <!-- copy: the same text, taken along -->
+  <symbol id="i-copy" viewBox="0 0 34 34"><rect x="12" y="12" width="15" height="15" rx="3"></rect><path d="M22 7 H10 a3 3 0 0 0 -3 3 V22" stroke-linecap="round"></path></symbol>
+  <!-- voice: read this screen aloud -->
+  <symbol id="i-voice" viewBox="0 0 34 34"><polygon points="6,13 12,13 19,7 19,27 12,21 6,21" stroke-linejoin="round"></polygon><path d="M23 12 a7 7 0 0 1 0 10" stroke-linecap="round"></path></symbol>
+  <!-- stop: the reading ends -->
+  <symbol id="i-stop" viewBox="0 0 34 34"><rect x="10" y="10" width="14" height="14" rx="2"></rect></symbol>
+  <!-- dismiss: put it away -->
+  <symbol id="i-dismiss" viewBox="0 0 34 34"><line x1="10" y1="10" x2="24" y2="24" stroke-linecap="round"></line><line x1="24" y1="10" x2="10" y2="24" stroke-linecap="round"></line></symbol>
+  <!-- undo: the step back -->
+  <symbol id="i-undo" viewBox="0 0 34 34"><polyline points="13,8 6,15 13,22" stroke-linejoin="round" stroke-linecap="round"></polyline><path d="M6 15 h15 a7 7 0 0 1 7 7 v4" stroke-linecap="round"></path></symbol>
+  <!-- the light theme -->
+  <symbol id="i-sun" viewBox="0 0 34 34"><circle cx="17" cy="17" r="6"></circle><line x1="17" y1="4" x2="17" y2="8" stroke-linecap="round"></line><line x1="17" y1="26" x2="17" y2="30" stroke-linecap="round"></line><line x1="4" y1="17" x2="8" y2="17" stroke-linecap="round"></line><line x1="26" y1="17" x2="30" y2="17" stroke-linecap="round"></line></symbol>
+  <!-- the dark theme -->
+  <symbol id="i-moon" viewBox="0 0 34 34"><path d="M27 20 A11 11 0 1 1 14 7 a9 9 0 0 0 13 13 Z" stroke-linejoin="round"></path></symbol>
 </svg>

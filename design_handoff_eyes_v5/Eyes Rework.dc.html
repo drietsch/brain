@@ -1,0 +1,1918 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"><link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet"><style>
+:root{--bg:oklch(0.968 0.005 265);--surface:#ffffff;--surface-2:oklch(0.984 0.003 265);--sunk:oklch(0.943 0.007 265);--hover:oklch(0.957 0.006 265);--ink:oklch(0.215 0.02 265);--body:oklch(0.39 0.022 265);--meta:oklch(0.565 0.022 265);--faint:oklch(0.72 0.018 265);--line:oklch(0.912 0.009 265);--line2:oklch(0.862 0.012 265);--t-settle:.24s cubic-bezier(.2,.7,.3,1);--t-nudge:.12s ease;--accent:oklch(0.55 0.17 275);--accent-2:oklch(0.58 0.17 300);--accent-tint:oklch(0.945 0.03 275);--grad-accent:linear-gradient(120deg,oklch(0.6 0.17 275),oklch(0.62 0.17 302));--proof:oklch(0.55 0.13 156);--proof-tint:oklch(0.955 0.028 156);--signal:oklch(0.55 0.13 80);--signal-tint:oklch(0.955 0.035 85);--fault:oklch(0.55 0.16 27);--fault-tint:oklch(0.955 0.022 27);--shadow:0 0 0 1px rgba(22,25,35,.02),0 1px 2px rgba(22,25,35,.06),0 5px 14px rgba(22,25,35,.045);--serif:"Source Serif 4",ui-serif,"New York","Iowan Old Style",Georgia,serif;--sans:system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+[data-theme="dark"]{--bg:oklch(0.185 0.012 265);--surface:oklch(0.235 0.014 265);--surface-2:oklch(0.218 0.013 265);--sunk:oklch(0.205 0.012 265);--hover:oklch(0.27 0.015 265);--ink:oklch(0.93 0.008 265);--body:oklch(0.77 0.014 265);--meta:oklch(0.63 0.018 265);--faint:oklch(0.49 0.018 265);--line:oklch(0.31 0.015 265);--line2:oklch(0.37 0.017 265);--accent:oklch(0.72 0.14 275);--accent-2:oklch(0.74 0.14 300);--accent-tint:oklch(0.3 0.06 275);--grad-accent:linear-gradient(120deg,oklch(0.68 0.15 275),oklch(0.7 0.15 302));--proof:oklch(0.72 0.12 156);--proof-tint:oklch(0.27 0.04 156);--signal:oklch(0.75 0.12 85);--signal-tint:oklch(0.27 0.045 85);--fault:oklch(0.7 0.14 27);--fault-tint:oklch(0.26 0.04 27);--shadow:0 0 0 1px rgba(0,0,0,.25),0 2px 6px rgba(0,0,0,.5)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased;text-wrap:pretty}
+a{color:var(--accent);text-decoration:none}a:hover{color:var(--ink)}
+button{font-family:inherit}
+code{font-family:var(--mono);font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+[data-plain="1"] [data-cmd]{display:none!important}
+@keyframes settle{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes dash{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+polyline[data-draw]{stroke-dasharray:1;stroke-dashoffset:1;animation:dash .9s ease-out .15s forwards}
+button:active{transform:translateY(.5px)}
+svg[data-ic]{width:15px;height:15px;flex:none;display:inline-block;vertical-align:-2px}
+svg[data-ic] use{fill:none;stroke:currentColor;stroke-width:2.4}
+svg[data-sm] use{stroke-width:3}
+[data-go]{transition:background-color var(--t-nudge),border-color var(--t-nudge)}
+[data-go]:hover{background-color:var(--accent-tint)!important}
+[data-go]:hover [data-arrow]{color:var(--accent)!important;transform:translateX(2px)}
+[data-arrow]{display:inline-block;transition:transform var(--t-nudge)}
+[data-fold]:hover{background-color:var(--hover)!important}
+[data-textlink]{color:var(--accent);text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;transition:text-decoration-color .12s ease}
+[data-textlink]:hover{text-decoration-color:var(--accent)}
+[data-density="compact"] [data-stage]{zoom:.88;padding:20px 26px 56px!important}
+[data-copy]{transition:background-color var(--t-nudge),color var(--t-nudge)}
+[data-copy]:hover{background-color:var(--sunk)!important;color:var(--ink)!important}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></helmet>
+<div data-theme="{{ theme }}" data-plain="{{ plainAttr }}" data-density="{{ density }}" style="height:100vh;background:radial-gradient(1100px 400px at 20% -130px,var(--accent-tint) 0%,transparent 60%),radial-gradient(800px 360px at 105% 0%,var(--accent-tint),transparent 58%),var(--bg);color:var(--ink);display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:52px minmax(0,1fr)">
+
+  <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 14px;background:var(--surface);border-bottom:1px solid var(--line);min-width:0;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:10px;flex:0 1 200px;min-width:0">
+      <div style="width:22px;height:22px;border-radius:6px;background:var(--grad-accent);color:#fff;box-shadow:0 1px 3px rgba(79,93,207,.35);display:flex;align-items:center;justify-content:center;gap:2px">
+        <span style="width:3.5px;height:11px;background:#fff;border-radius:1px"></span><span style="width:3.5px;height:8px;background:rgba(255,255,255,.85);border-radius:1px"></span><span style="width:3.5px;height:11px;border:1.2px dashed rgba(255,255,255,.9);border-radius:1px;box-sizing:border-box"></span>
+      </div>
+      <span style="font-weight:600;font-size:13px;letter-spacing:-.01em">Eyes</span>
+      <code style="font-size:11px;color:var(--meta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">twin/self</code>
+    </div>
+    <button type="button" onClick="{{ flashFind }}" style="display:flex;align-items:center;gap:10px;justify-content:space-between;flex:1 1 120px;min-width:0;max-width:340px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:var(--meta);font-size:12.5px;cursor:pointer">
+      <span style="display:flex;align-items:center;gap:8px;min-width:0"><svg data-ic="1" data-sm="1" style="width:13px;height:13px;flex:none"><use href="#i-search"></use></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Search names, paths and titles&#8230;</span></span><code style="font-size:10.5px;color:var(--faint)">&#8984;K</code>
+    </button>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex:none">
+      <span style="display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:4px 11px;white-space:nowrap" title="The working tree has 4 files the graph has not read yet.">
+        <span style="width:7px;height:7px;border-radius:999px;background:var(--signal);flex:none"></span>
+        <code style="font-size:11px;color:var(--meta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px">12 min ago &#183; 4 ahead</code>
+      </span>
+      <span style="display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--meta);border:1px solid var(--line);border-radius:999px;padding:4px 10px;white-space:nowrap" title="Eyes never writes. It shows you the command instead."><svg data-ic="1" data-sm="1" style="width:11px;height:11px" aria-hidden="true"><use href="#i-shield"></use></svg>read only</span>
+      <span style="width:1px;height:18px;background:var(--line);margin:0 2px"></span>
+      <button type="button" onClick="{{ briefMe }}" style="{{ briefStyle }}" title="Read this screen out loud. The sentences are the server's; the browser only speaks them."><svg data-ic="1" data-sm="1" style="width:12px;height:12px" aria-hidden="true"><use href="#i-{{ briefIcon }}"></use></svg>{{ briefLabel }}</button>
+      <button type="button" onClick="{{ togglePlain }}" style="{{ plainBtn }}"><svg data-ic="1" data-sm="1" style="width:12px;height:12px" aria-hidden="true"><use href="#i-ux"></use></svg>Plain view</button>
+      <button type="button" onClick="{{ toggleTheme }}" style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px;color:var(--body);background:transparent;border:1px solid var(--line);border-radius:7px;padding:5px 10px;cursor:pointer"><svg data-ic="1" data-sm="1" style="width:12px;height:12px" aria-hidden="true"><use href="#i-{{ themeIcon }}"></use></svg>{{ themeLabel }}</button>
+    </div>
+  </div>
+
+  <div style="background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 85%);border-right:1px solid var(--line);padding:12px 10px;display:flex;flex-direction:column;gap:1px;overflow-y:auto">
+    <sc-for list="{{ rail }}" as="r" hint-placeholder-count="7">
+      <div>
+        <sc-if value="{{ r.section }}" hint-placeholder-val="{{ false }}">
+          <p style="margin:14px 0 4px;padding:0 10px;font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)">{{ r.section }}</p>
+        </sc-if>
+        <button type="button" onClick="{{ r.go }}" style="{{ r.style }}">
+          <svg data-ic="1" style="color:{{ r.iconInk }}" aria-hidden="true"><use href="#i-{{ r.icon }}"></use></svg>
+          <span style="flex:1;text-align:left">{{ r.label }}</span>
+          <sc-if value="{{ r.count }}" hint-placeholder-val="{{ false }}">
+            <code style="{{ r.countStyle }}">{{ r.count }}</code>
+          </sc-if>
+        </button>
+      </div>
+    </sc-for>
+    <div style="margin-top:auto;padding:10px 8px;border-top:1px solid var(--line)">
+      <p style="margin:0;font-size:11px;line-height:1.7;color:var(--faint)"><span data-arrow="1" style="color:var(--meta)">&#8250;</span> opens a page &#183; <code style="font-size:10px">&#9656;</code> folds open<br>One graph, one voice. Eyes never writes.</p>
+    </div>
+  </div>
+
+  <div data-stage="1" style="overflow-y:auto;padding:28px 36px 80px">
+  <div style="max-width:1240px;margin:0 auto">
+
+  <sc-if value="{{ plain }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;align-items:center;gap:10px;background:var(--accent-tint);border:1px solid var(--line);border-radius:8px;padding:9px 14px;margin-bottom:22px">
+      <span style="width:8px;height:8px;border-radius:999px;background:var(--accent);flex:none"></span>
+      <p style="margin:0;font-size:12.5px;color:var(--body)">Plain view &#8212; the same facts, told for a stakeholder. Commands and operator chrome are hidden.</p>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isNow }}" hint-placeholder-val="{{ true }}">
+  <div style="animation:fadeup var(--t-settle) both" data-screen-label="Now">
+    <div style="background:linear-gradient(135deg,var(--fault-tint) 0%,var(--surface) 44%);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:26px 28px 20px">
+      <div style="display:flex;flex-wrap:wrap;gap:32px 44px;align-items:flex-start">
+        <div style="min-width:0;flex:1.5 1 460px">
+          <div style="display:flex;gap:14px">
+            <div style="width:4px;border-radius:2px;background:linear-gradient(180deg,var(--fault),transparent);flex:none;align-self:stretch"></div>
+            <div style="min-width:0">
+              <h1 style="margin:0;font-family:var(--serif);font-weight:400;font-size:clamp(30px,2.6vw,38px);line-height:1.12;letter-spacing:-.012em;color:var(--ink)">3 tests are failing.</h1>
+              <p style="margin:8px 0 0;font-size:13px;line-height:1.55;color:var(--body);max-width:60ch">say::quality_tests, work::approvals and compare::moments went red 12 minutes ago. Everything else below is quieter than that.</p>
+              <div data-cmd="1" style="margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <code style="display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:7px;padding:6px 10px">brain twin tests twin/self</code>
+                <button type="button" onClick="{{ copyTests }}" style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;white-space:nowrap;color:#fff;background:var(--grad-accent);border:1px solid color-mix(in srgb,var(--accent) 78%,black);border-radius:7px;padding:6px 12px;cursor:pointer;box-shadow:0 1px 2px rgba(16,17,20,.18)"><svg data-ic="1" data-sm="1" style="width:12px;height:12px" aria-hidden="true"><use href="#i-copy"></use></svg>Copy command</button>
+                <span style="font-size:11.5px;color:var(--faint)">you run it &#8212; Eyes never writes</span>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:22px;border-top:1px solid var(--line);padding-top:16px">
+            <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 12px;margin-bottom:10px">
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta);white-space:nowrap">Where quality is moving</span>
+              <button type="button" onClick="{{ toggleQuiet }}" style="font-size:11.5px;color:var(--meta);background:transparent;border:0;padding:0;cursor:pointer">{{ quietSummary }}</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <sc-for list="{{ ledger }}" as="q" hint-placeholder-count="4">
+                <button data-go="1" type="button" onClick="{{ q.open }}" style="display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;padding:8px 10px;border:0;border-left:2px solid {{ q.ink }};background:{{ q.wash }};text-align:left;cursor:pointer;border-radius:0 6px 6px 0">
+                  <span style="font-size:12px;font-weight:500;color:var(--body);width:118px;flex:none">{{ q.label }}</span>
+                  <span style="flex:none">
+                    <svg viewBox="0 0 118 22" width="118" height="22" aria-hidden="true" style="display:block;overflow:visible">
+                      <polygon points="{{ q.area }}" style="{{ q.areaStyle }}"></polygon>
+                      <polyline data-draw="1" pathLength="1" points="{{ q.poly }}" fill="none" stroke="{{ q.ink }}" stroke-width="1.5" stroke-linejoin="round"></polyline>
+                      <circle cx="{{ q.lastX }}" cy="{{ q.lastY }}" r="2.4" fill="{{ q.ink }}"></circle>
+                    </svg>
+                    <span style="display:flex;gap:1px;margin-top:3px;height:3px;width:118px" title="{{ q.tempoTitle }}">
+                      <sc-for list="{{ q.segs }}" as="sg" hint-placeholder-count="4">
+                        <span style="{{ sg.style }}"></span>
+                      </sc-for>
+                    </span>
+                  </span>
+                  <code style="font-size:11.5px;color:var(--ink);flex:1 1 150px;min-width:0">{{ q.current }}</code>
+                  <span style="font-size:11.5px;color:{{ q.ink }};white-space:nowrap;margin-left:auto">{{ q.arrow }} {{ q.trendWord }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="min-width:0;flex:1 1 300px">
+          <p style="margin:0 0 16px;font-family:var(--serif);font-size:16px;line-height:1.4;color:var(--fault)">7 of 33 claims cannot show their proof.</p>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <sc-for list="{{ census }}" as="g" hint-placeholder-count="4">
+              <div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px">
+                  <span style="font-size:11.5px;font-weight:500;color:var(--meta)">{{ g.label }}</span>
+                  <code style="font-size:11px;color:{{ g.ink }}">{{ g.ratio }}</code>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:2.5px">
+                  <sc-for list="{{ g.cells }}" as="c" hint-placeholder-count="8">
+                    <button type="button" style="{{ c.style }}" title="{{ c.text }}" aria-label="{{ c.text }}" onClick="{{ c.open }}"></button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <p style="margin:14px 0 0;font-size:11px;color:var(--faint);display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="display:inline-block;width:8px;height:8px;background:var(--fault);border-radius:1px"></span>failing
+            <span style="display:inline-block;width:8px;height:8px;border:1.5px solid var(--signal);border-radius:1px;margin-left:6px"></span>stale
+            <span style="display:inline-block;width:8px;height:8px;border:1.5px dashed var(--faint);border-radius:1px;margin-left:6px"></span>unproven
+            <span style="display:inline-block;width:8px;height:8px;background:var(--proof);border-radius:1px;margin-left:6px"></span>proven
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;margin-top:28px">
+      <div style="flex:1.55 1 460px;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Queue</span>
+          <span style="font-size:11.5px;color:var(--faint)">{{ queueCount }} &#183; decide now first, then what can wait</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ queue }}" as="c" hint-placeholder-count="3">
+            <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:16px 18px 14px;animation:settle var(--t-settle) both">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="{{ c.dot }}"></span>
+                <h3 style="margin:0;flex:1;min-width:0;font-family:var(--serif);font-weight:400;font-size:16.5px;line-height:1.3;color:var(--ink)">{{ c.title }} <sc-if value="{{ c.repeats }}" hint-placeholder-val="{{ false }}"><code style="font-size:11px;color:var(--faint)">{{ c.repeats }}</code></sc-if></h3>
+                <span style="{{ c.horizonStyle }}">{{ c.horizon }}</span>
+                <button type="button" onClick="{{ c.ack }}" style="font-size:11px;color:var(--faint);background:transparent;border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px"><svg data-ic="1" data-sm="1" style="width:10px;height:10px" aria-hidden="true"><use href="#i-dismiss"></use></svg>not now</button>
+              </div>
+              <p style="margin:7px 0 0 19px;font-size:12.5px;line-height:1.55;color:var(--body);max-width:66ch">{{ c.reason }}</p>
+              <sc-if value="{{ c.alsoLabel }}" hint-placeholder-val="{{ false }}">
+                <button data-textlink="1" type="button" onClick="{{ c.alsoToggle }}" style="margin:7px 0 0 19px;padding:0;border:0;background:none;cursor:pointer;font-size:11.5px;color:var(--accent);display:block;text-align:left">{{ c.alsoLabel }}</button>
+                <sc-for list="{{ c.also }}" as="al" hint-placeholder-count="0">
+                  <p style="margin:5px 0 0 31px;font-size:11.5px;color:var(--meta)">{{ al }}</p>
+                </sc-for>
+                <sc-if value="{{ c.alsoNote }}" hint-placeholder-val="{{ false }}">
+                  <p style="margin:4px 0 0 31px;font-size:11px;color:var(--faint)">{{ c.alsoNote }}</p>
+                </sc-if>
+              </sc-if>
+              <sc-if value="{{ c.steps.length }}" hint-placeholder-val="{{ 0 }}">
+                <div style="display:flex;align-items:flex-start;margin:13px 0 0 19px">
+                  <sc-for list="{{ c.steps }}" as="s" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:flex-start">
+                      <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">
+                        <div style="{{ s.dot }}"></div>
+                        <div style="font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:{{ s.ink }};white-space:nowrap">{{ s.label }}</div>
+                        <div style="font-family:var(--mono);font-size:10px;color:var(--faint);white-space:nowrap">{{ s.when }}</div>
+                      </div>
+                      <div style="{{ s.rail }}"></div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ c.chips.length }}" hint-placeholder-val="{{ 0 }}">
+                <div style="margin:11px 0 0 19px;display:flex;flex-wrap:wrap;gap:6px">
+                  <sc-for list="{{ c.chips }}" as="ch" hint-placeholder-count="2">
+                    <button data-go="1" type="button" onClick="{{ ch.open }}" style="display:flex;align-items:center;gap:7px;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:4px 8px;cursor:pointer;max-width:100%">
+                      <svg data-ic="1" data-sm="1" style="width:12px;height:12px;color:var(--meta)" aria-hidden="true"><use href="#i-{{ ch.icon }}"></use></svg>
+                      <code style="font-size:11.5px;color:var(--body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ch.label }}</code>
+                      <span data-arrow="1" style="font-size:11px;color:var(--faint)">&#8250;</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ c.chipFoldLabel }}" hint-placeholder-val="{{ false }}">
+                <button data-textlink="1" type="button" onClick="{{ c.chipFold }}" style="margin:8px 0 0 19px;padding:0;border:0;background:none;cursor:pointer;font-size:11.5px;color:var(--accent);display:block;text-align:left">{{ c.chipFoldLabel }}</button>
+              </sc-if>
+              <div data-cmd="1" style="margin:12px 0 0 19px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <code style="display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px;color:var(--body);background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:5px 9px">{{ c.cmd }}</code>
+                <button data-copy="1" type="button" onClick="{{ c.copy }}" style="font-size:11px;color:var(--faint);background:transparent;border:1px solid var(--line);border-radius:6px;padding:5px 8px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><svg data-ic="1" data-sm="1" style="width:11px;height:11px" aria-hidden="true"><use href="#i-copy"></use></svg>Copy</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ ackedLabel }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+            <button type="button" onClick="{{ ackToggle }}" style="display:flex;align-items:center;gap:8px;padding:0;border:0;background:none;cursor:pointer;font-size:11.5px;color:var(--meta)">
+              <code style="font-size:10px;color:var(--faint)">{{ ackCaret }}</code>{{ ackedLabel }}
+            </button>
+            <sc-if value="{{ ackOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+                <sc-for list="{{ acked }}" as="a" hint-placeholder-count="1">
+                  <div style="display:flex;align-items:center;gap:12px;justify-content:space-between;background:var(--sunk);border-radius:6px;padding:8px 12px">
+                    <span style="font-size:12px;color:var(--body);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.title }}</span>
+                    <button type="button" onClick="{{ a.restore }}" style="font-size:11px;color:var(--body);background:transparent;border:1px solid var(--line);border-radius:5px;padding:3px 8px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px"><svg data-ic="1" data-sm="1" style="width:11px;height:11px" aria-hidden="true"><use href="#i-undo"></use></svg>bring back</button>
+                  </div>
+                </sc-for>
+                <p style="margin:2px 0 0;font-size:11px;color:var(--faint)">Acknowledgements expire after a week &#8212; a concern that persists that long deserves to be seen again. Nothing was recorded in the graph.</p>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:24px;flex:1 1 320px;min-width:0">
+        <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:16px 18px">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Since the last session &#183; 3 hours ago</span>
+          <p style="margin:8px 0 12px;font-family:var(--serif);font-size:15px;line-height:1.45;color:var(--ink)">Two agents worked while you were away; the approvals path is where they overlapped.</p>
+          <div style="display:flex;flex-direction:column">
+            <div style="display:grid;grid-template-columns:64px 1fr;gap:12px;padding:9px 0;border-top:1px solid var(--line)">
+              <code style="font-size:10.5px;color:var(--faint);padding-top:2px">12 min</code>
+              <div><div style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;background:var(--fault);border-radius:1px;flex:none"></span><span style="font-size:12.5px;font-weight:500">Test run went red</span></div>
+              <p style="margin:3px 0 0;font-size:12px;color:var(--meta)">3 of 207 tests failed &#8212; all three name the approvals path</p></div>
+            </div>
+            <div style="display:grid;grid-template-columns:64px 1fr;gap:12px;padding:9px 0;border-top:1px solid var(--line)">
+              <code style="font-size:10.5px;color:var(--faint);padding-top:2px">2 hrs</code>
+              <div><div style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border:1.5px solid var(--faint);transform:rotate(45deg);flex:none"></span><span style="font-size:12.5px;font-weight:500">2 changes proposed</span></div>
+              <p style="margin:3px 0 0;font-size:12px;color:var(--meta)">src/util.rs and src/main.rs wait for your decision; nothing was applied</p></div>
+            </div>
+            <div style="display:grid;grid-template-columns:64px 1fr;gap:12px;padding:9px 0;border-top:1px solid var(--line)">
+              <code style="font-size:10.5px;color:var(--faint);padding-top:2px">3 hrs</code>
+              <div><div style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:999px;background:var(--faint);flex:none"></span><span style="font-size:12.5px;font-weight:500">Session consolidated</span></div>
+              <p style="margin:3px 0 0;font-size:12px;color:var(--meta)">11 files touched, 2 documents fell out of date, tests were green at the time</p></div>
+            </div>
+          </div>
+          <p style="margin:10px 0 0;font-size:11px;color:var(--faint);border-top:1px solid var(--line);padding-top:10px">1,204 new facts since you last looked &#8212; counted in this browser, not by the server.</p>
+        </div>
+
+        <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:16px 18px">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Where the pressure is</span>
+          <p style="margin:4px 0 10px;font-size:11.5px;color:var(--faint)">Changed often, imported widely, and no test names them.</p>
+          <div style="display:grid;grid-template-columns:14px minmax(0,1fr) 46px 40px 30px;gap:10px;padding-bottom:6px;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">
+            <span></span><span></span><span>Churn</span><span>Reach</span><span>Test</span>
+          </div>
+          <sc-for list="{{ pressure }}" as="a" hint-placeholder-count="3">
+            <button data-go="1" type="button" onClick="{{ a.open }}" title="{{ a.reasons }}" style="display:grid;grid-template-columns:14px minmax(0,1fr) 46px 40px 30px;gap:10px;align-items:center;padding:9px 0;border:0;border-top:1px solid var(--line);background:transparent;text-align:left;cursor:pointer;width:100%">
+              <code style="font-size:11px;color:var(--faint)">{{ a.rank }}</code>
+              <span style="display:flex;align-items:center;gap:5px;min-width:0"><code style="font-size:11.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left">{{ a.label }}</code><span data-arrow="1" style="font-size:11px;color:var(--faint)">&#8250;</span></span>
+              <span style="display:flex;gap:2px;align-items:flex-end;height:13px">
+                <sc-for list="{{ a.churn }}" as="b" hint-placeholder-count="5"><span style="{{ b.style }}"></span></sc-for>
+              </span>
+              <code style="font-size:10.5px;color:var(--body)">{{ a.importers }}</code>
+              <span style="{{ a.testMark }}"></span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isWork }}" hint-placeholder-val="{{ false }}">
+  <div style="animation:fadeup var(--t-settle) both" data-screen-label="Work">
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><svg data-ic="1" data-sm="1" style="width:12px;height:12px;color:var(--accent)" aria-hidden="true"><use href="#i-orbit"></use></svg><span style="font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--meta)">Operate &#183; Work</span></div>
+    <h1 style="margin:0;font-family:var(--serif);font-weight:400;font-size:26px;letter-spacing:-.012em">Two agents are working; two decisions wait on you.</h1>
+    <p style="margin:6px 0 24px;font-size:12.5px;color:var(--meta)">Agent sessions, governed changes, and plans still open.</p>
+
+    <div style="background:var(--fault-tint);border:1px solid var(--line);border-left:3px solid var(--fault);border-radius:10px;padding:14px 18px;margin-bottom:26px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="width:9px;height:9px;background:var(--fault);border-radius:1px;transform:rotate(45deg);flex:none"></span>
+        <h3 style="margin:0;flex:1;min-width:200px;font-family:var(--serif);font-weight:400;font-size:16.5px">2 agents are converging on one file</h3>
+        <span style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fault)">live now</span>
+      </div>
+      <p style="margin:6px 0 0 19px;font-size:12.5px;color:var(--body);max-width:70ch">Claude Code and Codex both touched <button data-go="1" type="button" onClick="{{ goThing }}" style="display:inline;padding:0;border:0;background:none;cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--accent);text-align:left">crates/brain-eyes/src/state.rs</button> inside the last twenty minutes &#8212; decide who owns it; the picture is as fresh as the last import.</p>
+      <div data-cmd="1" style="margin:10px 0 0 19px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <code style="font-size:11.5px;color:var(--body);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 9px">brain sessions import . --prefix twin/self</code>
+        <button data-copy="1" type="button" onClick="{{ copyImport }}" style="font-size:11px;color:var(--faint);background:transparent;border:1px solid var(--line);border-radius:6px;padding:5px 8px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><svg data-ic="1" data-sm="1" style="width:11px;height:11px" aria-hidden="true"><use href="#i-copy"></use></svg>Copy</button>
+      </div>
+    </div>
+
+    <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Waiting for your decision</span>
+    <div style="display:flex;flex-direction:column;gap:10px;margin:10px 0 28px">
+      <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:16px 18px">
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+          <button data-go="1" type="button" onClick="{{ goThing }}" style="display:flex;align-items:center;gap:7px;padding:0;border:0;background:none;cursor:pointer;font-family:var(--mono);font-size:13px;font-weight:500;color:var(--ink)"><svg data-ic="1" data-sm="1" style="width:13px;height:13px;color:var(--signal)" aria-hidden="true"><use href="#i-chevron"></use></svg>src/util.rs</button>
+          <span style="font-size:11.5px;color:var(--faint)">proposed 2 hours ago</span>
+          <span style="margin-left:auto;display:flex;align-items:center;gap:8px">
+            <span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--proof)"><span style="width:8px;height:8px;border-radius:999px;background:var(--proof)"></span>proposed</span>
+            <span style="width:22px;height:1.5px;background:var(--line2)"></span>
+            <span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--faint)"><span style="width:8px;height:8px;border-radius:999px;border:1.5px dashed var(--faint)"></span>applied</span>
+            <span style="width:22px;height:1.5px;background:var(--line2)"></span>
+            <span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--faint)"><span style="width:8px;height:8px;border-radius:999px;border:1.5px dashed var(--faint)"></span>verified</span>
+          </span>
+        </div>
+        <p style="margin:8px 0 0;font-size:12.5px;color:var(--body);max-width:70ch">Replaces the hand-rolled retry loop with the shared backoff helper; touches nothing outside util.</p>
+        <div style="display:flex;gap:8px;align-items:baseline;background:var(--signal-tint);border-radius:6px;padding:7px 10px;margin-top:9px">
+          <span style="width:8px;height:2px;background:var(--signal);flex:none;margin-top:6px"></span>
+          <span style="font-size:11.5px;color:var(--body)"><strong style="font-weight:600">Before you apply:</strong> util.rs sits on the pressure list &#8212; 9 files import it and no test names it.</span>
+        </div>
+        <button data-go="1" type="button" onClick="{{ goFeat }}" style="display:flex;align-items:center;gap:7px;margin-top:9px;padding:0;border:0;background:none;cursor:pointer">
+          <span style="width:8px;height:8px;border:1.5px solid var(--accent);transform:rotate(45deg);flex:none"></span>
+          <span style="font-size:11.5px;color:var(--body)">serves Approvals verify themselves</span>
+        </button>
+        <button data-textlink="1" type="button" onClick="{{ toggleDiff }}" style="margin-top:10px;font-size:11.5px;color:var(--accent);background:transparent;border:0;padding:0;cursor:pointer">{{ diffLabel }}</button>
+        <sc-if value="{{ diffOpen }}" hint-placeholder-val="{{ false }}">
+          <pre style="margin:10px 0 0;padding:10px 12px;background:var(--sunk);border:1px solid var(--line);border-radius:8px;font-family:var(--mono);font-size:11.5px;line-height:1.6;overflow-x:auto"><span style="color:var(--fault);display:block">- let mut tries = 0; loop {</span><span style="color:var(--fault);display:block">-     if tries &gt; 3 { break; }</span><span style="color:var(--proof);display:block">+ retry::with_backoff(3, || {</span><span style="color:var(--meta);display:block">      send(&amp;payload)?;</span><span style="color:var(--proof);display:block">+ })?;</span></pre>
+          <p style="margin:6px 0 0;font-size:11px;color:var(--faint)">2 of 3 hunks shown &#8212; the full diff is on the change itself.</p>
+        </sc-if>
+        <div data-cmd="1" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <code style="display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px;color:var(--body);background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:5px 9px">brain change apply twin/self util.rs-0ca5df1e --cap fs</code>
+          <button data-copy="1" type="button" onClick="{{ copyApply }}" style="font-size:11px;color:var(--faint);background:transparent;border:1px solid var(--line);border-radius:6px;padding:5px 8px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><svg data-ic="1" data-sm="1" style="width:11px;height:11px" aria-hidden="true"><use href="#i-copy"></use></svg>Copy</button>
+        </div>
+      </div>
+      <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:16px 18px">
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+          <button data-go="1" type="button" onClick="{{ goThing }}" style="display:flex;align-items:center;gap:7px;padding:0;border:0;background:none;cursor:pointer;font-family:var(--mono);font-size:13px;font-weight:500;color:var(--ink)"><svg data-ic="1" data-sm="1" style="width:13px;height:13px;color:var(--signal)" aria-hidden="true"><use href="#i-chevron"></use></svg>src/main.rs</button>
+          <span style="font-size:11.5px;color:var(--faint)">proposed 2 hours ago</span>
+        </div>
+        <p style="margin:8px 0 0;font-size:12.5px;color:var(--body);max-width:70ch">Threads the new capability flag through startup; one call site changes.</p>
+      </div>
+    </div>
+
+    <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Sessions</span>
+    <div style="display:flex;flex-direction:column;margin:10px 0 28px;background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden">
+      <div style="display:grid;grid-template-columns:16px 150px minmax(0,1fr) 150px 80px 70px;gap:14px;padding:9px 18px;border-bottom:1px solid var(--line2);background:var(--sunk);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--meta)">
+        <span></span><span>Agent</span><span>Objective</span><span>State</span><span>Files</span><span>Span</span>
+      </div>
+      <sc-for list="{{ sessions }}" as="w" hint-placeholder-count="3">
+        <div>
+          <button data-fold="1" type="button" onClick="{{ w.toggle }}" style="display:grid;grid-template-columns:16px 150px minmax(0,1fr) 150px 80px 70px;gap:14px;padding:12px 18px;border:0;border-top:1px solid var(--line);background:transparent;align-items:center;text-align:left;cursor:pointer;width:100%">
+            <code style="font-size:10px;color:var(--faint)">{{ w.caret }}</code>
+            <span style="display:flex;align-items:center;gap:7px;font-weight:600;font-size:12.5px;min-width:0"><svg data-ic="1" data-sm="1" style="width:13px;height:13px;color:var(--meta)" aria-hidden="true"><use href="#i-orbit"></use></svg><span style="{{ w.dotStyle }}"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ w.agent }}</span></span>
+            <span style="font-family:var(--serif);font-size:13.5px;color:var(--body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ w.objective }}</span>
+            <span style="font-size:11.5px;color:{{ w.stateInk }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ w.stateLabel }}</span>
+            <code style="font-size:11.5px;color:var(--body);white-space:nowrap">{{ w.files }}</code>
+            <code style="font-size:11.5px;color:var(--meta);white-space:nowrap">{{ w.span }}</code>
+          </button>
+          <sc-if value="{{ w.open }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:4px 18px 14px 48px;border-top:1px dashed var(--line)">
+              <p style="margin:8px 0 0;font-size:11.5px;color:var(--meta)">{{ w.turns }} &#183; {{ w.model }}<sc-if value="{{ w.outcome }}" hint-placeholder-val="{{ false }}"> &#183; {{ w.outcome }}</sc-if></p>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px">
+                <sc-for list="{{ w.tools }}" as="tl" hint-placeholder-count="3">
+                  <span style="font-size:11px;color:var(--meta);border:1px solid var(--line);border-radius:999px;padding:2px 8px;white-space:nowrap">{{ tl.label }}</span>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;align-items:center">
+                <span style="font-size:11px;color:var(--faint)">touched</span>
+                <sc-for list="{{ w.touched }}" as="tc" hint-placeholder-count="3">
+                  <button data-go="1" type="button" onClick="{{ tc.open }}" style="display:flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer"><code style="font-size:11px;color:var(--body)">{{ tc.label }}</code><span data-arrow="1" style="font-size:10px;color:var(--faint)">&#8250;</span></button>
+                </sc-for>
+                <sc-if value="{{ w.moreNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:var(--faint)">{{ w.moreNote }}</span></sc-if>
+              </div>
+              <sc-if value="{{ w.produced.length }}" hint-placeholder-val="{{ 0 }}">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">
+                  <span style="font-size:11px;color:var(--faint)">produced</span>
+                  <sc-for list="{{ w.produced }}" as="pr" hint-placeholder-count="1">
+                    <button data-go="1" type="button" onClick="{{ pr.open }}" style="display:flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer"><code style="font-size:11px;color:var(--body)">{{ pr.label }}</code><span data-arrow="1" style="font-size:10px;color:var(--faint)">&#8250;</span></button>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <button data-go="1" type="button" onClick="{{ goFeat }}" style="display:flex;align-items:center;gap:7px;margin-top:9px;padding:0;border:0;background:none;cursor:pointer">
+                <span style="width:8px;height:8px;border:1.5px solid var(--accent);transform:rotate(45deg);flex:none"></span>
+                <span style="font-size:11.5px;color:var(--body)">worked on {{ w.feature }}</span>
+              </button>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Handed back and forth</span>
+    <div style="margin:10px 0 28px">
+      <button data-go="1" type="button" onClick="{{ goThing }}" style="display:flex;gap:10px;align-items:baseline;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--signal);border-radius:8px;padding:11px 14px;text-align:left;cursor:pointer;width:100%">
+        <span style="width:8px;height:2px;background:var(--signal);flex:none;margin-top:6px"></span>
+        <span style="font-size:12.5px;color:var(--body)"><strong style="font-weight:600;color:var(--ink)">state.rs changed hands 3 times today</strong> &#8212; each agent reworked the other's edit; the file has no test to referee them.</span>
+      </button>
+    </div>
+
+    <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Plans still open</span>
+    <div style="margin-top:10px">
+      <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:14px 18px">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <span style="width:9px;height:9px;border:1.5px solid var(--meta);transform:rotate(45deg);flex:none"></span>
+          <h3 style="margin:0;font-family:var(--serif);font-weight:400;font-size:15px">plan-014 &#183; the desk verifies before it celebrates</h3>
+          <span style="font-size:10.5px;color:var(--signal);background:var(--signal-tint);border-radius:5px;padding:2px 7px">step 2 of 4</span>
+        </div>
+        <p style="margin:6px 0 0 18px;font-size:12px;color:var(--meta)">two steps remain: record the verify, then surface a failed one on Now.</p>
+        <div data-cmd="1" style="margin:9px 0 0 18px"><code style="font-size:11.5px;color:var(--body);background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:4px 8px">brain plan show twin/self plan-014</code></div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isRoadmap }}" hint-placeholder-val="{{ false }}">
+  <div style="animation:fadeup var(--t-settle) both" data-screen-label="Roadmap">
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><svg data-ic="1" data-sm="1" style="width:12px;height:12px;color:var(--accent)" aria-hidden="true"><use href="#i-chevron"></use></svg><span style="font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--meta)">Plan &#183; Roadmap</span></div>
+    <h1 style="margin:0;font-family:var(--serif);font-weight:400;font-size:26px;letter-spacing:-.012em">The current stage is one feature from done.</h1>
+    <p style="margin:6px 0 26px;font-size:12.5px;color:var(--meta)">What is planned, what is moving, what is done. A stage's state and its features' readiness are shown apart.</p>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:2px">
+      <h2 style="margin:0;font-family:var(--serif);font-weight:400;font-size:18px;line-height:1.35;min-width:0">Stage 4 &#183; The cockpit reads itself</h2>
+      <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--signal);background:var(--signal-tint);border-radius:5px;padding:3px 7px">in flight</span>
+    </div>
+    <p style="margin:6px 0 12px;font-size:12.5px;color:var(--body);max-width:70ch">Sixteen of seventeen features are ready; the one that is not is blocked on the approvals path.</p>
+    <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:30px">
+      <div style="display:grid;grid-template-columns:minmax(0,2fr) 120px 70px minmax(0,2fr) 90px;gap:14px;padding:9px 18px;border-bottom:1px solid var(--line2);background:var(--sunk);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--meta)">
+        <span>Feature</span><span>Parts</span><span>Ready</span><span>Verdict</span><span>Changed</span>
+      </div>
+      <button data-go="1" type="button" onClick="{{ goThing }}" style="display:grid;grid-template-columns:minmax(0,2fr) 120px 70px minmax(0,2fr) 90px;gap:14px;padding:12px 18px;border:0;border-bottom:1px solid var(--line);background:transparent;align-items:center;text-align:left;cursor:pointer;width:100%">
+        <span style="display:flex;align-items:center;gap:8px;min-width:0"><svg data-ic="1" data-sm="1" style="width:13px;height:13px;color:var(--meta);flex:none" aria-hidden="true"><use href="#i-hexagon"></use></svg><span style="font-size:13px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Approvals verify themselves</span></span>
+        <span style="display:flex;gap:2px"><span style="width:8px;height:8px;background:var(--proof);border-radius:1px"></span><span style="width:8px;height:8px;background:var(--proof);border-radius:1px"></span><span style="width:8px;height:8px;background:var(--fault);border-radius:1px"></span><span style="width:8px;height:8px;border:1.5px dashed var(--faint);border-radius:1px"></span></span>
+        <code style="font-size:11.5px;color:var(--fault)">2/4</code>
+        <span style="font-size:12px;color:var(--body)">a failing test contradicts one part; one claim has nothing behind it</span>
+        <code style="font-size:11px;color:var(--meta)">12 min ago</code>
+      </button>
+      <button data-go="1" type="button" onClick="{{ goThing }}" style="display:grid;grid-template-columns:minmax(0,2fr) 120px 70px minmax(0,2fr) 90px;gap:14px;padding:12px 18px;border:0;border-bottom:1px solid var(--line);background:transparent;align-items:center;text-align:left;cursor:pointer;width:100%">
+        <span style="font-size:13px;font-weight:500;color:var(--ink)">Sessions fold into memory</span>
+        <span style="display:flex;gap:2px"><span style="width:8px;height:8px;background:var(--proof);border-radius:1px"></span><span style="width:8px;height:8px;background:var(--proof);border-radius:1px"></span><span style="width:8px;height:8px;background:var(--proof);border-radius:1px"></span></span>
+        <code style="font-size:11.5px;color:var(--meta)">3/3</code>
+        <span style="font-size:12px;color:var(--body)">every claim is backed; last verified against the run 3 hours ago</span>
+        <code style="font-size:11px;color:var(--meta)">3 hrs ago</code>
+      </button>
+      <button data-go="1" type="button" onClick="{{ goThing }}" style="display:grid;grid-template-columns:minmax(0,2fr) 120px 70px minmax(0,2fr) 90px;gap:14px;padding:12px 18px;border:0;background:transparent;align-items:center;text-align:left;cursor:pointer;width:100%">
+        <span style="font-size:13px;font-weight:500;color:var(--ink)">The graph explains its pressure</span>
+        <span style="display:flex;gap:2px"><span style="width:8px;height:8px;background:var(--proof);border-radius:1px"></span><span style="width:8px;height:8px;background:var(--proof);border-radius:1px"></span></span>
+        <code style="font-size:11.5px;color:var(--meta)">2/2</code>
+        <span style="font-size:12px;color:var(--body)">ready; the ranking matches what the operator clicks first</span>
+        <code style="font-size:11px;color:var(--meta)">2 days ago</code>
+      </button>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:2px">
+      <h2 style="margin:0;font-family:var(--serif);font-weight:400;font-size:18px;line-height:1.35;min-width:0">Stage 5 &#183; Eyes for a team</h2>
+      <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--meta);background:var(--sunk);border-radius:5px;padding:3px 7px">planned</span>
+    </div>
+    <p style="margin:6px 0 12px;font-size:12.5px;color:var(--body);max-width:70ch">Nothing here has started; two features have definitions of done, one is still a sentence.</p>
+    <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden">
+      <button data-go="1" type="button" onClick="{{ goThing }}" style="display:grid;grid-template-columns:minmax(0,2fr) 120px 70px minmax(0,2fr) 90px;gap:14px;padding:12px 18px;border:0;border-bottom:1px solid var(--line);background:transparent;align-items:center;text-align:left;cursor:pointer;width:100%">
+        <span style="font-size:13px;font-weight:500;color:var(--ink)">Shared views without accounts</span>
+        <span style="display:flex;gap:2px"><span style="width:8px;height:8px;border:1.5px dashed var(--faint);border-radius:1px"></span><span style="width:8px;height:8px;border:1.5px dashed var(--faint);border-radius:1px"></span></span>
+        <code style="font-size:11.5px;color:var(--meta)">0/2</code>
+        <span style="font-size:12px;color:var(--body)">defined, not started</span>
+        <code style="font-size:11px;color:var(--meta)">&#8212;</code>
+      </button>
+      <button data-go="1" type="button" onClick="{{ goThing }}" style="display:grid;grid-template-columns:minmax(0,2fr) 120px 70px minmax(0,2fr) 90px;gap:14px;padding:12px 18px;border:0;background:transparent;align-items:center;text-align:left;cursor:pointer;width:100%">
+        <span style="font-size:13px;font-weight:500;color:var(--ink)">The stakeholder telling stands alone</span>
+        <span style="display:flex;gap:2px"><span style="width:8px;height:8px;border:1.5px dashed var(--faint);border-radius:1px"></span></span>
+        <code style="font-size:11.5px;color:var(--meta)">0/1</code>
+        <span style="font-size:12px;color:var(--body)">still a sentence &#8212; no definition of done yet</span>
+        <code style="font-size:11px;color:var(--meta)">&#8212;</code>
+      </button>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isProof }}" hint-placeholder-val="{{ false }}">
+  <div style="animation:fadeup var(--t-settle) both" data-screen-label="Proof">
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><svg data-ic="1" data-sm="1" style="width:12px;height:12px;color:var(--accent)" aria-hidden="true"><use href="#i-diamond"></use></svg><span style="font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--meta)">Prove &#183; Proof</span></div>
+    <h1 style="margin:0;font-family:var(--serif);font-weight:400;font-size:26px;letter-spacing:-.012em">3 of 207 tests are failing; everything else holds.</h1>
+    <p style="margin:6px 0 20px;font-size:12.5px;color:var(--meta)">Tests, the claims they back, and the artifacts runs leave behind &#8212; one surface, three registers.</p>
+    <div style="display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:18px">
+      <button type="button" onClick="{{ tabTests }}" style="{{ tabTestsStyle }}"><svg data-ic="1" data-sm="1" style="width:13px;height:13px" aria-hidden="true"><use href="#i-diamond"></use></svg>Tests <code style="font-size:11px;color:var(--fault)">3</code></button>
+      <button type="button" onClick="{{ tabEvidence }}" style="{{ tabEvidenceStyle }}"><svg data-ic="1" data-sm="1" style="width:13px;height:13px" aria-hidden="true"><use href="#i-seal"></use></svg>Evidence <code style="font-size:11px;color:var(--meta)">33</code></button>
+      <button type="button" onClick="{{ tabArtifacts }}" style="{{ tabArtifactsStyle }}"><svg data-ic="1" data-sm="1" style="width:13px;height:13px" aria-hidden="true"><use href="#i-docs"></use></svg>Artifacts <code style="font-size:11px;color:var(--meta)">41</code></button>
+    </div>
+
+    <sc-if value="{{ onTests }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+        <span style="font-size:11px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.05em">Result</span>
+        <span style="display:flex;gap:6px">
+          <sc-for list="{{ resultChips }}" as="rc" hint-placeholder-count="3">
+            <button type="button" onClick="{{ rc.click }}" style="{{ rc.style }}">{{ rc.label }}</button>
+          </sc-for>
+        </span>
+        <span style="width:1px;height:16px;background:var(--line2)"></span>
+        <span style="font-size:11px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.05em">Framework</span>
+        <span style="display:flex;gap:6px">
+          <span style="font-size:11.5px;color:var(--meta);border:1px solid var(--line);border-radius:6px;padding:3px 8px;white-space:nowrap">cargo 190</span>
+          <span style="font-size:11.5px;color:var(--meta);border:1px solid var(--line);border-radius:6px;padding:3px 8px;white-space:nowrap">playwright 17</span>
+        </span>
+        <code style="margin-left:auto;font-size:11px;color:var(--meta)">{{ resultNote }}</code>
+      </div>
+      <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:22px">
+        <sc-for list="{{ suites }}" as="s" hint-placeholder-count="3">
+          <div>
+            <button data-fold="1" type="button" onClick="{{ s.toggle }}" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 18px;border:0;border-bottom:1px solid var(--line);background:{{ s.headBg }};text-align:left;cursor:pointer">
+              <code style="font-size:10px;color:var(--faint);width:10px">{{ s.caret }}</code>
+              <code style="font-size:12.5px;font-weight:600;color:var(--ink)">{{ s.name }}</code>
+              <span style="font-size:11.5px;color:{{ s.ink }}">{{ s.note }}</span>
+              <code style="margin-left:auto;font-size:11px;color:var(--faint);white-space:nowrap">{{ s.countLabel }}</code>
+            </button>
+            <sc-if value="{{ s.open }}" hint-placeholder-val="{{ false }}">
+              <sc-for list="{{ s.cases }}" as="t" hint-placeholder-count="2">
+                <button data-go="1" type="button" onClick="{{ t.open }}" style="display:grid;grid-template-columns:minmax(0,2fr) 84px minmax(0,2.4fr) 64px;gap:14px;width:100%;padding:9px 18px 9px 38px;border:0;border-bottom:1px solid var(--line);background:transparent;align-items:center;text-align:left;cursor:pointer">
+                  <code style="font-size:12px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.name }}</code>
+                  <span style="{{ t.chip }}">{{ t.result }}</span>
+                  <span style="min-width:0;display:flex;align-items:center;gap:8px"><span style="font-size:11.5px;color:{{ t.detailInk }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.detail }}</span><sc-if value="{{ t.flaky }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;color:var(--signal);background:var(--signal-tint);border-radius:4px;padding:1px 6px;white-space:nowrap;flex:none">changed its mind &#215;3</span></sc-if></span>
+                  <code style="font-size:11px;color:var(--meta);text-align:right">{{ t.took }}</code>
+                </button>
+              </sc-for>
+            </sc-if>
+          </div>
+        </sc-for>
+        <p style="margin:0;padding:10px 18px;font-size:11px;color:var(--faint)">4 suites shown of 24 &#8212; 20 fully-passing suites are folded; expand them from the filter above.</p>
+      </div>
+      <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Runs</span>
+      <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;margin:10px 0 22px">
+        <button data-go="1" type="button" onClick="{{ goThing }}" style="display:grid;grid-template-columns:96px minmax(0,1fr) 170px;gap:14px;width:100%;padding:11px 18px;border:0;background:transparent;text-align:left;cursor:pointer;align-items:center">
+          <code style="font-size:11px;color:var(--faint)">12 min ago</code>
+          <span style="min-width:0"><span style="font-size:12.5px;color:var(--ink)"><strong style="font-weight:600;color:var(--fault)">3 failed</strong> &#183; cargo + playwright &#183; 41 s</span>
+            <span style="display:flex;height:5px;border-radius:999px;overflow:hidden;background:var(--line);margin-top:6px;max-width:420px"><span style="width:88%;background:var(--proof)"></span><span style="width:1.5%;background:var(--fault)"></span><span style="width:0.5%;background:var(--faint)"></span></span>
+            <span style="display:block;margin-top:5px;font-size:10.5px;color:var(--meta)">named: applies_then_verifies, quality_tests, moments_stay_ordered</span></span>
+          <span style="font-size:10.5px;color:var(--signal);background:var(--signal-tint);border-radius:5px;padding:2px 7px;justify-self:start;white-space:nowrap">left 4 screenshots behind</span>
+        </button>
+        <button data-go="1" type="button" onClick="{{ goThing }}" style="display:grid;grid-template-columns:96px minmax(0,1fr) 170px;gap:14px;width:100%;padding:11px 18px;border:0;border-top:1px solid var(--line);background:transparent;text-align:left;cursor:pointer;align-items:center">
+          <code style="font-size:11px;color:var(--faint)">3 hrs ago</code>
+          <span style="min-width:0"><span style="font-size:12.5px;color:var(--ink)"><strong style="font-weight:600;color:var(--proof)">all 207 passed</strong> &#183; cargo + playwright &#183; 38 s</span>
+            <span style="display:flex;height:5px;border-radius:999px;overflow:hidden;background:var(--line);margin-top:6px;max-width:420px"><span style="width:100%;background:var(--proof)"></span></span></span>
+          <span style="font-size:10.5px;color:var(--proof);background:var(--proof-tint);border-radius:5px;padding:2px 7px;justify-self:start;white-space:nowrap">verified the last apply</span>
+        </button>
+      </div>
+      <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Depended on, but no test touches them</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        <button data-go="1" type="button" onClick="{{ goThing }}" style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:4px 9px;cursor:pointer"><code style="font-size:11.5px;color:var(--body)">crates/brain-eyes/src/state.rs</code><span data-arrow="1" style="font-size:11px;color:var(--faint)">&#8250;</span></button>
+        <button data-go="1" type="button" onClick="{{ goThing }}" style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:4px 9px;cursor:pointer"><code style="font-size:11.5px;color:var(--body)">crates/brain-eyes/src/dto.rs</code><span data-arrow="1" style="font-size:11px;color:var(--faint)">&#8250;</span></button>
+        <span style="font-size:11.5px;color:var(--faint);align-self:center">and 6 more &#8212; ranked by reach on Now</span>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ onEvidence }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        <sc-for list="{{ evCats }}" as="ec" hint-placeholder-count="4">
+          <button type="button" onClick="{{ ec.click }}" style="{{ ec.style }}">{{ ec.label }}</button>
+        </sc-for>
+      </div>
+      <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden">
+        <sc-if value="{{ evShowApprovals }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:0;padding:12px 18px;border-bottom:1px solid var(--line)">
+          <div style="padding-right:18px;border-right:1px solid var(--line)">
+            <p style="margin:0;font-family:var(--serif);font-size:14.5px;color:var(--fault)">The approvals desk verifies what it applies</p>
+            <p style="margin:3px 0 0;font-size:11.5px;color:var(--meta)">claimed by a feature &#8212; contradicted by a failing test</p>
+          </div>
+          <div style="padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:12px">
+            <span style="display:flex;gap:8px;align-items:baseline"><span style="color:var(--fault);font-family:var(--mono)">&#10007;</span><button data-go="1" type="button" onClick="{{ goThing }}" style="padding:0;border:0;background:none;cursor:pointer;font-family:var(--mono);font-size:11.5px;color:var(--accent);text-align:left">work::approvals::applies_then_verifies</button><span style="color:var(--meta)">failing since 12 minutes ago</span></span>
+            <span style="display:flex;gap:8px;align-items:baseline"><span style="color:var(--proof);font-family:var(--mono)">&#10003;</span><span style="color:var(--body)">the change ledger records both steps</span><span style="color:var(--faint)">&#8212; observed on the last apply</span></span>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{ evShowSessions }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:0;padding:12px 18px">
+          <div style="padding-right:18px;border-right:1px solid var(--line)">
+            <p style="margin:0;font-family:var(--serif);font-size:14.5px;color:var(--ink)">Sessions fold into memory on consolidation</p>
+            <p style="margin:3px 0 0;font-size:11.5px;color:var(--meta)">every part of this claim has something observed behind it</p>
+          </div>
+          <div style="padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:12px">
+            <span style="display:flex;gap:8px;align-items:baseline"><span style="color:var(--proof);font-family:var(--mono)">&#10003;</span><span style="color:var(--body)">207 of 207 tests passed after the last fold</span></span>
+            <span style="display:flex;gap:8px;align-items:baseline"><span style="color:var(--proof);font-family:var(--mono)">&#10003;</span><span style="color:var(--body)">the consolidated session appears in history</span></span>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+      <p style="margin:12px 0 0;font-size:11.5px;color:var(--faint)">2 of 33 claims shown &#8212; the unproven lead. A claim is never shown stronger than the proof behind it.</p>
+    </sc-if>
+
+    <sc-if value="{{ onArtifacts }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        <sc-for list="{{ shelfChips }}" as="sh" hint-placeholder-count="5">
+          <button type="button" onClick="{{ sh.click }}" style="{{ sh.style }}">{{ sh.label }}</button>
+        </sc-for>
+      </div>
+      <sc-if value="{{ shelfIsTable }}" hint-placeholder-val="{{ true }}">
+        <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden">
+          <div style="display:grid;grid-template-columns:minmax(0,2fr) 110px minmax(0,2fr) 90px;gap:14px;padding:9px 18px;border-bottom:1px solid var(--line2);background:var(--sunk);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--meta)">
+            <span>Record</span><span>State</span><span>Because</span><span>Changed</span>
+          </div>
+          <sc-for list="{{ shelfRows }}" as="r" hint-placeholder-count="3">
+            <button data-go="1" type="button" onClick="{{ r.open }}" style="display:grid;grid-template-columns:minmax(0,2fr) 110px minmax(0,2fr) 90px;gap:14px;padding:11px 18px;border:0;border-top:1px solid var(--line);background:transparent;align-items:center;text-align:left;cursor:pointer;width:100%">
+              <span style="display:flex;align-items:center;gap:8px;min-width:0"><svg data-ic="1" data-sm="1" style="width:13px;height:13px;color:var(--meta);flex:none" aria-hidden="true"><use href="#i-{{ r.icon }}"></use></svg><code style="font-size:12px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.label }}</code></span>
+              <span style="{{ r.chipStyle }}">{{ r.state }}</span>
+              <span style="font-size:11.5px;color:var(--meta);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.because }}</span>
+              <code style="font-size:11px;color:var(--meta);white-space:nowrap;text-align:right">{{ r.when }}</code>
+            </button>
+          </sc-for>
+        </div>
+        <p style="margin:12px 0 0;font-size:11.5px;color:var(--faint)">The shelf holds what changed state first; the rest of the shelf is one filter away in the real app.</p>
+      </sc-if>
+      <sc-if value="{{ shelfIsMedia }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px">
+          <button data-go="1" type="button" onClick="{{ goTour }}" style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;text-align:left;cursor:pointer;padding:0">
+            <span style="display:block;height:110px;background:repeating-linear-gradient(45deg,var(--sunk),var(--sunk) 6px,var(--line) 6px,var(--line) 7px)"></span>
+            <span style="display:block;padding:11px 13px"><span style="font-size:12.5px;font-weight:600;display:block">The narrated tour</span><span style="font-size:11px;color:var(--signal)">2 chapters drifted — open the Tour</span></span>
+          </button>
+          <button data-go="1" type="button" onClick="{{ goThing }}" style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;text-align:left;cursor:pointer;padding:0">
+            <span style="display:block;height:110px;background:repeating-linear-gradient(45deg,var(--sunk),var(--sunk) 6px,var(--line) 6px,var(--line) 7px)"></span>
+            <span style="display:block;padding:11px 13px"><span style="font-size:12.5px;font-weight:600;display:block">run 09:41 · screenshots (4)</span><span style="font-size:11px;color:var(--meta)">left behind by the failing playwright run · 12 min ago</span></span>
+          </button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ shelfIsConcepts }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
+          <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:15px 17px">
+            <p style="margin:0;font-family:var(--serif);font-size:15px">Decision <code style="font-size:11px;color:var(--faint)">14</code></p>
+            <p style="margin:4px 0 10px;font-size:11.5px;color:var(--meta)">A choice the team made, with its reasons, recorded so code can be held against it.</p>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11.5px"><span style="color:var(--faint)">Lives</span><span style="color:var(--body)">docs/adr/</span><span style="color:var(--faint)">Rules</span><span style="color:var(--body)">must cite the code it governs</span><span style="color:var(--faint)">Ageing</span><span style="color:var(--body)">ages when cited code changes; never asks for action</span></div>
+            <p style="margin:10px 0 0;padding:8px 11px;background:var(--signal-tint);border-radius:6px;font-size:11px;color:var(--signal)">2 decisions currently cite code that has moved on.</p>
+          </div>
+          <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:15px 17px">
+            <p style="margin:0;font-family:var(--serif);font-size:15px">Governed change <code style="font-size:11px;color:var(--faint)">2</code></p>
+            <p style="margin:4px 0 10px;font-size:11.5px;color:var(--meta)">A proposed edit that waits for a person; Eyes shows the command, you run it.</p>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11.5px"><span style="color:var(--faint)">Lives</span><span style="color:var(--body)">the change ledger</span><span style="color:var(--faint)">Must have</span><span style="color:var(--body)">a diff, a capability, a proposer</span><span style="color:var(--faint)">Rules</span><span style="color:var(--body)">proposed → applied → verified, in order</span></div>
+            <p style="margin:10px 0 0;padding:8px 11px;background:var(--signal-tint);border-radius:6px;font-size:11px;color:var(--signal)">2 changes have waited more than an hour.</p>
+          </div>
+        </div>
+      </sc-if>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isThing }}" hint-placeholder-val="{{ false }}">
+  <div style="animation:fadeup var(--t-settle) both" data-screen-label="Dossier">
+    <button data-textlink="1" type="button" onClick="{{ goNow }}" style="padding:0;border:0;background:none;cursor:pointer;font-size:12px;color:var(--accent);margin-bottom:14px">&#8592; Back</button>
+    <div style="display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start">
+      <div style="min-width:0;flex:2 1 460px;max-width:760px">
+        <p style="margin:0 0 4px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">{{ t.noun }}</p>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <svg data-ic="1" data-sm="1" style="width:19px;height:19px;color:var(--meta)" aria-hidden="true"><use href="#i-{{ t.icon }}"></use></svg>
+          <code style="font-size:17px;font-weight:600;color:var(--ink)">{{ t.title }}</code>
+          <span style="{{ t.chipStyle }}">{{ t.chip }}</span>
+        </div>
+        <p style="margin:6px 0 22px;font-family:var(--serif);font-size:15px;line-height:1.5;color:var(--body)">{{ t.lede }}</p>
+
+        <sc-if value="{{ t.stages.length }}" hint-placeholder-val="{{ 0 }}">
+          <div style="display:flex;align-items:flex-start;margin:0 0 22px">
+            <sc-for list="{{ t.stages }}" as="s" hint-placeholder-count="3">
+              <div style="display:flex;align-items:flex-start">
+                <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">
+                  <div style="{{ s.dot }}"></div>
+                  <div style="font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:{{ s.ink }};white-space:nowrap">{{ s.label }}</div>
+                  <div style="font-family:var(--mono);font-size:10px;color:var(--faint);white-space:nowrap">{{ s.when }}</div>
+                </div>
+                <div style="{{ s.rail }}"></div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ t.briefing.length }}" hint-placeholder-val="{{ 0 }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Before you edit</span>
+          <div style="display:flex;flex-direction:column;gap:8px;margin:10px 0 24px">
+            <sc-for list="{{ t.briefing }}" as="b" hint-placeholder-count="2">
+              <div style="{{ b.style }}">
+                <p style="margin:0;font-size:12.5px;color:var(--ink)"><strong style="font-weight:600">{{ b.title }}</strong> <span style="color:var(--body)">{{ b.body }}</span></p>
+                <sc-if value="{{ b.cmd }}" hint-placeholder-val="{{ false }}">
+                  <div data-cmd="1" style="margin-top:8px"><code style="font-size:11.5px;color:var(--body);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 8px">{{ b.cmd }}</code></div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ t.hasDiff }}" hint-placeholder-val="{{ false }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">What changes</span>
+          <div style="margin:8px 0 24px">
+            <button data-textlink="1" type="button" onClick="{{ toggleThingDiff }}" style="padding:0;border:0;background:none;cursor:pointer;font-size:11.5px;color:var(--accent)">{{ diffLabel }}</button>
+            <sc-if value="{{ diffOpen }}" hint-placeholder-val="{{ false }}">
+              <pre style="margin:10px 0 0;padding:10px 12px;background:var(--sunk);border:1px solid var(--line);border-radius:8px;font-family:var(--mono);font-size:11.5px;line-height:1.6;overflow-x:auto"><span style="color:var(--fault);display:block">- let mut tries = 0; loop {</span><span style="color:var(--fault);display:block">-     if tries &gt; 3 { break; }</span><span style="color:var(--proof);display:block">+ retry::with_backoff(3, || {</span><span style="color:var(--meta);display:block">      send(&amp;payload)?;</span><span style="color:var(--proof);display:block">+ })?;</span></pre>
+              <p style="margin:6px 0 0;font-size:11px;color:var(--faint)">2 of 3 hunks shown &#8212; removed above added, context dim.</p>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ t.parts.length }}" hint-placeholder-val="{{ 0 }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Its parts</span>
+          <div style="display:flex;flex-direction:column;gap:6px;margin:10px 0 6px">
+            <sc-for list="{{ t.parts }}" as="p" hint-placeholder-count="4">
+              <button type="button" onClick="{{ p.open }}" style="display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px;text-align:left;cursor:pointer">
+                <span style="{{ p.mark }}"></span>
+                <span style="font-size:12.5px;color:var(--body);min-width:0"><strong style="font-weight:600;color:var(--ink)">{{ p.label }}</strong> &#8212; {{ p.verdict }}</span>
+                <span style="margin-left:auto;font-size:11px;color:var(--faint)">&#8250;</span>
+              </button>
+            </sc-for>
+          </div>
+          <sc-if value="{{ t.partsNote }}" hint-placeholder-val="{{ false }}">
+            <p style="margin:0 0 24px;font-size:11.5px;color:var(--faint)">{{ t.partsNote }}</p>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{ t.backs.length }}" hint-placeholder-val="{{ 0 }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">What backs this claim</span>
+          <div style="display:flex;flex-direction:column;gap:6px;margin:10px 0 24px">
+            <sc-for list="{{ t.backs }}" as="b" hint-placeholder-count="1">
+              <div style="display:flex;gap:10px;align-items:baseline;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px">
+                <code style="color:{{ b.ink }};font-size:12px">{{ b.mark }}</code>
+                <span style="font-size:12.5px;color:var(--body)">{{ b.text }} <span style="color:var(--faint);font-size:11.5px">&#8212; {{ b.basis }}</span></span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ t.reach.length }}" hint-placeholder-val="{{ 0 }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">What it reaches</span>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:10px 0 24px">
+            <sc-for list="{{ t.reach }}" as="r" hint-placeholder-count="2">
+              <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px">
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+                  <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">{{ r.label }}</span>
+                  <span style="font-size:10.5px;color:var(--faint)">{{ r.basis }}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px">
+                  <sc-for list="{{ r.items }}" as="it" hint-placeholder-count="2">
+                    <button data-go="1" type="button" onClick="{{ it.open }}" style="display:flex;gap:6px;align-items:baseline;padding:0;border:0;background:none;cursor:pointer;text-align:left;min-width:0">
+                      <code style="font-size:11.5px;color:var(--body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ it.label }}</code>
+                      <sc-if value="{{ it.via }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;color:var(--faint);white-space:nowrap">{{ it.via }}</span></sc-if>
+                    </button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ t.around.length }}" hint-placeholder-val="{{ 0 }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Around it</span>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:10px 0 24px">
+            <sc-for list="{{ t.around }}" as="a" hint-placeholder-count="3">
+              <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px">
+                <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">{{ a.label }}</span>
+                <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px">
+                  <sc-for list="{{ a.items }}" as="it" hint-placeholder-count="3">
+                    <button data-go="1" type="button" onClick="{{ it.open }}" style="padding:0;border:0;background:none;cursor:pointer;font-family:var(--mono);font-size:11.5px;color:var(--body);text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ it.label }}</button>
+                  </sc-for>
+                  <sc-if value="{{ a.note }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:var(--faint)">{{ a.note }}</span></sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ t.body }}" hint-placeholder-val="{{ false }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">The thing itself</span>
+          <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px 22px;margin:10px 0 6px;max-width:72ch">
+            <div style="min-width:0">{{ t.body.el }}</div>
+            <sc-if value="{{ t.body.canExtend }}" hint-placeholder-val="{{ false }}">
+              <button data-textlink="1" type="button" onClick="{{ t.body.toggle }}" style="margin-top:12px;padding:0;border:0;background:none;cursor:pointer;font-size:12px;color:var(--accent);display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><svg data-ic="1" data-sm="1" style="width:11px;height:11px" aria-hidden="true"><use href="#i-{{ t.body.toggleIcon }}"></use></svg>{{ t.body.toggleLabel }}</button>
+            </sc-if>
+          </div>
+          <p style="margin:0 0 24px;font-size:11px;color:var(--faint)">{{ t.body.origin }}</p>
+        </sc-if>
+
+        <sc-if value="{{ t.attachments }}" hint-placeholder-val="{{ false }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">What the run left behind</span>
+          <div style="display:flex;gap:8px;margin:10px 0 24px;flex-wrap:wrap">
+            <button data-go="1" type="button" onClick="{{ goAttach }}" style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer">
+              <span style="width:44px;height:30px;border-radius:4px;background:repeating-linear-gradient(45deg,var(--sunk),var(--sunk) 4px,var(--line) 4px,var(--line) 5px);flex:none"></span>
+              <span style="font-size:11.5px;color:var(--body)">screenshot &#183; the desk after the failed verify</span>
+              <span data-arrow="1" style="font-size:11px;color:var(--faint)">&#8250;</span>
+            </button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ t.flips.length }}" hint-placeholder-val="{{ 0 }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Result history</span>
+          <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;margin:10px 0 24px;overflow:hidden">
+            <sc-for list="{{ t.flips }}" as="fl" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:80px 1fr;gap:14px;padding:9px 16px;border-top:1px solid var(--line)"><code style="font-size:11px;color:var(--faint)">{{ fl.when }}</code><span style="font-size:12.5px;color:var(--body)">{{ fl.text }}</span></div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ t.relations.length }}" hint-placeholder-val="{{ 0 }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Links</span>
+          <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;margin:10px 0 24px;overflow:hidden">
+            <sc-for list="{{ t.relations }}" as="r" hint-placeholder-count="2">
+              <button data-go="1" type="button" onClick="{{ r.open }}" style="display:grid;grid-template-columns:110px 1fr;gap:14px;width:100%;padding:9px 16px;border:0;border-top:1px solid var(--line);background:transparent;text-align:left;cursor:pointer;align-items:baseline">
+                <span style="font-size:11px;color:var(--faint)">{{ r.phrase }}</span>
+                <span style="min-width:0"><code style="font-size:11.5px;color:var(--body)">{{ r.label }}</code> <span style="font-size:10.5px;color:var(--faint)">{{ r.noun }}</span></span>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ t.versions.length }}" hint-placeholder-val="{{ 0 }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Versions</span>
+          <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;margin:10px 0 24px;overflow:hidden">
+            <sc-for list="{{ t.versions }}" as="v" hint-placeholder-count="2">
+              <div style="display:grid;grid-template-columns:80px 1fr;gap:14px;padding:9px 16px;border-top:1px solid var(--line)"><code style="font-size:11px;color:var(--faint)">{{ v.when }}</code><span style="font-size:12.5px;color:var(--body)">{{ v.note }} <code style="font-size:10.5px;color:var(--faint)">{{ v.hash }}</code></span></div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ t.history.length }}" hint-placeholder-val="{{ 0 }}">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">History</span>
+          <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;margin-top:10px;overflow:hidden">
+            <sc-for list="{{ t.history }}" as="hh" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:80px 1fr;gap:14px;padding:10px 16px;border-top:1px solid var(--line)"><code style="font-size:11px;color:var(--faint)">{{ hh.when }}</code><span style="font-size:12.5px;color:var(--body)">{{ hh.text }}</span></div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="position:sticky;top:0;display:flex;flex-direction:column;gap:14px;flex:1 1 280px;max-width:360px">
+        <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:14px 16px">
+          <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">At a glance</span>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+            <sc-for list="{{ t.stats }}" as="s" hint-placeholder-count="4">
+              <div><code style="font-size:16px;font-weight:600;color:{{ s.ink }}">{{ s.value }}</code><p style="margin:1px 0 0;font-size:11px;color:var(--meta)">{{ s.label }}</p></div>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{ t.serves }}" hint-placeholder-val="{{ false }}">
+          <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:14px 16px">
+            <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">What it serves</span>
+            <button data-go="1" type="button" onClick="{{ t.serves.open }}" style="display:flex;align-items:flex-start;gap:8px;margin-top:9px;padding:0;border:0;background:none;cursor:pointer;text-align:left">
+              <span style="width:9px;height:9px;border:1.5px solid var(--accent);transform:rotate(45deg);flex:none;margin-top:3px"></span>
+              <span style="font-size:12.5px;color:var(--body)"><strong style="font-weight:600;color:var(--ink)">{{ t.serves.label }}</strong> &#8212; {{ t.serves.because }}</span>
+            </button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ t.cmd }}" hint-placeholder-val="{{ false }}">
+          <div data-cmd="1" style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:14px 16px">
+            <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">The command</span>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:9px;flex-wrap:wrap">
+              <code style="display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px;color:var(--body);background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:5px 9px">{{ t.cmd }}</code>
+              <button data-copy="1" type="button" onClick="{{ t.copyCmd }}" style="font-size:11px;color:var(--faint);background:transparent;border:1px solid var(--line);border-radius:6px;padding:5px 8px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><svg data-ic="1" data-sm="1" style="width:11px;height:11px" aria-hidden="true"><use href="#i-copy"></use></svg>Copy</button>
+            </div>
+          </div>
+        </sc-if>
+        <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:14px 16px">
+          <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">Machine detail</span>
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin-top:9px;font-family:var(--mono);font-size:10.5px;color:var(--meta)">
+            <sc-for list="{{ t.machine }}" as="m" hint-placeholder-count="3">
+              <span style="color:var(--faint)">{{ m.k }}</span><span style="word-break:break-all">{{ m.v }}</span>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isTour }}" hint-placeholder-val="{{ false }}">
+  <div style="animation:fadeup var(--t-settle) both" data-screen-label="Tour">
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><svg data-ic="1" data-sm="1" style="width:12px;height:12px;color:var(--accent)" aria-hidden="true"><use href="#i-frame"></use></svg><span style="font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--meta)">Plain telling &#183; Tour</span></div>
+    <h1 style="margin:0;font-family:var(--serif);font-weight:400;font-size:26px;letter-spacing:-.012em">The tour still says two things the graph has moved on from.</h1>
+    <p style="margin:6px 0 22px;font-size:12.5px;color:var(--meta)">The narrated walkthrough, regenerated after every consolidation. The script is composed by the server; the browser only plays it.</p>
+    <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;max-width:860px">
+      <div style="height:220px;background:repeating-linear-gradient(45deg,var(--sunk),var(--sunk) 8px,var(--line) 8px,var(--line) 9px);display:flex;align-items:center;justify-content:center">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--meta);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 10px">tour.mp4 &#183; 4 min 12 s &#183; rendered 2 days ago</span>
+      </div>
+      <div style="padding:18px 20px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--signal);background:var(--signal-tint);border-radius:5px;padding:2px 8px">drifted</span>
+          <span style="font-size:12px;color:var(--body)">recorded before this morning&#8217;s changes &#8212; two chapters no longer match the graph</span>
+        </div>
+        <div style="background:var(--signal-tint);border-radius:8px;padding:11px 14px;margin-top:12px">
+          <p style="margin:0 0 6px;font-size:11.5px;color:var(--body)">The recording still says things the graph has moved on from:</p>
+          <p style="margin:0;font-size:12px"><del style="color:var(--meta);text-decoration-color:var(--signal)">&#8220;every one of the 33 claims can show its proof&#8221;</del> <span style="color:var(--faint)">&#8594;</span> <ins style="color:var(--ink);text-decoration:none;font-weight:600">&#8220;7 of 33 claims cannot show their proof&#8221;</ins></p>
+          <p style="margin:4px 0 0;font-size:12px"><del style="color:var(--meta);text-decoration-color:var(--signal)">&#8220;17 of 17 features ready&#8221;</del> <span style="color:var(--faint)">&#8594;</span> <ins style="color:var(--ink);text-decoration:none;font-weight:600">&#8220;16 of 17 features ready&#8221;</ins></p>
+          <div data-cmd="1" style="margin-top:9px"><code style="font-size:11.5px;color:var(--body);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 8px">brain tour render twin/self</code></div>
+        </div>
+        <span style="display:block;margin-top:18px;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Chapters</span>
+        <div style="display:grid;grid-template-columns:130px 1fr;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);align-items:start">
+          <span style="display:block;height:74px;border-radius:6px;background:repeating-linear-gradient(45deg,var(--sunk),var(--sunk) 5px,var(--line) 5px,var(--line) 6px)"></span>
+          <span><span style="font-size:13px;font-weight:600;display:block">What the twin is</span>
+          <span data-cmd="1" style="display:inline-block;margin-top:5px"><code style="font-size:11px;color:var(--meta);background:var(--sunk);border:1px solid var(--line);border-radius:5px;padding:3px 7px">brain eyes serve</code></span>
+          <span style="display:block;margin-top:6px;font-family:var(--serif);font-size:13px;line-height:1.55;color:var(--body)">A codebase here has a semantic twin: a graph that observes the software and derives judgments from what it sees.</span></span>
+        </div>
+        <div style="display:grid;grid-template-columns:130px 1fr;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);align-items:start">
+          <span style="display:block;height:74px;border-radius:6px;background:repeating-linear-gradient(45deg,var(--sunk),var(--sunk) 5px,var(--line) 5px,var(--line) 6px)"></span>
+          <span><span style="font-size:13px;font-weight:600;display:block">The claim census</span>
+          <span data-cmd="1" style="display:inline-block;margin-top:5px"><code style="font-size:11px;color:var(--meta);background:var(--sunk);border:1px solid var(--line);border-radius:5px;padding:3px 7px">brain twin claims twin/self</code></span>
+          <span style="display:block;margin-top:6px;font-family:var(--serif);font-size:13px;line-height:1.55;color:var(--body)">Every claim the system makes, one mark each &#8212; and each one either can or cannot show its proof.</span></span>
+        </div>
+        <div style="display:grid;grid-template-columns:130px 1fr;gap:14px;padding:12px 0;align-items:start">
+          <span style="display:block;height:74px;border-radius:6px;background:repeating-linear-gradient(45deg,var(--sunk),var(--sunk) 5px,var(--line) 5px,var(--line) 6px)"></span>
+          <span><span style="font-size:13px;font-weight:600;display:block">The desk on Work</span>
+          <span style="display:block;margin-top:6px;font-size:11px;color:var(--meta)">the script says nothing about this chapter</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isFeatures }}" hint-placeholder-val="{{ false }}">
+  <div style="animation:fadeup var(--t-settle) both" data-screen-label="Features">
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><svg data-ic="1" data-sm="1" style="width:12px;height:12px;color:var(--accent)" aria-hidden="true"><use href="#i-hexagon"></use></svg><span style="font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--meta)">Plan &#183; Features</span></div>
+    <h1 style="margin:0;font-family:var(--serif);font-weight:400;font-size:26px;letter-spacing:-.012em">17 features; 16 can show they are ready.</h1>
+    <p style="margin:6px 0 20px;font-size:12.5px;color:var(--meta)">A feature is what the system claims to do. A claim is never shown stronger than the proof behind it.</p>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+      <input type="search" value="{{ featQ }}" onChange="{{ featType }}" placeholder="Filter features&#8230;" aria-label="Filter features" style="height:30px;border:1px solid var(--line);border-radius:7px;padding:0 10px;font-family:inherit;font-size:12px;color:var(--ink);background:var(--surface);outline:none;width:190px">
+      <span style="font-size:11px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.05em">State</span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap">
+        <span style="font-size:11.5px;color:var(--fault);background:var(--fault-tint);border-radius:6px;padding:3px 8px;white-space:nowrap">in progress 1</span>
+        <span style="font-size:11.5px;color:var(--meta);border:1px solid var(--line);border-radius:6px;padding:3px 8px;white-space:nowrap">not started 3</span>
+        <span style="font-size:11.5px;color:var(--meta);border:1px solid var(--line);border-radius:6px;padding:3px 8px;white-space:nowrap">ready 13</span>
+      </span>
+      <span style="width:1px;height:16px;background:var(--line2)"></span>
+      <span style="font-size:11px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.05em">Shape</span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap">
+        <span style="font-size:11.5px;color:var(--meta);border:1px solid var(--line);border-radius:6px;padding:3px 8px;white-space:nowrap">has parts 12</span>
+        <span style="font-size:11.5px;color:var(--meta);border:1px solid var(--line);border-radius:6px;padding:3px 8px;white-space:nowrap">a single claim 5</span>
+      </span>
+      <code style="margin-left:auto;font-size:11px;color:var(--meta);white-space:nowrap">{{ featTally }}</code>
+    </div>
+    <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden">
+      <div style="display:grid;grid-template-columns:minmax(0,2fr) 120px 70px minmax(0,2fr) 90px;gap:14px;padding:9px 18px;border-bottom:1px solid var(--line2);background:var(--sunk);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--meta)">
+        <span>Feature</span><span>Parts</span><span>Ready</span><span>Verdict</span><span>Changed</span>
+      </div>
+      <sc-for list="{{ feats }}" as="f" hint-placeholder-count="5">
+        <div>
+        <button data-fold="1" type="button" onClick="{{ f.open }}" style="display:grid;grid-template-columns:minmax(0,2fr) 120px 70px minmax(0,2fr) 90px 26px;gap:14px;padding:12px 18px;border:0;border-bottom:1px solid var(--line);background:{{ f.bg }};align-items:center;text-align:left;cursor:pointer;width:100%">
+          <span style="display:flex;align-items:center;gap:8px;min-width:0"><code style="font-size:10px;color:var(--faint);width:9px;flex:none">{{ f.caret }}</code><svg data-ic="1" data-sm="1" style="width:13px;height:13px;color:var(--meta);flex:none" aria-hidden="true"><use href="#i-hexagon"></use></svg><span style="font-size:13px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.title }}</span></span>
+          <span style="display:flex;gap:2px;flex-wrap:wrap">
+            <sc-for list="{{ f.strip }}" as="p" hint-placeholder-count="3"><span style="{{ p.style }}"></span></sc-for>
+          </span>
+          <code style="font-size:11.5px;color:{{ f.readyInk }}">{{ f.ready }}</code>
+          <span style="font-size:12px;color:var(--body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.verdict }}</span>
+          <code style="font-size:11px;color:var(--meta);white-space:nowrap;text-align:right">{{ f.when }}</code>
+          <span data-go="1" onClick="{{ f.push }}" title="Open the feature" style="font-size:12px;color:var(--faint);text-align:center;cursor:pointer">&#8250;</span>
+        </button>
+        <sc-for list="{{ f.parts }}" as="pt" hint-placeholder-count="0">
+          <button data-go="1" type="button" onClick="{{ pt.open }}" style="display:flex;gap:10px;align-items:center;width:100%;padding:8px 18px 8px 46px;border:0;border-bottom:1px solid var(--line);background:var(--sunk);text-align:left;cursor:pointer">
+            <code style="font-size:10px;color:var(--faint)">&#9492;</code>
+            <span style="{{ pt.mark }}"></span>
+            <span style="font-size:12px;color:var(--body)">{{ pt.label }}</span>
+            <span style="margin-left:auto;font-size:10.5px;color:var(--faint)">{{ pt.state }} &#183; opens the claim &#8250;</span>
+          </button>
+        </sc-for>
+        </div>
+      </sc-for>
+      <button data-textlink="1" type="button" onClick="{{ featToggle }}" style="display:block;width:100%;padding:10px 18px;border:0;background:transparent;text-align:left;cursor:pointer;font-size:11.5px;color:var(--accent)">{{ featFoldLabel }}</button>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isTime }}" hint-placeholder-val="{{ false }}">
+  <div style="animation:fadeup var(--t-settle) both" data-screen-label="Time">
+    <sc-if value="{{ inCompare }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;background:var(--signal-tint);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:20px">
+        <p style="margin:0;font-size:12.5px;color:var(--body)">You are reading the graph as it stood at <strong style="font-weight:600">v0.9 freeze, yesterday 18:04</strong> &#8212; held against the live reading.</p>
+        <button type="button" onClick="{{ toTimeline }}" style="font-size:12px;color:var(--body);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:5px 10px;cursor:pointer;white-space:nowrap">Back to live</button>
+      </div>
+    </sc-if>
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><svg data-ic="1" data-sm="1" style="width:12px;height:12px;color:var(--accent)" aria-hidden="true"><use href="#i-history"></use></svg><span style="font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--meta)">Explore &#183; Time</span></div>
+    <h1 style="margin:0;font-family:var(--serif);font-weight:400;font-size:26px;letter-spacing:-.012em">Since the moment you named &#8220;v0.9 freeze&#8221;, quality has moved four times &#8212; three of them down.</h1>
+    <p style="margin:6px 0 20px;font-size:12.5px;color:var(--meta)">Everything the graph recorded, in the batches it happened in. Any listed moment can be held against the live reading. <button data-go="1" type="button" onClick="{{ toCompare }}" style="padding:0;border:0;background:none;cursor:pointer;font-size:12.5px;color:var(--accent)">Compare against v0.9 freeze &#8250;</button></p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:26px">
+      <div style="background:var(--fault-tint);border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:150px">
+        <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">Tests</span>
+        <p style="margin:4px 0 0;font-family:var(--mono);font-size:13px;color:var(--ink)">207/207 <span style="color:var(--fault)">&#8594;</span> 204/207</p>
+      </div>
+      <div style="background:var(--fault-tint);border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:150px">
+        <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">Features ready</span>
+        <p style="margin:4px 0 0;font-family:var(--mono);font-size:13px;color:var(--ink)">17 <span style="color:var(--fault)">&#8594;</span> 16</p>
+      </div>
+      <div style="background:var(--fault-tint);border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:150px">
+        <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">Docs in doubt</span>
+        <p style="margin:4px 0 0;font-family:var(--mono);font-size:13px;color:var(--ink)">0 <span style="color:var(--fault)">&#8594;</span> 3</p>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:150px">
+        <span style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">Artifacts</span>
+        <p style="margin:4px 0 0;font-family:var(--mono);font-size:13px;color:var(--ink)">38 <span style="color:var(--faint)">&#8594;</span> 41</p>
+      </div>
+    </div>
+    <sc-if value="{{ inCompare }}" hint-placeholder-val="{{ false }}">
+      <span style="font-size:12px;font-weight:600;color:var(--fault)">Regressions &#8212; the loudest thing leads</span>
+      <div style="display:flex;flex-direction:column;gap:8px;margin:10px 0 20px">
+        <div style="display:flex;gap:10px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--fault);border-radius:8px;padding:11px 14px"><span style="width:8px;height:8px;background:var(--fault);border-radius:1px;transform:rotate(45deg);flex:none;margin-top:4px"></span><span style="font-size:12.5px;color:var(--body)"><strong style="font-weight:600;color:var(--ink)">3 tests fell to failing.</strong> All three name the approvals path; they passed at the freeze.</span></div>
+        <div style="display:flex;gap:10px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--fault);border-radius:8px;padding:11px 14px"><span style="width:8px;height:8px;background:var(--fault);border-radius:1px;transform:rotate(45deg);flex:none;margin-top:4px"></span><span style="font-size:12.5px;color:var(--body)"><strong style="font-weight:600;color:var(--ink)">3 documents fell into doubt.</strong> The code they describe moved after the freeze.</span></div>
+      </div>
+      <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Improvements &#8212; a footnote</span>
+      <div style="margin:10px 0 20px;display:flex;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:11px 14px"><span style="width:8px;height:8px;border-radius:999px;background:var(--proof);flex:none;margin-top:4px"></span><span style="font-size:12.5px;color:var(--body)">3 more artifacts were captured; the tour gained a chapter.</span></div>
+      <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Appeared since</span>
+      <div style="margin:10px 0 20px;display:flex;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:11px 14px"><span style="width:8px;height:8px;border:1.5px solid var(--faint);transform:rotate(45deg);flex:none;margin-top:4px"></span><span style="font-size:12.5px;color:var(--body)">2 governed changes were proposed; both still wait for you.</span></div>
+      <p style="margin:0 0 20px;font-size:11.5px;color:var(--faint)">Nothing present at the freeze has disappeared. Sessions consolidated between the two moments are folded into memory and not compared line by line.</p>
+    </sc-if>
+    <sc-if value="{{ inTimeline }}" hint-placeholder-val="{{ true }}">
+    <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Today</span>
+    <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;margin:10px 0 20px">
+      <button data-go="1" type="button" onClick="{{ goProof }}" style="display:grid;grid-template-columns:76px 16px minmax(0,1fr);gap:12px;width:100%;padding:11px 18px;border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;cursor:pointer;align-items:start">
+        <code style="font-size:11px;color:var(--faint);padding-top:2px">09:41</code>
+        <span style="width:8px;height:8px;background:var(--fault);border-radius:1px;margin-top:4px"></span>
+        <span><span style="font-size:12.5px;font-weight:500;color:var(--ink)">Test run went red</span><p style="margin:2px 0 0;font-size:12px;color:var(--meta)">3 of 207 failed &#8212; all three name the approvals path</p></span>
+      </button>
+      <button data-go="1" type="button" onClick="{{ goWork }}" style="display:grid;grid-template-columns:76px 16px minmax(0,1fr);gap:12px;width:100%;padding:11px 18px;border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;cursor:pointer;align-items:start">
+        <code style="font-size:11px;color:var(--faint);padding-top:2px">07:52</code>
+        <span style="width:8px;height:8px;border:1.5px solid var(--faint);transform:rotate(45deg);margin-top:4px"></span>
+        <span><span style="font-size:12.5px;font-weight:500;color:var(--ink)">2 changes proposed</span><p style="margin:2px 0 0;font-size:12px;color:var(--meta)">src/util.rs and src/main.rs wait for your decision</p></span>
+      </button>
+      <button data-go="1" type="button" onClick="{{ goWork }}" style="display:grid;grid-template-columns:76px 16px minmax(0,1fr);gap:12px;width:100%;padding:11px 18px;border:0;background:transparent;text-align:left;cursor:pointer;align-items:start">
+        <code style="font-size:11px;color:var(--faint);padding-top:2px">06:34</code>
+        <span style="width:8px;height:8px;border-radius:999px;background:var(--faint);margin-top:4px"></span>
+        <span><span style="font-size:12.5px;font-weight:500;color:var(--ink)">Session consolidated</span><p style="margin:2px 0 0;font-size:12px;color:var(--meta)">11 files touched, 2 documents fell out of date, tests were green at the time</p></span>
+      </button>
+    </div>
+    <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta)">Yesterday</span>
+    <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;margin:10px 0 20px">
+      <button data-go="1" type="button" onClick="{{ toCompare }}" style="display:grid;grid-template-columns:76px 16px minmax(0,1fr);gap:12px;width:100%;padding:11px 18px;border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;cursor:pointer;align-items:start">
+        <code style="font-size:11px;color:var(--faint);padding-top:2px">18:04</code>
+        <span style="width:8px;height:8px;border:1.5px dashed var(--faint);margin-top:4px"></span>
+        <span><span style="font-size:12.5px;font-weight:500;color:var(--ink)">Moment named: v0.9 freeze</span><p style="margin:2px 0 0;font-size:12px;color:var(--meta)">the reading above compares against this</p></span>
+      </button>
+      <button data-go="1" type="button" onClick="{{ goThing }}" style="display:grid;grid-template-columns:76px 16px minmax(0,1fr);gap:12px;width:100%;padding:11px 18px;border:0;background:transparent;text-align:left;cursor:pointer;align-items:start">
+        <code style="font-size:11px;color:var(--faint);padding-top:2px">14:31</code>
+        <span style="width:8px;height:8px;border-radius:999px;background:var(--faint);margin-top:4px"></span>
+        <span><span style="font-size:12.5px;font-weight:500;color:var(--ink)">Session consolidated</span><p style="margin:2px 0 0;font-size:12px;color:var(--meta)">4 files touched, 1 document updated, tests 207/207 ok</p></span>
+      </button>
+    </div>
+    </sc-if>
+    <div data-cmd="1" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:11.5px;color:var(--faint)">Name this moment to compare against it later:</span>
+      <code style="font-size:11.5px;color:var(--body);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 9px">brain moment name twin/self "before-the-fix"</code>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isStructure }}" hint-placeholder-val="{{ false }}">
+  <div style="animation:fadeup var(--t-settle) both" data-screen-label="Structure">
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><svg data-ic="1" data-sm="1" style="width:12px;height:12px;color:var(--accent)" aria-hidden="true"><use href="#i-map"></use></svg><span style="font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--meta)">Explore &#183; Structure</span></div>
+    <h1 style="margin:0;font-family:var(--serif);font-weight:400;font-size:26px;letter-spacing:-.012em">Seven modules on three layers; the pressure sits at the bottom.</h1>
+    <p style="margin:6px 0 18px;font-size:12.5px;color:var(--meta)">A block sits on its dependency layer and never points upward. The MRI is a lens on this same data, not a separate place.</p>
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+      <sc-for list="{{ lensChips }}" as="lc" hint-placeholder-count="4">
+        <button type="button" onClick="{{ lc.click }}" style="{{ lc.style }}">{{ lc.label }}</button>
+      </sc-for>
+    </div>
+    <p style="margin:0 0 14px;font-size:11.5px;color:var(--faint)">{{ lensNote }}</p>
+    <sc-if value="{{ notMri }}" hint-placeholder-val="{{ true }}">
+      <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:22px 24px">
+        <sc-for list="{{ layers }}" as="L" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:84px minmax(0,1fr);gap:16px;align-items:stretch;padding:14px 0;border-top:1px dashed var(--line)">
+            <span style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);align-self:center">{{ L.label }}</span>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <sc-for list="{{ L.blocks }}" as="b" hint-placeholder-count="3">
+                <button type="button" onClick="{{ b.open }}" style="{{ b.style }}">
+                  <span style="font-size:12.5px;font-weight:600;display:block;color:var(--ink)">{{ b.name }}</span>
+                  <code style="font-size:10.5px;color:{{ b.metaInk }}">{{ b.meta }}</code>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ blockDetail }}" hint-placeholder-val="{{ false }}">
+        <div style="background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:16px 20px;margin-top:14px">
+          <p style="margin:0;font-family:var(--serif);font-size:16px;color:var(--ink)">{{ blockDetail.name }}</p>
+          <p style="margin:4px 0 10px;font-size:12px;color:var(--meta)">{{ blockDetail.sentence }}</p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ blockDetail.files }}" as="fl" hint-placeholder-count="3">
+              <button data-go="1" type="button" onClick="{{ fl.open }}" style="display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:4px 9px;cursor:pointer"><code style="font-size:11.5px;color:var(--body)">{{ fl.label }}</code><span data-arrow="1" style="font-size:11px;color:var(--faint)">&#8250;</span></button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </sc-if>
+    <sc-if value="{{ onMri }}" hint-placeholder-val="{{ false }}">
+      <div style="position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line)">
+        <canvas id="mri-c" style="display:block;width:100%;height:540px;background:#070b10;cursor:grab;outline:none"></canvas>
+        <p id="mri-readout" style="position:absolute;left:14px;bottom:10px;margin:0;font-family:var(--mono);font-size:11px;color:#93a5b7;pointer-events:none">reading the anatomy&#8230;</p>
+      </div>
+    </sc-if>
+    <sc-if value="{{ notMri }}" hint-placeholder-val="{{ true }}">
+      <p style="margin:12px 0 0;font-size:11.5px;color:var(--faint)">Click a block to see what lives in it; its files open their dossiers.</p>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isStub }}" hint-placeholder-val="{{ false }}">
+  <div style="animation:fadeup var(--t-settle) both" data-screen-label="Stub">
+    <h1 style="margin:0;font-family:var(--serif);font-weight:400;font-size:26px;letter-spacing:-.012em">{{ stubTitle }}</h1>
+    <p style="margin:8px 0 0;font-size:12.5px;color:var(--meta);max-width:60ch">{{ stubNote }}</p>
+  </div>
+  </sc-if>
+
+  </div>
+  </div>
+
+  <sc-if value="{{ findOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ findClose }}" style="position:fixed;inset:0;background:rgba(15,16,20,.45);backdrop-filter:blur(2px);display:flex;align-items:flex-start;justify-content:center;padding-top:12vh;z-index:60">
+      <div onClick="{{ eatClick }}" style="width:min(620px,92vw);background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);box-shadow:0 24px 60px rgba(0,0,0,.35);overflow:hidden">
+        <input id="eyes-find" type="search" value="{{ findQ }}" onChange="{{ findType }}" placeholder="Search names, paths and titles&#8230;" autoComplete="off" spellCheck="false" style="width:100%;border:0;border-bottom:1px solid var(--line);padding:15px 18px;font-family:inherit;font-size:14px;color:var(--ink);background:var(--surface);outline:none;box-sizing:border-box">
+        <div style="max-height:52vh;overflow-y:auto">
+          <sc-for list="{{ findHits }}" as="x" hint-placeholder-count="0">
+            <button data-go="1" type="button" onClick="{{ x.go }}" style="{{ x.style }}">
+              <span style="display:flex;align-items:center;gap:7px;width:110px;flex:none"><svg data-ic="1" data-sm="1" style="width:13px;height:13px;color:var(--meta)" aria-hidden="true"><use href="#i-{{ x.icon }}"></use></svg><span style="font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">{{ x.kind }}</span></span>
+              <code style="font-size:12.5px;color:var(--ink)">{{ x.label }}</code>
+              <span style="margin-left:auto;font-size:11.5px;color:var(--meta);padding-left:12px;text-align:right">{{ x.why }}</span>
+            </button>
+          </sc-for>
+          <sc-if value="{{ findEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:10px;padding:14px 18px"><span style="display:flex;gap:2px;align-items:flex-end"><span style="width:5px;height:14px;background:var(--line2);border-radius:1px"></span><span style="width:5px;height:10px;background:var(--line2);border-radius:1px"></span><span style="width:5px;height:14px;border:1.5px dashed var(--faint);border-radius:1px;box-sizing:border-box"></span></span><p style="margin:0;font-size:12px;color:var(--meta)">Nothing by that name.</p></div>
+          </sc-if>
+        </div>
+        <p style="margin:0;padding:9px 18px;border-top:1px solid var(--line);font-size:11px;color:var(--faint)">&#8593;&#8595; to move &#183; Enter to open &#183; Esc to close</p>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:12px;padding:8px 14px;border-radius:8px;z-index:50;animation:settle .18s ease both;max-width:80vw">{{ toast }}</div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1500,&quot;height&quot;:1000},&quot;startView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;now&quot;,&quot;work&quot;,&quot;roadmap&quot;,&quot;features&quot;,&quot;proof&quot;,&quot;tour&quot;,&quot;time&quot;,&quot;structure&quot;,&quot;thing&quot;],&quot;default&quot;:&quot;now&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;comfortable&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;comfortable&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;}}">
+const NAV = [
+  { id:"now", label:"Now", count:"4", tone:"fault", icon:"now", section:"Operate" },
+  { id:"work", label:"Work", count:"2", tone:"signal", icon:"orbit" },
+  { id:"roadmap", label:"Roadmap", count:"1", tone:"signal", icon:"chevron", section:"Plan" },
+  { id:"features", label:"Features", count:null, tone:null, icon:"hexagon" },
+  { id:"proof", label:"Proof", count:"3", tone:"fault", icon:"diamond", section:"Prove" },
+  { id:"time", label:"Time", count:null, tone:null, icon:"history", section:"Explore" },
+  { id:"structure", label:"Structure", count:null, tone:null, icon:"map" }
+];
+const QUALITY = [
+  { label:"Tests passing", points:[100,100,98.6,98.6,95.2], gaps:[9,3,26,4], tone:"bad", trend:"falling",
+    current:"204 / 207 \u00b7 ran 12 min ago", span:"5 moves \u00b7 last 6 days",
+    sentence:"Tests are slipping: 204 of 207 passing, down from 207 of 207." },
+  { label:"Feature claims", points:[0,0,2,4], gaps:[14,5,2], tone:"bad", trend:"rising",
+    current:"4 claims with nothing behind them", span:"4 moves \u00b7 last 5 days",
+    sentence:"2 more feature claims have nothing observed behind them: 4 now." },
+  { label:"Features ready", points:[100,94.1], gaps:[3], tone:"bad", trend:"falling",
+    current:"16 / 17 ready", span:"2 moves \u00b7 last 2 days",
+    sentence:"A feature slipped back to not ready: 16 of 17 now." },
+  { label:"Documents in doubt", points:[0,3], gaps:[6], tone:"bad", trend:"rising",
+    current:"3 may be wrong", span:"2 moves \u00b7 last 3 days",
+    sentence:"3 more documents drifted from the code." }
+];
+const CENSUS = [
+  { label:"Feature completeness", proven:15, total:17 },
+  { label:"Test evidence", proven:4, total:6 },
+  { label:"Action verification", proven:4, total:4 },
+  { label:"Artifact verification", proven:3, total:6 }
+];
+const QUEUE = [
+  { id:"q1", sev:"act", horizon:"now", title:"3 tests are failing",
+    reason:"say::quality_tests, work::approvals and compare::moments all went red in the same run \u2014 they share the approvals path, so this is likely one cause.",
+    cmd:"brain twin tests twin/self", chips:[] },
+  { id:"q2", sev:"act", horizon:"now", title:"2 agents are converging on one file",
+    reason:"Claude Code and Codex both touched it inside the last twenty minutes \u2014 decide who owns it.",
+    cmd:"brain sessions import . --prefix twin/self",
+    chips:[{ label:"crates/brain-eyes/src/state.rs" }] },
+  { id:"q3", sev:"watch", horizon:"now", title:"3 documents drifted from the code", repeats:3,
+    also:["docs/guides/agent-sessions.md drifted the same way, 2 hours ago"],
+    reason:"the code they describe changed after they were written, so they may now be wrong \u2014 no one has read them since.",
+    cmd:"brain twin doubt twin/self",
+    chips:[{ label:"docs/architecture/store-boundary.md", thing:"doc-store" }, { label:"docs/architecture/query-planner.md", thing:"doc-query" }] },
+  { id:"q4", sev:"note", horizon:"can wait", title:"2 changes are waiting for your decision",
+    reason:"proposed 2 hours ago; nothing has been touched yet \u2014 the desk on Work shows each diff.",
+    cmd:"brain change apply twin/self util.rs-0ca5df1e --cap fs",
+    steps:[{ label:"proposed", state:"done", when:"2 hrs ago" },{ label:"applied", state:"missing", when:"\u2014" },{ label:"verified", state:"missing", when:"\u2014" }],
+    chips:[{ label:"src/util.rs", thing:"chg-util" }, { label:"src/main.rs", thing:"chg-util" }] },
+  { id:"q5", sev:"note", horizon:"can wait", title:"23 records aged as the code moved on",
+    reason:"decisions and finished plans are history \u2014 nothing here asks for action.",
+    cmd:"brain twin stale twin/self",
+    chips:[{ label:"docs/adr/adr-001-relation-predicate-field.md", thing:"doc-store" },
+      { label:"docs/adr/adr-002-alpha-normalization-at-store-boundary.md", thing:"doc-store" },
+      { label:"docs/adr/adr-003-templates-in-the-graph.md", thing:"doc-store" },
+      { label:"docs/adr/adr-004-tests-in-the-graph.md", thing:"doc-store" },
+      { label:"docs/adr/adr-005-docs-as-projections.md", thing:"doc-store" },
+      { label:"docs/plans/plan-011-eyes-now-surface.md", thing:"doc-store" },
+      { label:"docs/plans/plan-012-claim-census.md", thing:"doc-store" },
+      { label:"docs/adr/adr-007-git-triggers-the-brain.md", thing:"doc-store" }] }
+];
+const PRESSURE = [
+  { label:"crates/brain-eyes/src/state.rs", changes:22, importers:18, tested:false,
+    reasons:"changed 22 times \u00b7 18 files import this \u00b7 no test names it directly" },
+  { label:"crates/brain-eyes/src/dto.rs", changes:16, importers:18, tested:false,
+    reasons:"changed 16 times \u00b7 18 files import this \u00b7 no test names it directly" },
+  { label:"crates/brain-eyes/src/query/mod.rs", changes:9, importers:15, tested:true,
+    reasons:"changed 9 times \u00b7 15 files import this \u00b7 2 tests name it" }
+];
+const SESSIONS = [
+  { id:"w1", agent:"Claude Code", model:"claude-4.6", live:true, state:"working now",
+    objective:"Make the approvals desk verify what it applies", files:"7 edited", span:"41 min", turns:"12 instructions",
+    outcome:null, tools:[["edit",31],["run tests",6],["read",58]],
+    touched:[["crates/brain-eyes/src/state.rs","file-state"],["src/util.rs","chg-util"],["query/work.rs","file-query"]], more:4,
+    produced:[["change: src/util.rs","chg-util"]], feature:"Approvals verify themselves" },
+  { id:"w2", agent:"Codex", model:"gpt-5.2-codex", live:true, state:"working now",
+    objective:"Chase the flaky comparison in compare::moments", files:"3 edited", span:"18 min", turns:"5 instructions",
+    outcome:null, tools:[["edit",9],["run tests",11]],
+    touched:[["crates/brain-eyes/src/state.rs","file-state"],["query/mod.rs","file-query"]], more:1,
+    produced:[], feature:"Sessions fold into memory" },
+  { id:"w3", agent:"Claude Code", model:"claude-4.6", live:false, state:"consolidated 3 hrs ago",
+    objective:"Fold session imports into memory on consolidation", files:"11 edited", span:"2.1 hrs", turns:"19 instructions",
+    outcome:"tests were 207/207 ok at the time \u2014 then folded into memory", tools:[["edit",44],["run tests",9],["read",102]],
+    touched:[["crates/brain-eyes/src/dto.rs","file-dto"],["query/now.rs","file-query"]], more:9,
+    produced:[["doc: agent-sessions.md","doc-store"]], feature:"Sessions fold into memory" }
+];
+const SUITES = [
+  { id:"s1", name:"work::approvals", failing:1, cases:[
+    { name:"applies_then_verifies", result:"failing", detail:"expected the ledger to record the verify step \u2014 it recorded nothing", took:"1.2 s" },
+    { name:"refuses_without_cap", result:"passing", detail:"", took:"0.3 s" },
+    { name:"shows_the_exact_command", result:"passing", detail:"", took:"0.1 s" } ] },
+  { id:"s2", name:"say::quality", failing:1, cases:[
+    { name:"quality_tests", result:"failing", detail:"the falling sentence names 206, the run says 204", took:"0.2 s" },
+    { name:"quality_docs", result:"passing", detail:"", took:"0.2 s" } ] },
+  { id:"s3", name:"compare::moments", failing:1, cases:[
+    { name:"moments_stay_ordered", result:"failing", detail:"flaky \u2014 changed its mind 3 times this week", took:"2.8 s" },
+    { name:"named_moment_survives", result:"skipped", detail:"waits on the ordering fix above", took:"\u2014" } ] },
+  { id:"s4", name:"census::spine", failing:0, cases:[
+    { name:"failing_claims_render_failing", result:"passing", detail:"", took:"0.1 s" },
+    { name:"every_mark_names_itself", result:"passing", detail:"", took:"0.1 s" } ] }
+];
+const STUBS = {};
+const LAYERS = [
+  { label:"surfaces", blocks:[
+    { id:"eyes", name:"eyes", meta:"24 files \u00b7 96 defs", flex:3, tones:{ attention:"none", activity:"signal" }, sentence:"The cockpit itself: server-composed sentences, one voice.", files:[["assets/app.js","file-query"],["assets/list.js","file-query"],["src/http.rs","file-query"]] },
+    { id:"say", name:"say", meta:"6 files", flex:1, tones:{}, sentence:"The voice module: every sentence a person reads is composed here.", files:[["src/say.rs","file-query"]] } ] },
+  { label:"queries", blocks:[
+    { id:"query", name:"query", meta:"14 files \u00b7 61 defs", flex:2.5, tones:{ activity:"signal" }, sentence:"One query per surface; queries never call each other.", files:[["query/now.rs","file-query"],["query/work.rs","file-query"],["query/thing.rs","file-query"]] },
+    { id:"body", name:"body", meta:"4 files", flex:1, tones:{}, sentence:"Bytes on demand: images, video, and file excerpts.", files:[["src/body.rs","file-query"]] } ] },
+  { label:"foundation", blocks:[
+    { id:"state", name:"state", meta:"2 agents on it now \u00b7 untested", flex:1.2, tones:{ attention:"fault", activity:"fault" }, sentence:"Where the pressure sits: changed 22 times, 18 importers, no direct test.", files:[["src/state.rs","file-state"]] },
+    { id:"dto", name:"dto", meta:"18 importers \u00b7 untested", flex:1, tones:{ attention:"signal" }, sentence:"Every surface reads its shapes from here.", files:[["src/dto.rs","file-dto"]] },
+    { id:"store", name:"store", meta:"9 files \u00b7 2 tests name it", flex:2, tones:{ activity:"signal" }, sentence:"The graph store; alpha-normalization happens at its boundary.", files:[["src/state.rs","file-state"],["src/dto.rs","file-dto"]] } ] }
+];
+const FEAT_PARTS = {
+  "Approvals verify themselves":[
+    ["Applying records both steps","ready"],["The command is exact","ready"],
+    ["A failed verify blocks the desk","failing"],["The operator sees the drift","unproven"]]
+};
+const FEATS = [
+  { title:"Approvals verify themselves", strip:["r","r","f","u"], ready:"2/4", bad:true,
+    verdict:"a failing test contradicts one part; one claim has nothing behind it", when:"12 min ago" },
+  { title:"Sessions fold into memory", strip:["r","r","r"], ready:"3/3", verdict:"every claim is backed; verified against the run 3 hours ago", when:"3 hrs ago" },
+  { title:"The graph explains its pressure", strip:["r","r"], ready:"2/2", verdict:"ready; the ranking matches what the operator clicks first", when:"2 days ago" },
+  { title:"The cockpit states its freshness", strip:["r","r","r"], ready:"3/3", verdict:"every reading dates itself; the drift pill is tested", when:"4 days ago" },
+  { title:"Shared views without accounts", strip:["u","u"], ready:"0/2", verdict:"defined, not started", when:"\u2014" },
+  { title:"The stakeholder telling stands alone", strip:["u"], ready:"0/1", verdict:"still a sentence \u2014 no definition of done yet", when:"\u2014" }
+];
+const FEATS_MORE = [
+  { title:"Every number unfolds", strip:["r","r","r","r"], ready:"4/4", verdict:"each count reaches its evidence in three clicks or fewer", when:"6 days ago" },
+  { title:"Claims render no stronger than proof", strip:["r","r","r"], ready:"3/3", verdict:"the census renders all five states distinctly", when:"6 days ago" },
+  { title:"The tour narrates itself", strip:["r","r"], ready:"2/2", verdict:"regenerated after every consolidation; no drift", when:"8 days ago" },
+  { title:"One voice from the server", strip:["r","r","r"], ready:"3/3", verdict:"machine vocabulary cannot reach prose \u2014 a test forbids it", when:"9 days ago" }
+];
+const INK = { act:"var(--fault)", watch:"var(--signal)", note:"var(--faint)" };
+const THINGS = {
+  "file-state": { noun:"file", title:"crates/brain-eyes/src/state.rs", chip:["contested","fault"],
+    lede:"Two agents touched this file in the last twenty minutes, and no test names it directly.",
+    briefing:[
+      { ink:"fault", title:"Claude Code and Codex are both editing it now.", body:"Decide who owns it before either consolidates.", cmd:"brain sessions import . --prefix twin/self" },
+      { ink:"signal", title:"Edits here ripple widest.", body:"18 files import this one; nothing between them and a mistake \u2014 no test names it directly." }],
+    around:[
+      { label:"It uses \u00b7 4", items:[["dto.rs","file-dto"],["query/mod.rs","file-query"],["say.rs","file-dto"]], note:"1 more is not listed" },
+      { label:"Depends on it \u00b7 18", items:[["http.rs","file-dto"],["query/now.rs","file-query"],["query/work.rs","file-query"]], note:"15 more are not listed" },
+      { label:"Described in \u00b7 2", items:[["store-boundary.md","doc-store"],["adr-002-alpha-normalization.md","doc-store"]], note:"one may be wrong \u2014 it is in doubt" }],
+    history:[["18 min","edited by Codex \u2014 the comparison cache moved into state"],["20 min","edited by Claude Code \u2014 approvals now read their ledger from here"],["3 hrs","consolidated with the last session \u2014 22 changes over its history"]],
+    stats:[["22","changes over its history"],["18","files import this"],["0","tests name it directly","fault"],["2","agents on it now"]],
+    serves:{ label:"Approvals verify themselves", because:"its ledger lives here \u2014 the part a failing test contradicts", thing:"feat-approvals" },
+    machine:[["id","sid:a2bd8150\u2026"],["kind","source_file"],["head","b3:6dd2d7dc\u2026"]] },
+  "file-dto": { noun:"file", title:"crates/brain-eyes/src/dto.rs", chip:["quiet","meta"],
+    lede:"Every surface reads its shapes from here; edits ripple widest of any file.",
+    briefing:[{ ink:"signal", title:"No test names it directly.", body:"18 files import this one \u2014 a mistake here surfaces somewhere else." }],
+    around:[
+      { label:"Depends on it \u00b7 18", items:[["state.rs","file-state"],["query/now.rs","file-query"],["http.rs","file-query"]], note:"15 more are not listed" },
+      { label:"Described in \u00b7 1", items:[["store-boundary.md","doc-store"]], note:null }],
+    history:[["2 days","edited \u2014 the QualityLine shape gained a tone field"],["6 days","edited \u2014 concern cards gained repeats and also"]],
+    stats:[["16","changes over its history"],["18","files import this"],["0","tests name it directly","fault"]],
+    serves:null, machine:[["id","sid:77b2c1\u2026"],["kind","source_file"]] },
+  "file-query": { noun:"file", title:"crates/brain-eyes/src/query/mod.rs", chip:["steady","proof"],
+    lede:"The query router; 2 tests name it, and both pass.",
+    briefing:[],
+    around:[{ label:"It uses \u00b7 14", items:[["now.rs","file-state"],["work.rs","file-state"],["thing.rs","file-state"]], note:"11 more are not listed" }],
+    history:[["4 days","edited \u2014 the compare endpoint learned named moments"]],
+    stats:[["9","changes over its history"],["15","files import this"],["2","tests name it"]],
+    serves:null, machine:[["id","sid:31c99a\u2026"],["kind","source_file"]] },
+  "feat-approvals": { noun:"feature", title:"Approvals verify themselves", chip:["2 of 4 ready","fault"],
+    lede:"A failing test contradicts one part; one claim has nothing observed behind it.",
+    briefing:[],
+    parts:[
+      ["Applying records both steps","ready","the change ledger records apply and verify \u2014 observed on the last apply"],
+      ["The command is exact","ready","rendered from the change itself; a test compares them"],
+      ["A failed verify blocks the desk","failing","work::approvals::applies_then_verifies contradicts this since 12 minutes ago"],
+      ["The operator sees the drift","unproven","claimed, but nothing observed stands behind it yet"]],
+    partsNote:"Waiting on the approvals path \u2014 the failing test and the unproven claim share it.",
+    reach:[
+      { label:"Files", basis:"declared", items:[["crates/brain-eyes/src/state.rs",null,"file-state"],["src/util.rs",null,"chg-util"]] },
+      { label:"Documents", basis:"reached through its files", items:[["store-boundary.md","via state.rs","doc-store"]] }],
+    history:[["12 min","a part fell to failing \u2014 the run contradicted it"],["2 days","a part was proven \u2014 the exact-command test landed"]],
+    stats:[["2/4","parts ready","fault"],["3","tests name its parts"],["12 min","since it last moved"]],
+    serves:null, machine:[["id","sid:fe4410\u2026"],["kind","feature"],["slug","approvals-verify"]] },
+  "chg-util": { noun:"governed change", title:"src/util.rs \u2014 governed change", chip:["waiting","signal"],
+    lede:"Proposed 2 hours ago; nothing has been touched since. Applying it is one command, run by you.",
+    briefing:[{ ink:"signal", title:"The file it touches sits on the pressure list.", body:"util.rs is imported by 9 files; the change stays inside one function." }],
+    stages:[["proposed","done","2 hrs ago"],["applied","missing","\u2014"],["verified","missing","\u2014"]],
+    hasDiff:true,
+    history:[["2 hrs","proposed by Claude Code \u2014 replaces the retry loop with the shared backoff helper"]],
+    stats:[["3","hunks in the diff"],["1","file touched"],["2 hrs","waiting for you","signal"]],
+    serves:{ label:"Approvals verify themselves", because:"applying it exercises the desk end to end", thing:"feat-approvals" },
+    cmd:"brain change apply twin/self util.rs-0ca5df1e --cap fs",
+    machine:[["id","chg:0ca5df1e\u2026"],["kind","change"],["cap","fs"]] },
+  "test-applies": { noun:"test case", title:"work::approvals::applies_then_verifies", chip:["failing","fault"],
+    lede:"Expected the ledger to record the verify step \u2014 it recorded nothing. Failing since 12 minutes ago.",
+    briefing:[],
+    backs:[["bad","The approvals desk verifies what it applies","this test is the claim's only proof \u2014 while it fails, the claim renders hollow"]],
+    flips:[["12 min","went red \u2014 the verify step left no record"],["2 days","went green \u2014 the ledger test landed"],["6 days","first recorded run"]],
+    attachments:true,
+    history:[["12 min","ran 1.2 s in the cargo suite \u2014 failed"]],
+    stats:[["3","results recorded"],["1","claim it backs","fault"],["1.2 s","last run took"]],
+    serves:{ label:"Approvals verify themselves", because:"it is the proof behind the desk's central claim", thing:"feat-approvals" },
+    machine:[["id","tc:9917b0\u2026"],["kind","test_case"],["framework","cargo"]] },
+  "doc-store": { noun:"document", title:"docs/architecture/store-boundary.md", chip:["in doubt","fault"],
+    lede:"It describes a boundary the code moved 2 hours ago. It may now be wrong; no one has read it since.",
+    briefing:[],
+    body:{ origin:"read from the working tree \u00b7 shown in part \u2014 this is a long document",
+      text:"# The store boundary\n\nAll alpha-normalization happens **at the store boundary**, never inside queries. A query may assume its inputs are already normalized.\n\n> Moved 2 hours ago: normalization now also runs inside `compare::moments` \u2014 this paragraph no longer holds.",
+      full:"# The store boundary\n\nAll alpha-normalization happens **at the store boundary**, never inside queries. A query may assume its inputs are already normalized.\n\n> Moved 2 hours ago: normalization now also runs inside `compare::moments` \u2014 this paragraph no longer holds.\n\n## What the boundary guarantees\n\n- Every identifier entering the store is lowercased and trimmed\n- Aliases resolve to their canonical `sid` before any edge is written\n- Nothing downstream re-checks \u2014 that is the point of a boundary\n\n## Why it lives here\n\nThe store is the narrowest waist in the system: 3 write paths against 14 read paths. Guarding three doors is cheaper than guarding fourteen.\n\n## When this document ages\n\nAny change to `store/normalize.rs` or the write paths dates this text. The graph watches those files and marks this page in doubt \u2014 as it just did." },
+    relations:[["describes","crates/brain-eyes/src/state.rs","file","file-state"],["cited by","adr-002-alpha-normalization","decision","doc-query"]],
+    versions:[["2 hrs","fell into doubt \u2014 the code it cites changed","b3:6dd2\u2026"],["6 days","written after the boundary landed","b3:41c8\u2026"]],
+    history:[["2 hrs","the graph marked it in doubt"]],
+    stats:[["2","versions recorded"],["1","file it describes"],["2 hrs","in doubt","fault"]],
+    serves:{ label:"Approvals verify themselves", because:"the desk's ledger crosses this boundary", thing:"feat-approvals" },
+    cmd:"brain twin doubt twin/self", machine:[["id","doc:5a01fe\u2026"],["kind","document"]] },
+  "doc-query": { noun:"document", title:"docs/architecture/query-planner.md", chip:["in doubt","fault"],
+    lede:"It describes a planner the code reshaped this morning. It may now be wrong.",
+    briefing:[],
+    body:{ origin:"read from the working tree \u00b7 shown in part",
+      text:"# The query planner\n\nEach surface owns **one query**; queries never call each other.\n\n> The compare surface now borrows the timeline query \u2014 recorded 4 hours ago, after this was written.",
+      full:"# The query planner\n\nEach surface owns **one query**; queries never call each other.\n\n> The compare surface now borrows the timeline query \u2014 recorded 4 hours ago, after this was written.\n\n## The rule and its reason\n\n- One query per surface keeps every page's cost visible in one file\n- A surface that needs another surface's answer asks the graph, not the query\n- `mod.rs` routes, it never computes\n\n## When this document ages\n\nA new call edge between two files under `query/` dates this text; the graph records the import and marks this page in doubt." },
+    relations:[["describes","crates/brain-eyes/src/query/mod.rs","file","file-query"]],
+    versions:[["4 hrs","fell into doubt","b3:6dd2\u2026"]],
+    history:[["4 hrs","the graph marked it in doubt"]],
+    stats:[["1","file it describes"],["4 hrs","in doubt","fault"]],
+    serves:null, cmd:"brain twin doubt twin/self", machine:[["id","doc:8cc341\u2026"],["kind","document"]] }
+};
+const FIND_INDEX = [
+  { label:"crates/brain-eyes/src/state.rs", kind:"file", why:"contested \u00b7 2 agents on it now", view:"thing", thing:"file-state" },
+  { label:"crates/brain-eyes/src/dto.rs", kind:"file", why:"18 files import this", view:"thing", thing:"file-dto" },
+  { label:"crates/brain-eyes/src/query/mod.rs", kind:"file", why:"2 tests name it", view:"thing", thing:"file-query" },
+  { label:"Approvals verify themselves", kind:"feature", why:"2 of 4 parts ready \u00b7 serves the desk on Work", view:"thing", thing:"feat-approvals" },
+  { label:"src/util.rs \u2014 governed change", kind:"governed change", why:"proposed 2 hours ago \u00b7 waiting for your decision", view:"thing", thing:"chg-util" },
+  { label:"work::approvals::applies_then_verifies", kind:"test case", why:"failing since 12 minutes ago", view:"thing", thing:"test-applies" },
+  { label:"docs/architecture/store-boundary.md", kind:"document", why:"in doubt \u2014 the code moved past it", view:"thing", thing:"doc-store" },
+  { label:"docs/architecture/query-planner.md", kind:"document", why:"in doubt \u2014 the code moved past it", view:"thing", thing:"doc-query" },
+  { label:"Tests", kind:"surface", why:"204 of 207 passing", view:"proof" },
+  { label:"Roadmap", kind:"surface", why:"stage 4 is one feature from done", view:"roadmap" },
+  { label:"Tour", kind:"surface", why:"the narrated walkthrough", view:"tour" }
+];
+const SPOKEN = {
+  now:["3 tests are failing.","say quality tests, work approvals and compare moments went red 12 minutes ago.","7 of 33 claims cannot show their proof.","2 agents are converging on one file.","3 documents drifted from the code."],
+  work:["Two agents are working; two decisions wait on you.","2 changes are waiting for your decision, proposed 2 hours ago."],
+  roadmap:["The current stage is one feature from done.","Sixteen of seventeen features are ready; the one that is not is blocked on the approvals path."],
+  features:["17 features; 16 can show they are ready."],
+  proof:["3 of 207 tests are failing; everything else holds."],
+  time:["Since the moment you named v0.9 freeze, quality has moved four times, three of them down."],
+  structure:["Seven modules on three layers; the pressure sits at the bottom."],
+  tour:["The tour still says two things the graph has moved on from."],
+  thing:["This record is read from the graph; every fact on it can be opened."]
+};
+
+class Component extends DCLogic {
+  state = { view:null, theme:null, plain:false, toast:null, quietOpen:true,
+            acked:{}, ackOpen:false, alsoOpen:false, chipsAll:false, diffOpen:false,
+            proofTab:"tests", suitesOpen:{ s1:true, s2:true, s3:true },
+            resultFilter:null, evCat:null, shelf:"decisions", sessOpen:{},
+            timeMode:"timeline", lens:"attention", block:null,
+            thingId:"file-state", stack:[], featQ:"", featOpen:{},
+            findOpen:false, findQ:"", findIdx:0, speaking:false };
+
+  componentDidMount(){ this.sync(); window.addEventListener("keydown", this.onKey);
+    this._settleTimer = setTimeout(()=>{ this._settled = true; }, 1200);
+    fetch("icons.svg").then(r=>r.text()).then(svg=>{
+      if (document.getElementById("eyes-sprite")) return;
+      const holder=document.createElement("div"); holder.id="eyes-sprite"; holder.style.display="none";
+      holder.innerHTML=svg; document.body.prepend(holder);
+    }).catch(()=>{}); }
+  componentDidUpdate(){ this.sync(); }
+  componentWillUnmount(){ window.removeEventListener("keydown", this.onKey); clearTimeout(this._t); this.stopSpeak(); if (this._mri) this._mri.destroy(); }
+  onKey = (e) => {
+    if ((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="k"){ e.preventDefault(); this.setState({ findOpen:true, findQ:"", findIdx:0 }); return; }
+    if (!this.state.findOpen) return;
+    const hits = this.findHits();
+    if (e.key === "Escape") this.setState({ findOpen:false });
+    if (e.key === "ArrowDown"){ e.preventDefault(); this.setState(s=>({ findIdx:(s.findIdx+1)%Math.max(hits.length,1) })); }
+    if (e.key === "ArrowUp"){ e.preventDefault(); this.setState(s=>({ findIdx:(s.findIdx-1+Math.max(hits.length,1))%Math.max(hits.length,1) })); }
+    if (e.key === "Enter" && hits.length){ e.preventDefault(); hits[this.state.findIdx].go(); }
+  };
+  sync(){
+    document.documentElement.setAttribute("data-theme", this.theme());
+    if (this.state.findOpen){ const f=document.getElementById("eyes-find"); if (f && document.activeElement!==f) f.focus(); }
+    const wantMri = this.view()==="structure" && this.state.lens==="mri";
+    if (wantMri && !this._mri){ const c=document.getElementById("mri-c"); if (c) this._mri=this.mriMount(c); }
+    if (!wantMri && this._mri){ this._mri.destroy(); this._mri=null; }
+  }
+  theme(){ return this.state.theme || this.props.theme || "light"; }
+  view(){ return this.state.view || this.props.startView || "now"; }
+  flash(m){ clearTimeout(this._t); this.setState({ toast:m }); this._t=setTimeout(()=>this.setState({toast:null}), 2400); }
+  copy(text){ if (navigator.clipboard) navigator.clipboard.writeText(text).catch(()=>{}); this.flash("Copied \u2014 you run it; Eyes never writes."); }
+  nav(v, thing){
+    this.stopSpeak();
+    this.setState(s=>({ view:v, thingId:thing||s.thingId, block:null, findOpen:false, bodyFull:false,
+      stack: s.stack.concat([{ view:this.view(), thing:s.thingId }]).slice(-20) }));
+  }
+  back(){
+    this.stopSpeak();
+    this.setState(s=>{ const st=s.stack.slice(); const prev=st.pop()||{view:"now"}; return { view:prev.view, thingId:prev.thing||s.thingId, stack:st }; });
+  }
+  findHits(){
+    const q=this.state.findQ.trim().toLowerCase();
+    if (!q) return [];
+    return FIND_INDEX.map(x=>Object.assign({},x,{ go:()=>this.nav(x.view,x.thing) }))
+      .filter(x=>(x.label+" "+x.why).toLowerCase().includes(q)).slice(0,8);
+  }
+  stopSpeak(){ if (window.speechSynthesis) speechSynthesis.cancel(); if (this.state.speaking) this.setState({ speaking:false }); }
+  brief(sentences){
+    if (!window.speechSynthesis){ this.flash("No voice in this browser."); return; }
+    if (this.state.speaking){ this.stopSpeak(); return; }
+    this.setState({ speaking:true });
+    sentences.forEach((s,i)=>{ const u=new SpeechSynthesisUtterance(s); u.rate=1.02;
+      if (i===sentences.length-1) u.onend=()=>this.setState({ speaking:false });
+      speechSynthesis.speak(u); });
+  }
+
+  md(src){
+    const inline=(s)=>{ const out=[]; let k=0, last=0, m;
+      const rx=/(`[^`]+`|\*\*[^*]+\*\*)/g;
+      while((m=rx.exec(s))){
+        if (m.index>last) out.push(s.slice(last,m.index));
+        const tok=m[0];
+        if (tok[0]==="`") out.push(React.createElement("code",{key:k++,style:{fontFamily:"var(--mono)",fontSize:"12px",background:"var(--sunk)",padding:"1px 5px",borderRadius:"4px"}},tok.slice(1,-1)));
+        else out.push(React.createElement("strong",{key:k++,style:{fontWeight:600,color:"var(--ink)"}},tok.slice(2,-2)));
+        last=m.index+tok.length;
+      }
+      if (last<s.length) out.push(s.slice(last));
+      return out; };
+    const els=[]; let list=null, key=0;
+    const para={margin:"8px 0",fontFamily:"var(--serif)",fontSize:"14px",lineHeight:1.7,color:"var(--body)"};
+    const flush=()=>{ if(list){ els.push(React.createElement("ul",{key:key++,style:{margin:"8px 0",paddingLeft:"20px",display:"flex",flexDirection:"column",gap:"4px"}},list)); list=null; } };
+    src.split("\n").forEach(line=>{ const t=line.trim();
+      if (!t){ flush(); return; }
+      if (t.indexOf("## ")===0){ flush(); els.push(React.createElement("h3",{key:key++,style:{margin:"18px 0 4px",fontFamily:"var(--serif)",fontWeight:600,fontSize:"15.5px",color:"var(--ink)"}},inline(t.slice(3)))); return; }
+      if (t.indexOf("# ")===0){ flush(); els.push(React.createElement("h2",{key:key++,style:{margin:"0 0 8px",fontFamily:"var(--serif)",fontWeight:600,fontSize:"19px",letterSpacing:"-.01em",color:"var(--ink)"}},inline(t.slice(2)))); return; }
+      if (t.indexOf("> ")===0){ flush(); els.push(React.createElement("blockquote",{key:key++,style:{margin:"10px 0",padding:"3px 0 3px 12px",borderLeft:"3px solid var(--signal)",color:"var(--meta)",fontFamily:"var(--serif)",fontSize:"13.5px",lineHeight:1.65}},inline(t.slice(2)))); return; }
+      if (t.indexOf("- ")===0){ if(!list) list=[]; list.push(React.createElement("li",{key:key++,style:Object.assign({},para,{margin:0})},inline(t.slice(2)))); return; }
+      flush(); els.push(React.createElement("p",{key:key++,style:para},inline(t)));
+    });
+    flush();
+    return React.createElement("div",null,els);
+  }
+
+  mriMount(canvas){
+    const self=this, DPR=Math.min(devicePixelRatio||1,2);
+    const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const CL=[["implementation","#8ba6d4",-130,10,0,95,"file-state"],["features","#8cc9a8",140,50,-70,70,"feat-approvals"],
+      ["tests","#b8a8e0",50,-120,90,62,"test-applies"],["decisions","#e0c284",-50,140,70,50,"doc-store"],
+      ["documentation","#9fc2cc",170,-70,100,55,"doc-query"],["artifacts","#cca8b8",-170,-100,-80,46,"doc-store"]];
+    const nodes=[], edges=[];
+    CL.forEach((c,ci)=>{ const n=34+ci*3;
+      for(let i=0;i<n;i++){ const th=Math.random()*6.283, ph=Math.acos(2*Math.random()-1), r=c[5]*Math.cbrt(Math.random());
+        nodes.push({ x:c[2]+r*Math.sin(ph)*Math.cos(th), y:c[3]+r*Math.cos(ph), z:c[4]+r*Math.sin(ph)*Math.sin(th),
+          c:ci, level:i===0?0:(i<n*0.3?1:2), pulse:(ci===0&&i%17===3)?2:(ci===2&&i%13===5)?1:0,
+          shape:i%3 }); }
+      const base=nodes.length-n;
+      for(let e=0;e<n;e++) edges.push([base+Math.floor(Math.random()*n), base+Math.floor(Math.random()*n)]);
+    });
+    const orbit={ yaw:0.7, pitch:0.3, dist:420 };
+    let drag=null, raf=0, t0=performance.now();
+    function resize(){ canvas.width=canvas.clientWidth*DPR; canvas.height=canvas.clientHeight*DPR; }
+    resize();
+    const ro=new ResizeObserver(resize); ro.observe(canvas);
+    const P=new Float32Array(nodes.length*3);
+    function project(){
+      const cy=Math.cos(orbit.yaw), sy=Math.sin(orbit.yaw), cp=Math.cos(orbit.pitch), sp=Math.sin(orbit.pitch);
+      const W=canvas.width, H=canvas.height;
+      nodes.forEach((n,i)=>{ const x=n.x*cy-n.z*sy, z=n.x*sy+n.z*cy, y=n.y*cp-z*sp, z2=n.y*sp+z*cp+orbit.dist;
+        const f=z2>40?(620*DPR)/z2:0;
+        P[i*3]=W/2+x*f; P[i*3+1]=H/2-y*f; P[i*3+2]=f; });
+    }
+    function maxLevel(){ return orbit.dist>460?0:orbit.dist>280?1:2; }
+    function draw(){
+      const ctx=canvas.getContext("2d"), W=canvas.width, H=canvas.height, ml=maxLevel();
+      const time=(performance.now()-t0)/1000;
+      ctx.fillStyle="#070b10"; ctx.fillRect(0,0,W,H);
+      project();
+      ctx.strokeStyle="rgba(107,143,179,0.14)"; ctx.lineWidth=1*DPR; ctx.beginPath();
+      edges.forEach(e=>{ if (P[e[0]*3+2]>0&&P[e[1]*3+2]>0){ ctx.moveTo(P[e[0]*3],P[e[0]*3+1]); ctx.lineTo(P[e[1]*3],P[e[1]*3+1]); } });
+      ctx.stroke();
+      let inFocus=0;
+      nodes.forEach((n,i)=>{ const f=P[i*3+2]; if (f<=0) return;
+        const beyond=n.level>ml; if(!beyond) inFocus++;
+        const beat=(!reduce&&n.pulse)?(1+0.2*Math.sin(time*(n.pulse===2?6:2.2)+n.x)):1;
+        const s=(n.level===0?7:n.level===1?4.2:2.6)*f*beat*(beyond?0.62:1);
+        const col=n.pulse===2?"#e8756c":n.pulse===1?"#e0b46a":CL[n.c][1];
+        ctx.globalAlpha=beyond?0.35:0.85;
+        ctx.fillStyle=col;
+        if (n.shape===0){ ctx.beginPath(); ctx.arc(P[i*3],P[i*3+1],s,0,6.283); ctx.fill(); }
+        else if (n.shape===1){ ctx.fillRect(P[i*3]-s,P[i*3+1]-s,s*2,s*2); }
+        else { ctx.beginPath(); ctx.moveTo(P[i*3],P[i*3+1]-s*1.3); ctx.lineTo(P[i*3]+s*1.3,P[i*3+1]); ctx.lineTo(P[i*3],P[i*3+1]+s*1.3); ctx.lineTo(P[i*3]-s*1.3,P[i*3+1]); ctx.fill(); }
+      });
+      ctx.globalAlpha=1;
+      ctx.font=(11*DPR)+"px ui-monospace,Menlo,monospace"; ctx.fillStyle="#9fb4c7";
+      CL.forEach((c,ci)=>{ const first=nodes.findIndex(n=>n.c===ci&&n.level===0);
+        if (first>=0&&P[first*3+2]>0) ctx.fillText(c[0].toUpperCase()+" \u00b7 "+nodes.filter(n=>n.c===ci).length, P[first*3]+10*DPR, P[first*3+1]-10*DPR); });
+      const ro2=document.getElementById("mri-readout");
+      if (ro2) ro2.textContent="all "+nodes.length+" drawn, "+inFocus+" in focus \u00b7 "+(ml===0?"the whole system":ml===1?"modules and neighbourhoods":"individual functions and types")+" \u00b7 drag to turn, scroll to approach, + and \u2212 to zoom";
+      raf=requestAnimationFrame(draw);
+    }
+    function pick(ev){ const b=canvas.getBoundingClientRect(); const x=(ev.clientX-b.left)*DPR, y=(ev.clientY-b.top)*DPR;
+      let best=-1,bd=16*DPR; const ml=maxLevel();
+      nodes.forEach((n,i)=>{ if (n.level>ml||P[i*3+2]<=0) return;
+        const d=Math.hypot(P[i*3]-x,P[i*3+1]-y); if (d<bd){ bd=d; best=i; } });
+      return best; }
+    const down=(e)=>{ drag={x:e.clientX,y:e.clientY,moved:false}; canvas.setPointerCapture(e.pointerId); };
+    const move=(e)=>{ if(!drag) return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+      if (Math.abs(dx)+Math.abs(dy)>3) drag.moved=true;
+      orbit.yaw-=dx*0.006; orbit.pitch=Math.max(-1.2,Math.min(1.35,orbit.pitch+dy*0.005));
+      drag.x=e.clientX; drag.y=e.clientY; };
+    const up=(e)=>{ const was=drag&&drag.moved; drag=null; if (was) return;
+      const i=pick(e); if (i>=0) self.nav("thing", CL[nodes[i].c][6]); };
+    const wheel=(e)=>{ e.preventDefault(); orbit.dist=Math.max(120,Math.min(1400,orbit.dist*(1+e.deltaY*0.0012))); };
+    const key=(e)=>{ const m={"+":0.82,"=":0.82,"-":1.22}[e.key]; if(!m) return; e.preventDefault();
+      orbit.dist=Math.max(120,Math.min(1400,orbit.dist*m)); };
+    canvas.addEventListener("pointerdown",down); canvas.addEventListener("pointermove",move);
+    canvas.addEventListener("pointerup",up); canvas.addEventListener("wheel",wheel,{passive:false});
+    canvas.addEventListener("keydown",key); canvas.tabIndex=0;
+    canvas.setAttribute("aria-label","The graph as a spatial anatomy: "+nodes.length+" things. Every fact here is also on the layered map and Now.");
+    raf=requestAnimationFrame(draw);
+    return { focusOn(ci){ const c=CL[ci]; orbit.dist=Math.max(160,c[5]*3.4); },
+      destroy(){ cancelAnimationFrame(raf); ro.disconnect();
+        canvas.removeEventListener("pointerdown",down); canvas.removeEventListener("pointermove",move);
+        canvas.removeEventListener("pointerup",up); canvas.removeEventListener("wheel",wheel);
+        canvas.removeEventListener("keydown",key); } };
+  }
+
+  thing(){
+    const id=this.state.thingId;
+    let raw=THINGS[id];
+    if (id==="claim" || !raw){
+      const c=this._claimCtx||{ title:"A claim from the census", state:"ready", text:"Opened from the claim spine." };
+      raw={ noun:"claim", title:c.title, chip:[c.state, c.state==="ready"?"proof":c.state==="failing"?"fault":"signal"],
+        lede:c.text, briefing:[],
+        backs:[[c.state==="ready"?"good":"bad", c.text, "read from the census \u2014 the mark and this page are the same fact"]],
+        history:[["just now","opened from the claim census on Now"]],
+        stats:[["1","mark on the spine"],["\u22643","clicks from count to proof"]],
+        serves:{ label:"Approvals verify themselves", because:"claims in this group belong to the desk", thing:"feat-approvals" },
+        machine:[["kind","claim"]] };
+    }
+    const toneVar={ fault:"var(--fault)", signal:"var(--signal)", proof:"var(--proof)", meta:"var(--meta)" };
+    const tintVar={ fault:"var(--fault-tint)", signal:"var(--signal-tint)", proof:"var(--proof-tint)", meta:"var(--sunk)" };
+    const go=(t)=>()=>t?this.nav("thing",t):this.flash("Not modelled in this prototype.");
+    return {
+      icon:{ file:"block", feature:"hexagon", "governed change":"chevron", "test case":"diamond", document:"page", claim:"seal" }[raw.noun]||"dot",
+      noun:raw.noun, title:raw.title, lede:raw.lede,
+      chip:raw.chip[0], chipStyle:{ fontSize:"11px", color:toneVar[raw.chip[1]], background:tintVar[raw.chip[1]], borderRadius:"5px", padding:"2px 8px", whiteSpace:"nowrap" },
+      briefing:(raw.briefing||[]).map(b=>({ title:b.title, body:b.body, cmd:b.cmd||null,
+        style:{ background:b.ink==="fault"?"var(--fault-tint)":"var(--surface)", border:"1px solid var(--line)",
+          borderLeft:"3px solid "+toneVar[b.ink], borderRadius:"8px", padding:"11px 14px" } })),
+      stages:(raw.stages||[]).map((s,i,arr)=>({ label:s[0], when:s[2],
+        ink:s[1]==="done"?"var(--body)":"var(--faint)",
+        dot:{ width:"9px", height:"9px", borderRadius:"999px", flex:"none",
+          background:s[1]==="done"?"var(--proof)":"transparent", border:s[1]==="done"?"0":"1.5px dashed var(--faint)" },
+        rail:{ width:i===arr.length-1?"0":"52px", height:"1.5px", marginTop:"4px", background:"var(--line2)" } })),
+      hasDiff:!!raw.hasDiff,
+      parts:(raw.parts||[]).map(p=>({ label:p[0], verdict:p[2],
+        mark:{ width:"9px", height:"9px", flex:"none", borderRadius:"1px", marginTop:"4px",
+          background:p[1]==="ready"?"var(--proof)":p[1]==="failing"?"var(--fault)":"transparent",
+          border:p[1]==="unproven"?"1.5px dashed var(--faint)":p[1]==="stale"?"1.5px solid var(--signal)":"0" },
+        open:()=>{ this._claimCtx={ title:raw.title+" \u00b7 "+p[0], state:p[1]==="ready"?"ready":p[1], text:p[2] }; this.nav("thing","claim"); } })),
+      partsNote:raw.partsNote||null,
+      backs:(raw.backs||[]).map(b=>({ text:b[1], basis:b[2], mark:b[0]==="good"?"\u2713":"\u2717",
+        ink:b[0]==="good"?"var(--proof)":"var(--fault)" })),
+      reach:(raw.reach||[]).map(r=>({ label:r.label, basis:r.basis,
+        items:r.items.map(it=>({ label:it[0], via:it[1]?("via "+it[1].replace("via ","")):null, open:go(it[2]) })) })),
+      around:(raw.around||[]).map(a=>({ label:a.label, note:a.note,
+        items:a.items.map(it=>({ label:it[0], open:go(it[1]) })) })),
+      body:raw.body?{
+        el:this.md(this.state.bodyFull && raw.body.full ? raw.body.full : raw.body.text),
+        canExtend:!!raw.body.full,
+        toggleLabel:this.state.bodyFull?"Fold back to the excerpt":"Show the whole document",
+        toggleIcon:this.state.bodyFull?"undo":"docs",
+        toggle:()=>this.setState(s=>({ bodyFull:!s.bodyFull })),
+        origin:this.state.bodyFull?"read from the working tree \u00b7 the whole document":raw.body.origin
+      }:null,
+      flips:(raw.flips||[]).map(f=>({ when:f[0], text:f[1] })),
+      attachments:!!raw.attachments,
+      relations:(raw.relations||[]).map(r=>({ phrase:r[0], label:r[1], noun:r[2], open:go(r[3]) })),
+      versions:(raw.versions||[]).map(v=>({ when:v[0], note:v[1], hash:v[2] })),
+      history:(raw.history||[]).map(hh=>({ when:hh[0], text:hh[1] })),
+      stats:(raw.stats||[]).map(s=>({ value:s[0], label:s[1], ink:s[2]?toneVar[s[2]]:"var(--ink)" })),
+      serves:raw.serves?{ label:raw.serves.label, because:raw.serves.because, open:go(raw.serves.thing) }:null,
+      cmd:raw.cmd||null, copyCmd:()=>this.copy(raw.cmd||""),
+      machine:(raw.machine||[]).map(m=>({ k:m[0], v:m[1] }))
+    };
+  }
+
+  spark(q){
+    const w=118,h=22,pad=4,pts=q.points;
+    const min=Math.min.apply(null,pts),max=Math.max.apply(null,pts),r=max-min;
+    const xy=pts.map((p,i)=>[pts.length===1?w/2:(i/(pts.length-1))*w, r===0?h/2:h-pad-((p-min)/r)*(h-2*pad)]);
+    const poly = xy.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ");
+    return { poly, area:"0,"+h+" "+poly+" "+w+","+h,
+             areaStyle:{ fill:"var(--fault)", opacity:.07 },
+             lastX:xy[xy.length-1][0].toFixed(1), lastY:xy[xy.length-1][1].toFixed(1) };
+  }
+
+  renderVals(){
+    const view=this.view(), theme=this.theme();
+    const LEDGER_GO = {
+      "Tests passing":()=>{ this.setState({ proofTab:"tests" }); this.nav("proof"); },
+      "Feature claims":()=>{ this.setState({ proofTab:"evidence" }); this.nav("proof"); },
+      "Features ready":()=>this.nav("features"),
+      "Documents in doubt":()=>{ this.setState({ proofTab:"artifacts", shelf:"documents" }); this.nav("proof"); }
+    };
+    const ledger = QUALITY.map(q => Object.assign({}, q, this.spark(q), {
+      ink:"var(--fault)", wash:"var(--fault-tint)",
+      arrow:q.trend==="rising"?"\u2197":"\u2198", trendWord:"worse",
+      tempoTitle:"each block is the real time between two moves \u2014 "+q.span+" \u2014 click through to the surface that holds its evidence",
+      segs:q.gaps.map(g=>({ style:{ flexGrow:g, minWidth:"1px", background:"var(--fault)", opacity:.55, borderRadius:"1px" } })),
+      open:LEDGER_GO[q.label]||(()=>this.nav("proof"))
+    }));
+    let cellIndex = 0;
+    const census = CENSUS.map(g => {
+      const missing=g.total-g.proven, states=["failing","unproven","stale"], cells=[];
+      for(let i=0;i<g.total;i++){
+        const hollow=i<missing, st=hollow?states[i%3]:"ready";
+        const text=g.label+" \u2014 claim "+(i+1)+" of "+g.total+": "+(st==="ready"?"this claim can show its proof":st==="failing"?"the test behind this claim is failing":st==="unproven"?"nothing observed stands behind this claim":"the proof behind this claim is older than the code");
+        cells.push({ text, style:{ width:"11px", height:"24px", padding:0, cursor:"pointer", borderRadius:"2px", flex:"none",
+          background:st==="ready"?"linear-gradient(180deg,color-mix(in srgb,var(--proof) 82%,white),var(--proof))":st==="failing"?"linear-gradient(180deg,color-mix(in srgb,var(--fault) 82%,white),var(--fault))":"transparent",
+          border:st==="stale"?"1.5px solid var(--signal)":st==="unproven"?"1.5px dashed var(--faint)":"0",
+          animation:this._settled?"none":("settle .3s ease-out "+(cellIndex*18)+"ms both") },
+          open:()=>{ this._claimCtx={ title:g.label+" \u00b7 claim "+(i+1)+" of "+g.total, state:st, text }; this.nav("thing","claim"); } });
+        cellIndex+=1;
+      }
+      return { label:g.label, cells, ratio:g.proven+"/"+g.total, ink:missing?"var(--fault)":"var(--faint)" };
+    });
+    const visible = QUEUE.filter(c=>!this.state.acked[c.id]);
+    const shown = this.state.quietOpen ? visible : visible.filter(c=>c.sev!=="note");
+    const queue = shown.map(c=>{
+      const allChips = c.chips || [];
+      const chipsShown = (this.state.chipsAll || allChips.length<=6) ? allChips : allChips.slice(0,6);
+      const hiddenChips = allChips.length - chipsShown.length;
+      const alsoAll = c.also || [];
+      return {
+      title:c.title, reason:c.reason, cmd:c.cmd, horizon:c.horizon,
+      repeats:c.repeats>1?"\u00d7"+c.repeats:null,
+      also:this.state.alsoOpen?alsoAll:[],
+      alsoLabel:alsoAll.length?(this.state.alsoOpen?"fold the others away":"and "+(c.repeats-1)+" more like it"):null,
+      alsoNote:(this.state.alsoOpen && c.repeats-1>alsoAll.length)?(c.repeats-1-alsoAll.length)+" more are not listed here":null,
+      alsoToggle:()=>this.setState(s=>({ alsoOpen:!s.alsoOpen })),
+      steps:(c.steps||[]).map((st,i,arr)=>({ label:st.label, when:st.when,
+        ink:st.state==="done"?"var(--body)":"var(--faint)",
+        dot:{ width:"9px", height:"9px", borderRadius:"999px", flex:"none",
+          background:st.state==="done"?"var(--proof)":"transparent",
+          border:st.state==="done"?"0":"1.5px dashed var(--faint)" },
+        rail:{ width:i===arr.length-1?"0":"52px", height:"1.5px", marginTop:"4px", background:"var(--line2)" } })),
+      dot:{ width:"9px", height:"9px", flex:"none", borderRadius:c.sev==="act"?"1px":"999px",
+        transform:c.sev==="act"?"rotate(45deg)":"none",
+        background:c.sev==="watch"?"var(--signal)":c.sev==="act"?"var(--fault)":"var(--faint)" },
+      horizonStyle:{ fontSize:"10px", fontWeight:600, letterSpacing:".05em", textTransform:"uppercase", whiteSpace:"nowrap",
+        color:c.horizon==="now"?"var(--fault)":"var(--faint)",
+        background:c.horizon==="now"?"var(--fault-tint)":"var(--sunk)", borderRadius:"5px", padding:"3px 7px" },
+      chips:chipsShown.map(ch=>({ label:ch.label, open:()=>this.nav("thing", ch.thing),
+        icon:(ch.thing||"").indexOf("chg")===0?"chevron":(ch.thing||"").indexOf("file")===0?"block":ch.label.indexOf("/adr/")>=0?"kite":"page" })),
+      chipFoldLabel:hiddenChips>0?("show all "+allChips.length+" \u2014 "+hiddenChips+" are folded (of 23 aged records, 15 are not listed in this prototype)"):(this.state.chipsAll&&allChips.length>6?"fold them away":null),
+      chipFold:()=>this.setState(s=>({ chipsAll:!s.chipsAll })),
+      copy:()=>this.copy(c.cmd),
+      ack:()=>this.setState(s=>({ acked:Object.assign({},s.acked,{[c.id]:true}) }))
+    };});
+    const ackedList = QUEUE.filter(c=>this.state.acked[c.id]).map(c=>({ title:c.title, reason:c.reason,
+      restore:()=>this.setState(s=>{ const a=Object.assign({},s.acked); delete a[c.id]; return { acked:a }; }) }));
+    const ackedN = ackedList.length;
+    const pressure = PRESSURE.map((a,i)=>({
+      rank:i+1, label:a.label, importers:a.importers, reasons:a.reasons,
+      churn:Array.from({length:5},(_,b)=>({ style:{ width:"4px", flex:"none", borderRadius:"1px", height:(3+b*2.2)+"px",
+        background:b<Math.min(5,Math.ceil(a.changes/5))?(a.changes>15?"var(--fault)":"var(--meta)"):"var(--line2)" } })),
+      testMark:{ display:"block", width:"9px", height:"9px", borderRadius:"999px",
+        background:a.tested?"var(--proof)":"transparent", border:a.tested?"0":"1.5px dashed var(--fault)" },
+      open:()=>this.nav("thing", a.label.includes("dto")?"file-dto":a.label.includes("query")?"file-query":"file-state")
+    }));
+    const rf = this.state.resultFilter;
+    const facet=(val,label,count,tone)=>({ label:label+" "+count,
+      click:()=>this.setState(s=>({ resultFilter:s.resultFilter===val?null:val })),
+      style:{ fontSize:"11.5px", whiteSpace:"nowrap", cursor:"pointer", borderRadius:"6px", padding:"3px 8px",
+        color:rf===val?"var(--surface)":(tone==="fault"?"var(--fault)":"var(--meta)"),
+        background:rf===val?"var(--ink)":(tone==="fault"?"var(--fault-tint)":"transparent"),
+        border:rf===val||tone==="fault"?"1px solid transparent":"1px solid var(--line)" } });
+    const resultChips=[facet("failing","failing",3,"fault"), facet("skipped","skipped",1), facet("passing","passing",203)];
+    const suites = SUITES.map(s=>{
+      const open=!!this.state.suitesOpen[s.id] || !!rf;
+      const kept=s.cases.filter(t=>!rf || t.result===rf);
+      return { name:s.name, open:open&&kept.length>0, caret:open?"\u25be":"\u25b8",
+        headBg:s.failing?"var(--fault-tint)":"transparent",
+        ink:s.failing?"var(--fault)":"var(--proof)",
+        note:s.failing?s.failing+" failing":"all passing",
+        countLabel:rf?(kept.length+" of "+s.cases.length+" match"):(s.cases.length+" cases"),
+        toggle:()=>this.setState(st=>({ suitesOpen:Object.assign({},st.suitesOpen,{[s.id]:!st.suitesOpen[s.id]}) })),
+        cases:kept.map(t=>({ name:t.name, result:t.result, took:t.took,
+          detail:t.detail, detailInk:t.result==="failing"?"var(--fault)":"var(--meta)",
+          flaky:t.name==="moments_stay_ordered",
+          chip:{ fontSize:"11px", justifySelf:"start", borderRadius:"5px", padding:"2px 7px",
+            color:t.result==="failing"?"var(--fault)":t.result==="skipped"?"var(--signal)":"var(--proof)",
+            background:t.result==="failing"?"var(--fault-tint)":t.result==="skipped"?"var(--signal-tint)":"var(--proof-tint)" },
+          open:()=>this.nav("thing","test-applies") })) };
+    });
+    const evCats=[[null,"everything"],["completeness","Feature completeness \u00b7 2 unproven"],["evidence","Test evidence \u00b7 1 contradicted"],["action","Action verification \u00b7 all proven"]]
+      .map(c=>({ label:c[1], click:()=>this.setState({ evCat:c[0] }),
+        style:{ fontSize:"11.5px", whiteSpace:"nowrap", cursor:"pointer", borderRadius:"999px", padding:"4px 11px",
+          color:this.state.evCat===c[0]?"var(--surface)":"var(--meta)",
+          background:this.state.evCat===c[0]?"var(--ink)":"transparent",
+          border:this.state.evCat===c[0]?"1px solid transparent":"1px solid var(--line)" } }));
+    const shelfChips=["decisions","plans","documents","media","concepts"].map(sh=>({
+      label:sh, click:()=>this.setState({ shelf:sh }),
+      style:{ fontSize:"11.5px", whiteSpace:"nowrap", cursor:"pointer", borderRadius:"999px", padding:"4px 11px", textTransform:"capitalize",
+        color:this.state.shelf===sh?"var(--surface)":"var(--meta)",
+        background:this.state.shelf===sh?"var(--ink)":"transparent",
+        border:this.state.shelf===sh?"1px solid transparent":"1px solid var(--line)" } }));
+    const SHELF_ROWS={
+      decisions:[["docs/adr/adr-009-severity-discipline.md","aged","signal","code it cites changed 4 times since it was written","6 days ago","doc-store"],
+        ["docs/adr/adr-002-alpha-normalization-at-store-boundary.md","aged","signal","the boundary it decided moved this morning","2 hrs ago","doc-store"],
+        ["docs/adr/adr-010-voice-module.md","holds","proof","nothing it cites has changed","12 days ago","doc-store"]],
+      plans:[["docs/plans/plan-014-desk-verifies.md","open","signal","step 2 of 4 \u2014 two steps remain","2 hrs ago","doc-store"],
+        ["docs/plans/plan-012-claim-census.md","finished","proof","all steps done; history now","8 days ago","doc-store"]],
+      documents:[["docs/architecture/store-boundary.md","in doubt","fault","describes a boundary the code moved 2 hours ago","2 hrs ago","doc-store"],
+        ["docs/architecture/query-planner.md","in doubt","fault","describes a planner the code reshaped this morning","4 hrs ago","doc-query"],
+        ["docs/guides/agent-sessions.md","in doubt","fault","the import flow gained a step it does not mention","2 hrs ago","doc-store"]]
+    };
+    const shelfRows=(SHELF_ROWS[this.state.shelf]||[]).map(r=>({
+      label:r[0], state:r[1], because:r[3], when:r[4],
+      icon:this.state.shelf==="decisions"?"kite":"page",
+      chipStyle:{ fontSize:"11px", justifySelf:"start", borderRadius:"5px", padding:"2px 7px", whiteSpace:"nowrap",
+        color:"var(--"+r[2]+")", background:"var(--"+r[2]+"-tint)" },
+      open:()=>this.nav("thing",r[5]) }));
+    const tab=(on)=>({ display:"flex", alignItems:"center", gap:"6px", padding:"8px 14px", cursor:"pointer",
+      border:"0", borderBottom:on?"2px solid var(--accent)":"2px solid transparent", background:"transparent",
+      fontSize:"12.5px", fontWeight:on?600:400, color:on?"var(--ink)":"var(--meta)", marginBottom:"-1px" });
+    const railBtn=(on)=>({ display:"flex", alignItems:"center", gap:"9px", width:"100%", padding:"7px 10px",
+      border:"0", borderRadius:"7px", cursor:"pointer", fontSize:"13px", fontWeight:on?600:450,
+      background:on?"var(--accent-tint)":"transparent", color:on?"var(--ink)":"var(--body)", textAlign:"left",
+      boxShadow:on?"inset 2.5px 0 0 var(--accent)":"none", transition:"background-color .12s ease" });
+    const items = this.state.plain
+      ? NAV.filter(n=>["roadmap","features"].includes(n.id)).concat([{ id:"tour", label:"Tour", count:null, tone:null }])
+      : NAV;
+    const rail = items.map(n=>{
+      const on = view===n.id || (view==="thing" && n.id==="now") || (view==="tour" && n.id==="tour");
+      return { label:n.label, count:this.state.plain?null:n.count,
+        icon:n.icon||"frame", section:this.state.plain?null:(n.section||null),
+        iconInk:on?"var(--accent)":n.tone==="fault"?"var(--fault)":n.tone==="signal"?"var(--signal)":"var(--meta)",
+        countInk:n.tone==="fault"?"var(--fault)":n.tone==="signal"?"var(--signal)":"var(--meta)",
+        countStyle:{ fontSize:"10.5px", fontWeight:600, borderRadius:"999px", padding:"1.5px 7px", whiteSpace:"nowrap",
+          color:n.tone==="fault"?"var(--fault)":n.tone==="signal"?"var(--signal)":"var(--meta)",
+          background:n.tone==="fault"?"var(--fault-tint)":n.tone==="signal"?"var(--signal-tint)":"var(--sunk)" },
+        style:railBtn(on), go:()=>this.nav(n.id) };
+    });
+    const stub = STUBS[view];
+    return {
+      theme, themeLabel:theme==="dark"?"Light":"Dark",
+      toggleTheme:()=>this.setState({ theme:theme==="dark"?"light":"dark" }),
+      plain:this.state.plain, plainAttr:this.state.plain?"1":"0",
+      density:this.props.density || "comfortable",
+      togglePlain:()=>this.setState(s=>({ plain:!s.plain, view:(!s.plain && !["roadmap","features"].includes(this.view()))?"roadmap":s.view })),
+      plainBtn:{ fontSize:"12px", cursor:"pointer", borderRadius:"7px", padding:"5px 10px", whiteSpace:"nowrap",
+        display:"inline-flex", alignItems:"center", gap:"6px",
+        border:"1px solid "+(this.state.plain?"var(--accent)":"var(--line)"),
+        color:this.state.plain?"var(--accent)":"var(--body)",
+        background:this.state.plain?"var(--accent-tint)":"transparent" },
+      flashFind:()=>this.setState({ findOpen:true, findQ:"", findIdx:0 }),
+      findOpen:this.state.findOpen, findQ:this.state.findQ,
+      findClose:()=>this.setState({ findOpen:false }),
+      findType:(e)=>this.setState({ findQ:e.target.value, findIdx:0 }),
+      findHits:this.findHits().map((x,i)=>({ label:x.label, kind:x.kind, why:x.why, go:x.go,
+        icon:{ file:"block", feature:"hexagon", "governed change":"chevron", "test case":"diamond", document:"page", surface:"map" }[x.kind]||"dot",
+        style:{ display:"flex", alignItems:"baseline", gap:"10px", width:"100%", padding:"10px 16px",
+          border:"0", borderTop:"1px solid var(--line)", textAlign:"left", cursor:"pointer",
+          background:i===this.state.findIdx?"var(--accent-tint)":"transparent" } })),
+      findEmpty:this.state.findQ.trim() ? this.findHits().length===0 : false,
+      eatClick:(e)=>e.stopPropagation(),
+      speaking:this.state.speaking,
+      briefLabel:this.state.speaking?"Stop":"Brief me",
+      briefIcon:this.state.speaking?"stop":"voice",
+      themeIcon:theme==="dark"?"sun":"moon",
+      briefStyle:{ fontSize:"12px", cursor:"pointer", borderRadius:"7px", padding:"5px 10px", whiteSpace:"nowrap",
+        display:"inline-flex", alignItems:"center", gap:"6px",
+        border:"1px solid "+(this.state.speaking?"var(--accent)":"var(--line)"),
+        color:this.state.speaking?"var(--accent)":"var(--body)",
+        background:this.state.speaking?"var(--accent-tint)":"transparent" },
+      briefMe:()=>this.brief(SPOKEN[view]||SPOKEN.now),
+      rail,
+      isNow:view==="now", isWork:view==="work", isRoadmap:view==="roadmap",
+      isProof:view==="proof", isThing:view==="thing", isStub:!!stub,
+      isFeatures:view==="features", isTime:view==="time", isStructure:view==="structure", isTour:view==="tour",
+      inCompare:this.state.timeMode==="compare", inTimeline:this.state.timeMode!=="compare",
+      toCompare:()=>this.setState({ timeMode:"compare" }),
+      toTimeline:()=>this.setState({ timeMode:"timeline" }),
+      featQ:this.state.featQ,
+      featType:(e)=>this.setState({ featQ:e.target.value }),
+      feats:(this.state.featAll?FEATS.concat(FEATS_MORE):FEATS)
+        .filter(f=>!this.state.featQ.trim() || (f.title+" "+f.verdict).toLowerCase().includes(this.state.featQ.trim().toLowerCase()))
+        .map(f=>{
+        const hasParts=!!FEAT_PARTS[f.title];
+        const open=hasParts && !!this.state.featOpen[f.title];
+        return {
+        title:f.title, ready:f.ready, verdict:f.verdict, when:f.when,
+        bg:f.bad?"var(--fault-tint)":"transparent",
+        readyInk:f.bad?"var(--fault)":"var(--meta)",
+        caret:hasParts?(open?"\u25be":"\u25b8"):"",
+        strip:f.strip.map(s=>({ style:{ width:"8px", height:"8px", borderRadius:"1px", flex:"none",
+          background:s==="r"?"var(--proof)":s==="f"?"var(--fault)":"transparent",
+          border:s==="u"?"1.5px dashed var(--faint)":s==="s"?"1.5px solid var(--signal)":"0" } })),
+        parts:open?FEAT_PARTS[f.title].map(p=>({ label:p[0],
+          mark:{ width:"8px", height:"8px", flex:"none", borderRadius:"1px",
+            background:p[1]==="ready"?"var(--proof)":p[1]==="failing"?"var(--fault)":"transparent",
+            border:p[1]==="unproven"?"1.5px dashed var(--faint)":"0" },
+          state:p[1],
+          open:()=>{ this._claimCtx={ title:f.title+" \u00b7 "+p[0], state:p[1], text:p[0]+" \u2014 "+p[1] }; this.nav("thing","claim"); } })):[],
+        open:()=>{ if (hasParts) this.setState(s=>({ featOpen:Object.assign({},s.featOpen,{[f.title]:!s.featOpen[f.title]}) }));
+          else this.nav("thing","feat-approvals"); },
+        push:()=>this.nav("thing","feat-approvals") };}),
+      featTally:(this.state.featAll?10:6)+" of 17 shown",
+      featFoldLabel:this.state.featAll?"fold back to the 6 that moved recently \u2014 7 ready features stay unlisted in this prototype":"show 4 more \u2014 the rest have not moved this quarter",
+      featToggle:()=>this.setState(s=>({ featAll:!s.featAll })),
+      goProof:()=>this.nav("proof"), goWork:()=>this.nav("work"),
+      lensChips:["attention","anatomy","activity","mri"].map(l=>({
+        label:l==="mri"?"3D (MRI)":l.charAt(0).toUpperCase()+l.slice(1),
+        click:()=>this.setState({ lens:l, block:null }),
+        style:{ fontSize:"11.5px", whiteSpace:"nowrap", cursor:"pointer", borderRadius:"999px", padding:"4px 11px",
+          color:this.state.lens===l?"var(--accent)":"var(--meta)",
+          background:this.state.lens===l?"var(--accent-tint)":"transparent",
+          border:"1px solid "+(this.state.lens===l?"var(--accent)":"var(--line)") } })),
+      lensNote:{ attention:"Tinted blocks carry the attention ranking from Now \u2014 the same numbers, placed on the anatomy.",
+        anatomy:"Colour stands down; the block's row is its dependency layer, and a block never points upward.",
+        activity:"Only what moved since your last session wears ink; everything else recedes.",
+        mri:"Drag to turn. Scroll to approach \u2014 detail resolves as you get closer, nothing is hidden. Click anything to open it." }[this.state.lens],
+      onMri:this.state.lens==="mri", notMri:this.state.lens!=="mri",
+      layers:LAYERS.map(L=>({ label:L.label, blocks:L.blocks.map(b=>{
+        const tone=b.tones[this.state.lens==="mri"?"anatomy":this.state.lens];
+        return { name:b.name, meta:b.meta,
+          metaInk:tone?("var(--"+tone+")"):"var(--meta)",
+          style:{ flex:b.flex+" 1 0%", minWidth:0, textAlign:"left", cursor:"pointer", borderRadius:"8px", padding:"12px 14px",
+            border:"1px solid "+(this.state.block===b.id?"var(--accent)":"var(--line)"),
+            background:tone?("var(--"+tone+"-tint)"):"var(--bg)" },
+          open:()=>this.setState({ block:this.state.block===b.id?null:b.id }) }; }) })),
+      blockDetail:(()=>{ if (!this.state.block) return null;
+        const b=LAYERS.flatMap(L=>L.blocks).find(x=>x.id===this.state.block);
+        return b?{ name:b.name, sentence:b.sentence,
+          files:b.files.map(fl=>({ label:fl[0], open:()=>this.nav("thing",fl[1]) })) }:null; })(),
+      stubTitle:stub?stub.title:"", stubNote:stub?stub.note:"",
+      ledger, census, queue,
+      queueCount:shown.length+" of "+QUEUE.length,
+      quietSummary:this.state.quietOpen?"hide what can wait":"show "+(visible.filter(c=>c.sev==="note").length)+" that can wait",
+      toggleQuiet:()=>this.setState(s=>({ quietOpen:!s.quietOpen })),
+      ackedLabel:ackedN?(ackedN+" acknowledged this week \u2014 in this browser only"):null,
+      acked:ackedList, ackOpen:this.state.ackOpen,
+      ackCaret:this.state.ackOpen?"\u25be":"\u25b8",
+      ackToggle:()=>this.setState(s=>({ ackOpen:!s.ackOpen })),
+      pressure, suites, resultChips, evCats, shelfChips, shelfRows,
+      shelfIsTable:["decisions","plans","documents"].includes(this.state.shelf),
+      shelfIsMedia:this.state.shelf==="media", shelfIsConcepts:this.state.shelf==="concepts",
+      evShowApprovals:!this.state.evCat || this.state.evCat==="evidence" || this.state.evCat==="completeness",
+      evShowSessions:!this.state.evCat || this.state.evCat==="action",
+      goTour:()=>this.nav("tour"),
+      resultNote:this.state.resultFilter?("filtered to "+this.state.resultFilter+" \u2014 click the chip again to clear"):"207 cases \u00b7 failing first",
+      onTests:this.state.proofTab==="tests", onEvidence:this.state.proofTab==="evidence", onArtifacts:this.state.proofTab==="artifacts",
+      tabTests:()=>this.setState({proofTab:"tests"}), tabEvidence:()=>this.setState({proofTab:"evidence"}), tabArtifacts:()=>this.setState({proofTab:"artifacts"}),
+      tabTestsStyle:tab(this.state.proofTab==="tests"), tabEvidenceStyle:tab(this.state.proofTab==="evidence"), tabArtifactsStyle:tab(this.state.proofTab==="artifacts"),
+      diffOpen:this.state.diffOpen, diffLabel:this.state.diffOpen?"fold the diff away":"what changes \u2014 3 hunks",
+      toggleDiff:()=>this.setState(s=>({ diffOpen:!s.diffOpen })),
+      copyTests:()=>this.copy("brain twin tests twin/self"),
+      copyImport:()=>this.copy("brain sessions import . --prefix twin/self"),
+      copyApply:()=>this.copy("brain change apply twin/self util.rs-0ca5df1e --cap fs"),
+      goThing:()=>this.nav("thing","file-state"), goNow:()=>this.back(), goRoadmap:()=>this.nav("roadmap"),
+      t:this.thing(), goAttach:()=>{ this.setState({ proofTab:"artifacts", shelf:"media" }); this.nav("proof"); },
+      sessions:SESSIONS.map(w=>({ agent:w.agent, model:w.model, objective:w.objective, files:w.files, span:w.span,
+        turns:w.turns, outcome:w.outcome, feature:w.feature, stateLabel:w.state,
+        stateInk:w.live?"var(--proof)":"var(--meta)",
+        dotStyle:{ width:"7px", height:"7px", borderRadius:"999px", flex:"none",
+          background:w.live?"var(--proof)":"var(--faint)", animation:w.live?"breathe 2.4s ease-in-out infinite":"none" },
+        open:!!this.state.sessOpen[w.id], caret:this.state.sessOpen[w.id]?"\u25be":"\u25b8",
+        toggle:()=>this.setState(s=>({ sessOpen:Object.assign({},s.sessOpen,{[w.id]:!s.sessOpen[w.id]}) })),
+        tools:w.tools.map(tl=>({ label:tl[0]+" "+tl[1] })),
+        touched:w.touched.map(tc=>({ label:tc[0], open:()=>this.nav("thing",tc[1]) })),
+        moreNote:w.more?("and "+w.more+" more are not listed here"):null,
+        produced:w.produced.map(pr=>({ label:pr[0], open:()=>this.nav("thing",pr[1]) })) })),
+      goFeat:()=>this.nav("thing","feat-approvals"),
+      toggleThingDiff:()=>this.setState(s=>({ diffOpen:!s.diffOpen })),
+      toast:this.state.toast
+    };
+  }
+}
+
+</script>
+</body>
+</html>
