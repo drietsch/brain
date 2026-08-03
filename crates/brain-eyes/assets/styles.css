@@ -267,8 +267,10 @@ body.plain .fix { display: none; }
 .quality-cell {
   display: flex; flex-direction: column; gap: 5px; width: 138px;
   padding: 9px 11px 8px; border: 1px solid var(--line); border-radius: 4px;
-  background: var(--sunk);
+  background: var(--sunk); text-align: left; cursor: pointer;
 }
+.quality-cell:hover { border-color: var(--control); background: var(--hover); }
+.quality-cell.bad:hover { border-color: var(--fault); background: var(--fault-fill); }
 .quality-cell.bad { border-color: var(--fault-edge); background: var(--fault-fill); }
 .quality-cell.good { border-color: var(--proof-edge); }
 .quality-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }

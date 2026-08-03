@@ -36,6 +36,10 @@ test("the cockpit opens on Now and takes its reading", async ({ page }) => {
   for (const cell of await cells.all()) {
     expect(await cell.getAttribute("title")).toBeTruthy();
   }
+  // And every tile opens the surface that holds its evidence — a trend
+  // is never the end of the trail.
+  await page.locator('.quality-cell:has-text("Tests passing")').click();
+  await expect(page).toHaveURL(/#tests/);
 });
 
 test("every surface answers without a loading stub left behind", async ({ page }) => {

@@ -380,7 +380,11 @@ function qualityCell(line) {
   dot.setAttribute("r", "2");
   svg.append(dot);
   const arrow = { rising: "↗", falling: "↘", flat: "→" }[line.trend] ?? "→";
-  return h("div", { class: `quality-cell ${line.tone}`, title: line.sentence },
+  // Every number unfolds: the tile opens the surface that holds its
+  // evidence, so a trend is never the end of the trail.
+  const home = ({ tests: "tests", claims: "evidence", features: "features", docs: "library" })[line.id];
+  return h("button", { class: `quality-cell ${line.tone}`, title: line.sentence,
+      onclick: () => home && go(home) },
     h("div", { class: "quality-head" },
       h("span", { class: "quality-label", text: line.label }),
       pts.length > 1 ? h("span", { class: "quality-arrow", text: arrow, "aria-hidden": "true" }) : null),
