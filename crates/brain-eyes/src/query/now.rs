@@ -48,6 +48,8 @@ pub fn build(loaded: &Loaded, seen: Option<usize>) -> Result<NowView, String> {
             target: None,
             repeats: 1,
             also: Vec::new(),
+            chips: Vec::new(),
+            steps: Vec::new(),
         });
     }
 
@@ -74,6 +76,8 @@ pub fn build(loaded: &Loaded, seen: Option<usize>) -> Result<NowView, String> {
             target: None,
             repeats: 1,
             also: Vec::new(),
+            chips: Vec::new(),
+            steps: Vec::new(),
         });
     }
 
@@ -99,10 +103,17 @@ pub fn build(loaded: &Loaded, seen: Option<usize>) -> Result<NowView, String> {
             target: Some(query::make_ref(index, store, &sid)),
             repeats: 1,
             also: Vec::new(),
+            chips: Vec::new(),
+            steps: Vec::new(),
         });
     }
 
-    // Governed changes that never reached a conclusion.
+    // Governed changes that never reached a conclusion: one card per
+    // stuck stage, showing the journey (proposed → applied → verified)
+    // and the files themselves as openable chips — the card shows what
+    // it is about instead of asking the reader to imagine it.
+    let mut limbo: std::collections::BTreeMap<String, Vec<(StableId, String, String, u64)>> =
+        std::collections::BTreeMap::new();
     for (sid, labels) in query::scoped(index, store, prefix, "change")? {
         let (status_at, status) = twin::latest_at(index, store, &sid, "status")
             .map_err(|e| e.to_string())?
@@ -111,52 +122,86 @@ pub fn build(loaded: &Loaded, seen: Option<usize>) -> Result<NowView, String> {
             continue; // broken/indeterminate already arrive as coherence findings
         }
         let slug = labels.get("slug").cloned().unwrap_or_default();
-        let (stage, note) = say::change_stage(&status);
-        let what = labels.get("title").cloned().unwrap_or_else(|| slug.clone());
-        // Name the file it touches and how long it has waited. Four tidy
-        // moves share a title and are told apart only by what they moved —
-        // a collapsed count is worth nothing if unfolding it repeats the
-        // same sentence four times, and limbo without an age looks fresh.
-        let waited = format!("{stage} {}", say::ago(now, status_at));
-        let reason = match labels.get("target") {
-            Some(path) => format!("{what} — {path}: {note} · {waited}"),
-            None => format!("{what}: {note} · {waited}"),
+        let target = labels.get("target").cloned().unwrap_or_else(|| slug.clone());
+        limbo.entry(status).or_default().push((sid, slug, target, status_at));
+    }
+    for (status, mut changes) in limbo {
+        changes.sort_by(|a, b| a.3.cmp(&b.3).then(a.2.cmp(&b.2)));
+        let oldest = say::ago(now, changes.first().map(|c| c.3).unwrap_or(0));
+        let (title, reason) = say::changes_in_limbo(&status, changes.len(), &oldest);
+        let step = |label: &str, state: &str, when: Option<String>| Stage {
+            label: label.to_string(),
+            note: String::new(),
+            state: state.to_string(),
+            when,
         };
-        // The command is the way OUT of the stage, not a look at it.
+        let steps = if status == "proposed" {
+            vec![
+                step("proposed", "done", Some(oldest.clone())),
+                step("applied", "missing", None),
+                step("verified", "missing", None),
+            ]
+        } else {
+            vec![
+                step("proposed", "done", None),
+                step("applied", "done", Some(oldest.clone())),
+                step("verified", "missing", None),
+            ]
+        };
+        // Chips wear the file the change touches — the slug is the
+        // machine's name for it, the path is the person's.
+        let chips: Vec<Ref> = changes
+            .iter()
+            .map(|(sid, _, target, _)| {
+                let mut reference = query::make_ref(index, store, sid);
+                reference.label = target.clone();
+                reference
+            })
+            .collect();
+        let first_slug = changes.first().map(|c| c.1.clone()).unwrap_or_default();
         let fix = match status.as_str() {
-            "proposed" => format!("brain change apply {prefix} {slug} --cap fs"),
-            _ => format!("brain change verify {prefix} {slug}"),
+            "proposed" => format!("brain change apply {prefix} {first_slug} --cap fs"),
+            _ => format!("brain change verify {prefix} {first_slug}"),
         };
         needs_you.push(Concern {
             severity: "note".to_string(),
-            title: format!("a governed change is {stage}"),
+            title,
             reason,
             fix_command: Some(fix),
-            target: Some(query::make_ref(index, store, &sid)),
+            target: None,
             repeats: 1,
             also: Vec::new(),
+            chips,
+            steps,
         });
     }
 
-    // Records aging quietly: collapsed by the grouper, each one named on
-    // unfolding — a count that cannot be unfolded cannot be checked.
-    for doc in insights
+    // Records aging quietly: one card wearing the records themselves —
+    // a shelf of openable chips instead of a bare count.
+    let aged: Vec<&twin::StaleDoc> = insights
         .stale_docs
         .iter()
         .filter(|d| d.severity == twin::Severity::Info)
-    {
+        .collect();
+    if !aged.is_empty() {
+        let chips: Vec<Ref> = aged
+            .iter()
+            .map(|doc| {
+                let sid = StableId::derive(&[doc.kind.as_str(), prefix, doc.slug.as_str()]);
+                query::make_ref(index, store, &sid)
+            })
+            .collect();
+        let (title, reason) = say::records_aged(aged.len());
         needs_you.push(Concern {
             severity: "note".to_string(),
-            title: "a record was written before later changes".to_string(),
-            reason: format!(
-                "{} ({}) — kept as history; it is not expected to track the code",
-                doc.slug,
-                say::kind_noun(&doc.kind)
-            ),
+            title,
+            reason,
             fix_command: Some(format!("brain twin stale {prefix}")),
             target: None,
             repeats: 1,
             also: Vec::new(),
+            chips,
+            steps: Vec::new(),
         });
     }
 

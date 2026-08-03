@@ -689,6 +689,50 @@ pub fn find_reason(why: &str) -> String {
     why.to_string()
 }
 
+/// Changes stuck mid-journey, told as the need they are: (title,
+/// reason). The title leads with the ask, never with the graph's state.
+pub fn changes_in_limbo(status: &str, n: usize, oldest: &str) -> (String, String) {
+    if status == "proposed" {
+        (
+            format!(
+                "{} waiting for your decision",
+                count(n as u64, "change is", "changes are")
+            ),
+            format!(
+                "proposed {oldest}; nothing has been touched yet — the desk on Work shows each diff"
+            ),
+        )
+    } else {
+        let (written, vouched) = if n == 1 {
+            ("the file was written", "it")
+        } else {
+            ("the files were written", "them")
+        };
+        (
+            format!(
+                "{} waiting for {} receipt",
+                count(n as u64, "write is", "writes are"),
+                if n == 1 { "its" } else { "their" }
+            ),
+            format!("{written} {oldest}, and no test run has vouched for {vouched} since"),
+        )
+    }
+}
+
+/// Old records whose code moved on — the expected fate of history, said
+/// so nobody mistakes it for rot: (title, reason).
+pub fn records_aged(n: usize) -> (String, String) {
+    (
+        format!(
+            "{} aged as the code moved on",
+            count(n as u64, "record", "records")
+        ),
+        "decisions and finished plans are history — code changing after them is expected, \
+         and nothing here asks for action"
+            .to_string(),
+    )
+}
+
 /// What a recorded change does to its file, in one clause.
 pub fn change_summary(gone: usize, added: usize, created: bool) -> String {
     if created {

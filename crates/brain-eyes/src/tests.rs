@@ -235,6 +235,8 @@ fn a_calm_day_leads_with_the_calm_and_counts_its_notes() {
         target: None,
         repeats,
         also: Vec::new(),
+        chips: Vec::new(),
+        steps: Vec::new(),
     };
     let mut insights = brain_observe::twin::Insights::default();
     insights.last_run = Some((1_000, 10, 10, 0));
@@ -252,26 +254,46 @@ fn a_calm_day_leads_with_the_calm_and_counts_its_notes() {
     assert!(subhead.contains("5 notes"), "collapsed cards still count: {subhead}");
 }
 
-/// The aging-records card unfolds to the records themselves and names
-/// the command that lists them — a count you cannot unfold is a count
-/// you cannot check.
+/// The Needs-you cards wear their subjects: the aging-records card
+/// carries the records as openable chips, and the stuck-change card
+/// shows the journey with the stuck step hollow — what it is about is
+/// visible at first sight, never left to the reader's imagination.
 #[test]
-fn the_records_note_unfolds_and_names_its_command() {
+fn needs_you_cards_wear_their_subjects() {
     let f = fixture();
     let now = f.state.read(|loaded| crate::query::now::build(loaded, None)).unwrap();
+
     let records = now
         .needs_you
         .iter()
-        .find(|c| c.title.contains("record was written before later changes"))
+        .find(|c| c.title.contains("aged as the code moved on"))
         .expect("the fixture's aged decision surfaces");
-    assert!(
-        records.reason.contains("(") && records.reason.contains(")"),
-        "the shown row names a record and its kind: {}",
-        records.reason
-    );
+    assert_eq!(records.chips.len(), 1, "each record is a chip");
+    assert_eq!(records.chips[0].kind, "decision");
     assert_eq!(
         records.fix_command.as_deref(),
         Some("brain twin stale twin/app")
+    );
+
+    let waiting = now
+        .needs_you
+        .iter()
+        .find(|c| c.title.contains("waiting for your decision"))
+        .expect("the fixture's proposed change surfaces");
+    assert_eq!(waiting.chips.len(), 1, "the touched file is a chip");
+    assert_eq!(
+        waiting.chips[0].label, "crates/app/src/lib.rs",
+        "the chip wears the path, not the machine's slug"
+    );
+    let states: Vec<&str> = waiting.steps.iter().map(|s| s.state.as_str()).collect();
+    assert_eq!(
+        states,
+        vec!["done", "missing", "missing"],
+        "the journey shows exactly where it is stuck"
+    );
+    assert!(
+        waiting.steps[0].when.is_some(),
+        "the reached step carries its age"
     );
 }
 

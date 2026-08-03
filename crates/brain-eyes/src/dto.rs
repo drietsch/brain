@@ -88,6 +88,28 @@ pub struct Concern {
     pub repeats: usize,
     /// The other occurrences' reasons, so a count can be unfolded.
     pub also: Vec<String>,
+    /// The things this concern is about, each openable — the card shows
+    /// its subjects instead of asking the reader to imagine them.
+    pub chips: Vec<Ref>,
+    /// Where in a journey the subjects stand (proposed → applied →
+    /// verified), so a stuck step is visible at a glance.
+    pub steps: Vec<Stage>,
+}
+
+impl Default for Concern {
+    fn default() -> Self {
+        Concern {
+            severity: "note".to_string(),
+            title: String::new(),
+            reason: String::new(),
+            fix_command: None,
+            target: None,
+            repeats: 1,
+            also: Vec::new(),
+            chips: Vec::new(),
+            steps: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

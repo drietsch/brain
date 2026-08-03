@@ -290,6 +290,22 @@ views.now = async () => {
                     ? h("li", { class: "faint", text: `${concern.repeats - 1 - concern.also.length} more are not listed here` })
                     : null))
             : null,
+          // The journey: which step the subjects are stuck on.
+          concern.steps.length
+            ? h("div", { class: "journey" }, concern.steps.map((step) =>
+                h("span", { class: `journey-step ${step.state}` },
+                  h("i", { class: "journey-dot", "aria-hidden": "true" }),
+                  step.when ? `${step.label} ${step.when}` : step.label)))
+            : null,
+          // The subjects themselves, each openable — the card shows what
+          // it is about instead of asking the reader to imagine it.
+          concern.chips.length
+            ? h("div", { class: "concern-chips" }, concern.chips.map((ref) =>
+                h("button", {
+                  class: "chip-ref", title: `a ${ref.noun}`,
+                  onclick: (event) => { event.stopPropagation(); openThing(ref.id); },
+                }, glyph(ref.glyph), h("span", { text: ref.label }))))
+            : null,
           fixLine(concern.fix_command),
           ackButton(concern)));
       if (concern.target) {

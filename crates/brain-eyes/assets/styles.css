@@ -367,6 +367,27 @@ body.plain .fix { display: none; }
   margin-left: 8px; font: 400 11px/1 var(--record); font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
+/* The journey strip on a concern: proposed → applied → verified, with
+   the stuck step hollow. The chips beneath wear the subjects. */
+.journey { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 9px 0 2px; }
+.journey-step {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 500 10px/1 var(--record); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted);
+}
+.journey-step:not(:first-child)::before { content: "→"; color: var(--faint); margin-right: 10px; }
+.journey-step.done { color: var(--proof); }
+.journey-step.missing { color: var(--faint); }
+.journey-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.journey-step.missing .journey-dot { background: transparent; border: 1.5px dashed currentColor; }
+.concern-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0 2px; }
+.chip-ref {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--sunk);
+  font: 400 11.5px/1 var(--record); color: var(--body); cursor: pointer;
+}
+.chip-ref:hover { border-color: var(--trace); color: var(--trace); }
+
 .also { margin-top: 7px; }
 .also summary { color: var(--meta); font-size: 11.5px; cursor: pointer; }
 .also ul { margin: 7px 0 0; padding-left: 16px; color: var(--meta); font-size: 11.5px; }

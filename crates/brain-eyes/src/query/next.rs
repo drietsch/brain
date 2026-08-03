@@ -30,6 +30,8 @@ pub fn build(loaded: &Loaded) -> Result<NextView, String> {
                 target: None,
                 repeats: 1,
                 also: Vec::new(),
+                chips: Vec::new(),
+                steps: Vec::new(),
             },
         ));
     };
@@ -132,6 +134,8 @@ pub fn build(loaded: &Loaded) -> Result<NextView, String> {
                 target: None,
                 repeats: 1,
                 also: Vec::new(),
+                chips: Vec::new(),
+                steps: Vec::new(),
             },
         ));
     }

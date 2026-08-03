@@ -166,6 +166,8 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
             target: Some(query::make_ref(index, store, file)),
             repeats: 1,
             also: Vec::new(),
+            chips: Vec::new(),
+            steps: Vec::new(),
         });
     }
     for (agent, ran_for) in &maybe_stuck {
@@ -178,6 +180,8 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
             target: None,
             repeats: 1,
             also: Vec::new(),
+            chips: Vec::new(),
+            steps: Vec::new(),
         });
     }
 

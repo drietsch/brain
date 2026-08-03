@@ -781,6 +781,8 @@ pub(crate) fn briefing_rows(
             target: None,
             repeats: 1,
             also: Vec::new(),
+            chips: Vec::new(),
+            steps: Vec::new(),
         });
     };
 
