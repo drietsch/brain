@@ -744,7 +744,7 @@ a.ref:hover, button.ref:hover { border-color: var(--trace); color: var(--trace);
 /* ------------------------------------------------------- the dimension strip
    A feature's parts (or, for a leaf, its requirements) at 7px each. The
    same object appears labelled in a dossier and expanded in a drill-down. */
-.strip { display: inline-flex; gap: 2px; vertical-align: middle; }
+.strip { display: inline-flex; gap: 2px; vertical-align: middle; flex-wrap: wrap; max-width: 100%; }
 .strip i {
   width: 7px; height: 7px; border-radius: 2px; box-sizing: border-box;
   display: inline-block; border: 1px solid transparent; background: transparent;
@@ -808,6 +808,15 @@ button.strip:hover i { transform: scale(1.18); }
 }
 .trow.child .name { color: var(--body); font-weight: 400; padding-left: 28px; }
 .trow .name .branch { color: var(--faint); font-family: var(--record); flex: none; }
+.trow .name .name-label {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.trow .name .name-label .icon { margin-right: 6px; }
+/* Inside a name cell a pill-row is a label, not a shelf: it keeps to
+   one line and lets the title truncate beside its icon. */
+.trow .name .pill-row { flex-wrap: nowrap; min-width: 0; }
+.trow .name .pill-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .trow .dim { color: var(--muted); }
 .trow .nowrap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chev {

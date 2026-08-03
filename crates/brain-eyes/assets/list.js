@@ -285,7 +285,10 @@ export function table(host, spec) {
               },
             })
           : h("span", { class: "spacer" }));
-        node.append(h("span", { class: "name" }, ...lead, content));
+        // The label rides in its own span: a bare text node in a flex
+        // cell can wrap under its icon but can never grow an ellipsis.
+        node.append(h("span", { class: "name" }, ...lead,
+          h("span", { class: "name-label" }, content)));
       } else {
         node.append(h("span", { class: column.class ?? "dim nowrap" }, content));
       }
