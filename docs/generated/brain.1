@@ -27,10 +27,10 @@ replicate this store into another
 .SH TWIN
 Reflective mode: a persistent, queryable semantic model of existing software. Observations are sourced and timestamped; only drift is recorded.
 .TP
-.B brain twin refresh \fI<dir> [\-\-prefix <p>] [\-\-full]\fR
+.B brain twin refresh \fI<dir> [\-\-prefix <p>] [\-\-full] [\-\-json]\fR
 observe a source tree, record only drift; \-\-full reprocesses every file after extractor upgrades
 .TP
-.B brain twin status \fI<dir> [\-\-prefix <p>]\fR
+.B brain twin status \fI<dir> [\-\-prefix <p>] [\-\-json]\fR
 the same comparison, read\-only
 .TP
 .B brain twin backfill \fI<dir> [\-\-prefix <p>] [\-\-max\-commits N]\fR
@@ -39,37 +39,43 @@ replay git history into the twin with historical timestamps (brownfield minute\-
 .B brain twin files \fI<prefix>\fR
 twinned files with language, symbols, freshness
 .TP
-.B brain twin symbols \fI<name>\fR
+.B brain twin symbols \fI<name> [\-\-json]\fR
 what a file declares, with line numbers
 .TP
 .B brain twin imports \fI<name> [\-\-transitive]\fR
 what a file depends on; \-\-transitive walks the closure
 .TP
-.B brain twin rdeps \fI<name> [\-\-transitive]\fR
+.B brain twin rdeps \fI<name> [\-\-transitive] [\-\-json]\fR
 who depends on a file; \-\-transitive is the blast radius
 .TP
-.B brain twin at \fI<prefix> <ms|30m|2h|1d|git\-hash>\fR
-the twin as it was: bi\-temporal read at a moment or commit
+.B brain twin at \fI<prefix> <ms|30m|2h|1d|git\-hash|baseline>\fR
+the twin as it was: bi\-temporal read at a moment, commit, or baseline
+.TP
+.B brain baseline add \fI<prefix> <name> [\-\-at <when>]\fR
+name a moment so it can be asked about later
+.TP
+.B brain baseline list \fI<prefix>\fR
+every named moment, newest first
 .TP
 .B brain twin search \fI<substring>\fR
 find twinned entities by name
 .TP
-.B brain twin insights \fI<prefix>\fR
+.B brain twin insights \fI<prefix> [\-\-json]\fR
 the synthesized picture: churn, hubs, tests, decisions, growth, last sleep
 .TP
-.B brain twin tests \fI<prefix>\fR
+.B brain twin tests \fI<prefix> [\-\-json]\fR
 test files, frameworks, covers\-relations, failing cases
 .TP
-.B brain twin stale \fI<prefix>\fR
+.B brain twin stale \fI<prefix> [\-\-json]\fR
 docs invalidated by later changes to files they mention
 .TP
 .B brain ingest \fI<dir> [\-\-prefix <p>]\fR
 alias for twin refresh
 .TP
-.B brain note \fI<name> <text...>\fR
+.B brain note \fI<name> <text...> [\-\-kind learning|dead\-end|gap|decision\-pending]\fR
 attach a durable note to any entity
 .TP
-.B brain notes \fI<name>\fR
+.B brain notes \fI<name> [\-\-top N] [\-\-json]\fR
 read an entity's notes, in true order
 .TP
 .B brain observations \fI<name>\fR
@@ -159,8 +165,11 @@ Who worked here: the coding\-agent sessions that ran in this workspace, with the
 .B brain sessions import \fI[dir] [\-\-prefix p] [\-\-agent claude|codex] [\-\-since 2h]\fR
 record the coding\-agent sessions that ran in this workspace: objective, model, turns, tools, and the files they edited (never the conversation)
 .TP
-.B brain sessions list \fI<prefix>\fR
+.B brain sessions list \fI<prefix> [\-\-json]\fR
 who worked here and what they were trying to do, most recent first
+.TP
+.B brain sessions annotate \fI<prefix> <session\-id> [\-\-objective <text>] [\-\-outcome shipped|abandoned|superseded]\fR
+the distilled mission and whether its work survived \(em supersedes the import\-time guess, keeps it in history
 .SH FEATURES
 The registry: features as entities, the definition of done as relation predicates, done\-ness as a query.
 .TP
@@ -170,7 +179,7 @@ register (or update) a feature; \-\-part\-of makes it a part of another feature 
 .B brain feature link \fI<prefix> <slug> <predicate> <target> [\-\-kind k]\fR
 link a feature to files, tests, decisions, docs; part_of joins it to a parent feature
 .TP
-.B brain feature tree \fI<prefix> [slug]\fR
+.B brain feature tree \fI<prefix> [slug] [\-\-json]\fR
 features and their parts, with readiness rolled up from the leaves
 .TP
 .B brain feature list|matrix \fI<prefix>\fR
@@ -181,23 +190,35 @@ evaluate a feature against the DoD and record the outcome
 .SH BRAIN FUNCTIONS
 The functional organs: attention (what matters now), consolidation (distill history into memory), association (what is related, and why).
 .TP
-.B brain wake \fI<prefix> [\-\-full]\fR
+.B brain wake \fI<prefix> [\-\-full] [\-\-json]\fR
 orientation: last sleep, the delta since, attention, warn\-stale, in\-flight work, coherence \(em one command
 .TP
 .B brain tidy \fI[dir] [\-\-prefix <p>] [\-\-fix \-\-cap fs] [\-\-rm <path>]\fR
 clean up: drifted/orphaned projections, retired artifacts, legacy assets, concluded prototypes \(em fixes are governed changes (auditable, revertible); deletion only via explicit \-\-rm
 .TP
-.B brain attend \fI<prefix> [\-\-top N]\fR
+.B brain attend \fI<prefix> [\-\-top N] [\-\-json]\fR
 attention: what deserves attention now, ranked with reasons
 .TP
-.B brain spine \fI<prefix> [\-\-unclaimed <kind>]\fR
+.B brain spine \fI<prefix> [\-\-unclaimed <kind>] [\-\-json]\fR
 what each feature reaches through the files it declares, what no feature claims, and which declared slots nothing corroborates
 .TP
 .B brain sleep \fI<prefix>\fR
 consolidation: distill activity since last sleep into durable memory
 .TP
-.B brain related \fI<name> [\-\-top N]\fR
+.B brain related \fI<name> [\-\-top N] [\-\-json]\fR
 association: what is related (co\-change, co\-mention, shared imports)
+.TP
+.B brain find \fI<prefix> <query...> [\-\-top N] [\-\-json]\fR
+where is the thing that does X \(em paths, symbol names, doc titles, notes, ranked by graph centrality
+.TP
+.B brain next \fI<prefix> [\-\-top N] [\-\-json]\fR
+the ranked work queue: failing tests, unsettled changes, rotting docs, unmet definitions of done, open plans
+.TP
+.B brain before \fI<name> [\-\-json]\fR
+the pre\-edit briefing: write access, blast radius, covering tests, constraining docs, churn, notes, associations
+.TP
+.B brain can\-i \fI<name\-or\-path> [\-\-prefix <p>] [\-\-json]\fR
+the authoring gate as a question \(em exit 0: write the file; exit 3: the graph owns it, the answer names the fix
 .TP
 .B brain eyes \fI[\-\-prefix P] [\-\-bind IP] [\-\-port N] [\-\-root DIR]\fR
 the visual layer for people: judgments as sentences, content you can read, a map of the system \(em read\-only, on localhost
