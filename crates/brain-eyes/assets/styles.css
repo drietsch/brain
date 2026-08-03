@@ -11,8 +11,9 @@
  * interpretation and which are record. That is the product's central rule
  * made visible: a claim is never stronger than its proof.
  *
- * Nothing is fetched. The serif is New York / Charter / Iowan Old Style,
- * already present on the machine; Eyes serves only itself.
+ * Nothing is fetched from anyone else. The display serif is Source
+ * Serif 4, served by Eyes itself; New York / Charter / Iowan Old Style
+ * stand in while it loads.
  */
 
 :root {
@@ -432,6 +433,11 @@ body.plain .stage { padding-top: 62px; }
 .spark-path { stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linejoin: round; }
 .spark-dot { fill: currentColor; }
 .spark-area { fill: currentColor; opacity: .07; stroke: none; }
+.spark-lane { display: flex; flex-direction: column; gap: 3px; flex: none; }
+/* Readings accrue on change, not on a clock; the tempo strip draws the
+   gaps between them so the trend confesses its own cadence. */
+.spark-tempo { display: flex; gap: 1px; height: 3px; width: 118px; }
+.spark-tempo i { flex-grow: 1; min-width: 1px; background: currentColor; opacity: .45; border-radius: 1px; }
 .spark-arrow { font: 600 12.5px/1 var(--ui); color: var(--meta); margin-left: auto; }
 .spark-now { font: 400 11.5px/1.4 var(--record); color: var(--body); flex: 1 1 150px; min-width: 0; }
 .spark-item.bad { border-left-color: var(--fault); background: var(--fault-fill); }
@@ -887,20 +893,43 @@ button.strip:hover i { transform: scale(1.18); }
 .episode strong { font: 400 14px/1.45 var(--judgment); font-weight: 400; color: var(--ink); }
 .episode p { margin: 3px 0 0; color: var(--meta); font-size: 12px; }
 
-/* The pressure is a ranking; it renders as one. */
+/* The pressure is a ranking with its measurements: churn as ramping
+   bars, reach as the number it is, coverage as a dot that either can or
+   cannot vouch. */
+.pressure-head {
+  display: grid; grid-template-columns: 14px minmax(0, 1fr) 46px 34px 26px; gap: 10px;
+  padding-bottom: 6px; font: 600 10px/1.3 var(--ui); letter-spacing: .05em;
+  text-transform: uppercase; color: var(--faint);
+}
 .pressure-list { display: flex; flex-direction: column; }
 .pressure-row {
-  display: flex; gap: 12px; align-items: baseline; width: 100%;
-  padding: 9px 2px; border-bottom: 1px solid var(--line-soft); text-align: left;
+  display: grid; grid-template-columns: 14px minmax(0, 1fr) 46px 34px 26px; gap: 10px;
+  align-items: center; width: 100%;
+  padding: 9px 0; border-bottom: 1px solid var(--line-soft); text-align: left;
 }
 .pressure-row:hover .pressure-path { color: var(--trace); }
-.pressure-rank { font: 400 11px/1 var(--record); color: var(--faint); min-width: 14px; }
+.pressure-rank { font: 400 11px/1 var(--record); color: var(--faint); }
 .pressure-body { min-width: 0; }
 .pressure-path {
-  display: block; font: 500 12px/1.4 var(--record); color: var(--body);
-  word-break: break-all;
+  display: block; font: 500 11.5px/1.4 var(--record); color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  direction: rtl; text-align: left;
 }
 .pressure-why { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.pressure-churn { display: flex; gap: 2px; align-items: flex-end; height: 13px; }
+.pressure-churn i { width: 4px; flex: none; border-radius: 1px; background: var(--line2); }
+.pressure-churn i:nth-child(1) { height: 3px; }
+.pressure-churn i:nth-child(2) { height: 5.2px; }
+.pressure-churn i:nth-child(3) { height: 7.4px; }
+.pressure-churn i:nth-child(4) { height: 9.6px; }
+.pressure-churn i:nth-child(5) { height: 11.8px; }
+.pressure-churn i[data-on="warm"] { background: var(--meta); }
+.pressure-churn i[data-on="hot"] { background: var(--fault); }
+.pressure-reach { font: 400 10.5px/1.3 var(--record); color: var(--body); text-align: right; }
+.pressure-test { width: 9px; height: 9px; border-radius: 999px; justify-self: center; }
+.pressure-test[data-state="named"] { background: var(--proof); }
+.pressure-test[data-state="bare"] { border: 1.5px dashed var(--fault); }
+.pressure-test[data-state="unknown"] { background: var(--sunk); }
 
 /* Hashes and sources name their author in the record voice. */
 .who {
@@ -945,6 +974,10 @@ button.strip:hover i { transform: scale(1.18); }
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
 .tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.tabs .icon { width: 13px; height: 13px; }
+.tab-count { font-size: 11px; color: var(--meta); }
+.tab-count:empty { display: none; }
+.tab-count[data-tone="fault"] { color: var(--fault); }
 
 .body-view {
   background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
@@ -1379,11 +1412,9 @@ button:active { transform: translateY(.5px); }
   --grad-accent: linear-gradient(120deg, oklch(0.68 0.15 275), oklch(0.7 0.15 302));
 }
 
-/* Self-hosting the display serif (no CDN — Eyes serves only itself):
-   drop SourceSerif4Variable.woff2 into assets/ and uncomment.
+/* The display serif, self-hosted — no CDN; Eyes serves only itself. */
 @font-face {
   font-family: "Source Serif 4";
   src: url("/assets/SourceSerif4Variable.woff2") format("woff2-variations");
   font-weight: 200 900; font-stretch: normal; font-display: swap;
 }
-*/

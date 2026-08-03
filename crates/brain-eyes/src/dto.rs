@@ -129,6 +129,13 @@ pub struct AttentionCard {
     pub glyph: String,
     pub id: Option<String>,
     pub reasons: Vec<String>,
+    /// Lifetime edit count, when the ranking recorded one.
+    pub churn: Option<u64>,
+    /// How many files import this one, when the ranking recorded it.
+    pub reach: Option<u64>,
+    /// Some(false) when no test names it; Some(true) when a failing test
+    /// proves one does; None when the ranking had nothing to say.
+    pub tested: Option<bool>,
 }
 
 /// One claim in the system, reduced to a mark.
@@ -170,6 +177,8 @@ pub struct QualityLine {
     pub label: String,
     /// Percent for ratios (tests, features), plain counts otherwise.
     pub points: Vec<f64>,
+    /// When each reading was taken — the tempo under the trend.
+    pub at_ms: Vec<u64>,
     pub current: String,
     /// "rising" | "falling" | "flat" — the direction of the line itself.
     pub trend: String,
@@ -638,6 +647,17 @@ pub struct EvidenceView {
     pub headline: String,
     pub categories: Vec<EvidenceCategory>,
     pub claims: Vec<Claim>,
+}
+
+/// What each proof register would say before it is opened: the tab row's
+/// honest badges.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProofCounts {
+    pub snapshot: Snapshot,
+    pub tests_failing: usize,
+    pub tests_total: usize,
+    pub claims: usize,
+    pub artifacts: usize,
 }
 
 // ---------------------------------------------------------------------------

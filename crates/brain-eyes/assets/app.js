@@ -335,14 +335,34 @@ views.now = async () => {
       : null));
 
   if (data.attention.length) {
+    // Churn draws as five ramping bars, filled to the measured count and
+    // red past heavy; the test cell is a proof dot, a dashed fault ring,
+    // or nothing when the ranking had nothing to say.
+    const churnBars = (churn) => {
+      if (churn === null || churn === undefined) return h("span", {});
+      const filled = Math.min(5, Math.ceil(churn / 5));
+      return h("span", { class: "pressure-churn" },
+        [0, 1, 2, 3, 4].map((i) =>
+          h("i", { "data-on": i < filled ? (churn > 15 ? "hot" : "warm") : null })));
+    };
+    const testDot = (tested) =>
+      h("i", { class: "pressure-test", "data-state":
+        tested === true ? "named" : tested === false ? "bare" : "unknown" });
     side.push(h("section", { class: "side-panel" },
       h("h2", { class: "section", text: "Where the pressure is" }),
+      h("div", { class: "pressure-head", "aria-hidden": "true" },
+        h("span", {}), h("span", {}),
+        h("span", { text: "churn" }), h("span", { text: "reach" }), h("span", { text: "test" })),
       h("div", { class: "pressure-list" }, data.attention.map((card, index) =>
-        h("button", { class: "pressure-row", title: `a ${card.noun}`, onclick: () => card.id && openThing(card.id) },
+        h("button", { class: "pressure-row", title: `a ${card.noun} — ${card.reasons.join(" · ")}`,
+            onclick: () => card.id && openThing(card.id) },
           h("span", { class: "pressure-rank", text: String(index + 1) }),
           h("span", { class: "pressure-body" },
             h("span", { class: "pressure-path", text: card.label }),
-            h("span", { class: "pressure-why", text: card.reasons.join(" · ") })))))));
+            h("span", { class: "pressure-why", text: card.reasons.join(" · ") })),
+          churnBars(card.churn),
+          h("span", { class: "pressure-reach", text: card.reach ?? "" }),
+          testDot(card.tested))))));
   }
 
   stage.replaceChildren(h("div", { class: "page" },
@@ -525,10 +545,19 @@ function sparkItem(line) {
     features: ["features", {}],
     docs: ["proof", { tab: "artifacts", shelf: "documents" }],
   })[line.id];
+  // The tempo strip: the gaps between readings, drawn as gaps — a
+  // series bounded by change, not by time, says so under its trend.
+  let tempo = null;
+  const at = line.at_ms ?? [];
+  if (at.length > 2) {
+    const gaps = at.slice(1).map((t, i) => Math.max(1, t - at[i]));
+    tempo = h("span", { class: "spark-tempo", "aria-hidden": "true" },
+      gaps.map((gap) => h("i", { style: `flex-grow:${gap}` })));
+  }
   return h("button", { class: `spark-item ${line.tone}`, title: line.sentence,
       onclick: () => home && go(home[0], home[1]) },
     h("span", { class: "spark-label", text: line.label }),
-    svg,
+    h("span", { class: "spark-lane" }, svg, tempo),
     pts.length > 1 ? h("span", { class: "spark-arrow", text: arrow, "aria-hidden": "true" }) : null,
     h("span", { class: "spark-now", text: line.current }));
 }
@@ -565,14 +594,29 @@ views.proof = async (params) => {
   const tab = params.tab || "tests";
   const host = h("div", {});
   const bar = h("div", { class: "tabs proof-tabs" }, [
-    ["tests", "Tests"],
-    ["evidence", "Evidence"],
-    ["artifacts", "Artifacts"],
-  ].map(([id, label]) =>
-    h("button", { class: tab === id ? "on" : "", onclick: () => go("proof", { tab: id }) }, label)));
+    ["tests", "Tests", "diamond"],
+    ["evidence", "Evidence", "seal"],
+    ["artifacts", "Artifacts", "page"],
+  ].map(([id, label, mark]) =>
+    h("button", { class: tab === id ? "on" : "", onclick: () => go("proof", { tab: id }) },
+      icon(mark, "sm"), label,
+      h("code", { class: "tab-count", "data-tab": id }))));
   stage.replaceChildren(h("div", { class: "page" },
     h("p", { class: "kicker" }, icon("diamond"), "Prove · Proof"),
     bar, host));
+  // The badges say what each register would say before it is opened;
+  // the numbers arrive from their own endpoint so no tab loads early.
+  api("/api/proof").then((counts) => {
+    const set = (id, value, tone) => {
+      const node = bar.querySelector(`[data-tab="${id}"]`);
+      if (!node) return;
+      node.textContent = value ? String(value) : "";
+      if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+    };
+    set("tests", counts.tests_failing, counts.tests_failing ? "fault" : null);
+    set("evidence", counts.claims, null);
+    set("artifacts", counts.artifacts, null);
+  }).catch(() => {});
   if (tab === "evidence") await evidencePanel(host, params);
   else if (tab === "artifacts") await artifactsPanel(host, params);
   else await testsPanel(host, params);

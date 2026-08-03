@@ -23,6 +23,26 @@ pub mod work;
 
 use crate::dto::Ref;
 use crate::say;
+
+/// The proof tab row's badges: what each register would say before it is
+/// opened. The numbers are already computed elsewhere — this only
+/// gathers them so the tab row never guesses.
+pub fn proof_counts(loaded: &crate::state::Loaded) -> Result<crate::dto::ProofCounts, String> {
+    let (tests_failing, tests_total) = loaded
+        .insights()
+        .last_run
+        .map(|(_, total, _, failed)| (failed, total))
+        .unwrap_or((0, 0));
+    let claims = loaded.evidence()?.claims.len();
+    let artifacts = library::shelves(loaded)?.iter().map(|s| s.count).sum();
+    Ok(crate::dto::ProofCounts {
+        snapshot: loaded.snapshot.clone(),
+        tests_failing,
+        tests_total,
+        claims,
+        artifacts,
+    })
+}
 use brain_core::ids::StableId;
 use brain_core::object::Object;
 use brain_index::{Index, MemIndex};

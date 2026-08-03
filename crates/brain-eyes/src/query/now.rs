@@ -252,39 +252,45 @@ fn quality_lines(insights: &twin::Insights, now: u64) -> Vec<QualityLine> {
     // Tests: percent passing, counting only readings that had a run.
     // The run's age rides along — a level without its moment can read
     // calm long after anyone last ran anything.
-    let tests: Vec<(usize, usize)> = readings.iter().filter_map(|p| p.tests).collect();
-    if let Some(&(passed, total)) = tests.last() {
-        let points: Vec<f64> = tests.iter().map(|&(p, t)| ratio(p, t)).collect();
-        let prev = (tests.len() >= 2).then(|| tests[tests.len() - 2]);
+    let tests: Vec<(u64, (usize, usize))> = readings
+        .iter()
+        .filter_map(|p| p.tests.map(|t| (p.at_ms, t)))
+        .collect();
+    if let Some(&(_, (passed, total))) = tests.last() {
+        let points: Vec<f64> = tests.iter().map(|&(_, (p, t))| ratio(p, t)).collect();
+        let at_ms: Vec<u64> = tests.iter().map(|&(at, _)| at).collect();
+        let prev = (tests.len() >= 2).then(|| tests[tests.len() - 2].1);
         let trend = ratio_trend(&points, DEADBAND_PP);
         let ran = insights.last_run.map(|(at, ..)| say::ago(now, at));
         let (current, sentence) =
             say::quality_tests(passed, total, prev, trend, ran.as_deref());
-        lines.push((0, line("tests", "Tests passing", points, current, trend, tone(trend, true), sentence)));
+        lines.push((0, line("tests", "Tests passing", points, at_ms, current, trend, tone(trend, true), sentence)));
     }
 
     // Features: percent ready, counting only readings that had features.
-    let feats: Vec<(usize, usize)> = readings
+    let feats: Vec<(u64, (usize, usize))> = readings
         .iter()
         .filter(|p| p.features_total > 0)
-        .map(|p| (p.features_done, p.features_total))
+        .map(|p| (p.at_ms, (p.features_done, p.features_total)))
         .collect();
-    if let Some(&(done, total)) = feats.last() {
-        let points: Vec<f64> = feats.iter().map(|&(d, t)| ratio(d, t)).collect();
-        let prev = (feats.len() >= 2).then(|| feats[feats.len() - 2]);
+    if let Some(&(_, (done, total))) = feats.last() {
+        let points: Vec<f64> = feats.iter().map(|&(_, (d, t))| ratio(d, t)).collect();
+        let at_ms: Vec<u64> = feats.iter().map(|&(at, _)| at).collect();
+        let prev = (feats.len() >= 2).then(|| feats[feats.len() - 2].1);
         let trend = ratio_trend(&points, DEADBAND_PP);
         let (current, sentence) = say::quality_features(done, total, prev, trend);
-        lines.push((1, line("features", "Features ready", points, current, trend, tone(trend, true), sentence)));
+        lines.push((1, line("features", "Features ready", points, at_ms, current, trend, tone(trend, true), sentence)));
     }
 
     // Documents in doubt and claims without proof: plain counts, where
     // any step is a real move and zero is said, not hidden.
+    let all_at: Vec<u64> = readings.iter().map(|p| p.at_ms).collect();
     let docs: Vec<f64> = readings.iter().map(|p| p.stale_warnings as f64).collect();
     let n = readings.last().map(|p| p.stale_warnings).unwrap_or(0);
     let prev = (readings.len() >= 2).then(|| readings[readings.len() - 2].stale_warnings);
     let trend = count_trend(&docs);
     let (current, sentence) = say::quality_docs(n, prev, trend);
-    lines.push((2, line("docs", "Documents in doubt", docs, current, trend, tone(trend, false), sentence)));
+    lines.push((2, line("docs", "Documents in doubt", docs, all_at.clone(), current, trend, tone(trend, false), sentence)));
 
     // "Feature claims", not "claims": the census above this strip counts
     // every claim the graph makes, this line counts only what features
@@ -295,7 +301,7 @@ fn quality_lines(insights: &twin::Insights, now: u64) -> Vec<QualityLine> {
     let prev = (readings.len() >= 2).then(|| readings[readings.len() - 2].uncorroborated);
     let trend = count_trend(&claims);
     let (current, sentence) = say::quality_claims(n, prev, trend);
-    lines.push((3, line("claims", "Feature claims", claims, current, trend, tone(trend, false), sentence)));
+    lines.push((3, line("claims", "Feature claims", claims, all_at, current, trend, tone(trend, false), sentence)));
 
     // Regressions first, then holding, then improving; canonical order
     // within a rank so the strip never reshuffles without cause.
@@ -310,10 +316,12 @@ fn quality_lines(insights: &twin::Insights, now: u64) -> Vec<QualityLine> {
     lines.into_iter().map(|(_, l)| l).collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn line(
     id: &str,
     label: &str,
     points: Vec<f64>,
+    at_ms: Vec<u64>,
     current: String,
     trend: &str,
     tone: &str,
@@ -323,6 +331,7 @@ fn line(
         id: id.to_string(),
         label: label.to_string(),
         points,
+        at_ms,
         current,
         trend: trend.to_string(),
         tone: tone.to_string(),
@@ -590,6 +599,24 @@ fn attention_cards(loaded: &Loaded, ranked: &[attention::Attention]) -> Vec<Atte
             }
             let sid = StableId::derive(&["file", &item.label]);
             let known = !index.entity_nodes(&sid).is_empty();
+            // The numbers behind the sentences, for the mini-table: the
+            // ranking already measured churn, reach and coverage — hand
+            // them over as records instead of asking the client to read
+            // them back out of prose.
+            let mut churn = None;
+            let mut reach = None;
+            let mut tested = None;
+            for raw in &item.reasons {
+                if let Some(rest) = raw.strip_prefix("churn ") {
+                    churn = rest.split_whitespace().next().and_then(|v| v.parse().ok());
+                } else if let Some(rest) = raw.strip_prefix("hub ") {
+                    reach = rest.trim().parse().ok();
+                } else if raw == "untested hub" {
+                    tested = Some(false);
+                } else if raw.contains("failing test") {
+                    tested = Some(true);
+                }
+            }
             Some(AttentionCard {
                 label: item.label.clone(),
                 kind: item.kind.clone(),
@@ -597,6 +624,9 @@ fn attention_cards(loaded: &Loaded, ranked: &[attention::Attention]) -> Vec<Atte
                 glyph: say::kind_glyph(&item.kind).to_string(),
                 id: known.then(|| sid.to_string()),
                 reasons,
+                churn,
+                reach,
+                tested,
             })
         })
         .take(6)

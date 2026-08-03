@@ -21,6 +21,8 @@ const LIST_JS: &str = include_str!("../assets/list.js");
 /// The shape vocabulary, inlined into the page so nothing is fetched.
 pub const ICONS_SVG: &str = include_str!("../assets/icons.svg");
 const STYLES_CSS: &str = include_str!("../assets/styles.css");
+/// The display serif, self-hosted: Eyes serves only itself (SIL OFL).
+const SERIF_WOFF2: &[u8] = include_bytes!("../assets/SourceSerif4Variable.woff2");
 /// Browsers ask for a favicon on every visit; a 404 here put an error in
 /// the console of every session — found by the first e2e run.
 const FAVICON_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="#2e7d5b" stroke-width="1.6"/><circle cx="8" cy="8" r="2.4" fill="#2e7d5b"/></svg>"##;
@@ -105,6 +107,22 @@ fn handle(request: Request, state: &Arc<AppState>) {
         "/assets/icons.svg" => text(request, 200, ICONS_SVG, "image/svg+xml; charset=utf-8"),
         "/favicon.ico" => text(request, 200, FAVICON_SVG, "image/svg+xml; charset=utf-8"),
         "/assets/styles.css" => text(request, 200, STYLES_CSS, "text/css; charset=utf-8"),
+        "/assets/SourceSerif4Variable.woff2" => {
+            let response = Response::from_data(SERIF_WOFF2.to_vec())
+                .with_status_code(StatusCode(200))
+                .with_chunked_threshold(NEVER_CHUNK)
+                .with_header(
+                    Header::from_bytes(&b"Content-Type"[..], &b"font/woff2"[..])
+                        .expect("static header"),
+                )
+                .with_header(
+                    // The font never changes within a build; let the
+                    // browser keep it.
+                    Header::from_bytes(&b"Cache-Control"[..], &b"max-age=86400"[..])
+                        .expect("static header"),
+                );
+            let _ = request.respond(response);
+        }
 
         "/api/snapshot" => json_result(request, state.snapshot()),
         "/api/now" => {
@@ -128,6 +146,7 @@ fn handle(request: Request, state: &Arc<AppState>) {
             )
         }
         "/api/concepts" => json_result(request, state.read(query::library::concepts)),
+        "/api/proof" => json_result(request, state.read(query::proof_counts)),
         "/api/tests" => json_result(request, state.read(query::tests::build)),
         "/api/work" => json_result(request, state.read(query::work::build)),
         "/api/mri" => json_result(request, state.read(|loaded| loaded.mri())),
