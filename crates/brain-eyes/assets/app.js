@@ -304,14 +304,16 @@ views.now = async () => {
 
   parts.push(h("h2", { class: "section", text: data.since.known ? `Since your last session, ${data.since.when}` : "Recently" }));
   parts.push(h("p", { class: "sub", text: data.since.summary }));
-  parts.push(data.since.episodes.length
-    ? h("div", { class: "episodes" }, data.since.episodes.map(episodeRow))
-    : h("p", { class: "empty", text: "Nothing has happened since. Work here and it will show up." }));
+  // The summary already said "nothing changed" when it did — a second
+  // empty-state box saying it again was the same fact three times.
+  if (data.since.episodes.length) {
+    parts.push(h("div", { class: "episodes" }, data.since.episodes.map(episodeRow)));
+  }
 
   if (data.attention.length) {
     parts.push(h("h2", { class: "section", text: "Where the pressure is" }));
     parts.push(h("div", { class: "attention" }, data.attention.map((card) =>
-      h("button", { onclick: () => card.id && openThing(card.id) },
+      h("button", { title: `a ${card.noun}`, onclick: () => card.id && openThing(card.id) },
         h("div", { class: "who" }, glyph(card.glyph), card.label),
         h("ul", {}, card.reasons.map((reason) => h("li", { text: reason })))))));
   }

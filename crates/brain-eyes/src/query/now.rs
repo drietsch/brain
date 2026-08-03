@@ -104,49 +104,56 @@ pub fn build(loaded: &Loaded, seen: Option<usize>) -> Result<NowView, String> {
 
     // Governed changes that never reached a conclusion.
     for (sid, labels) in query::scoped(index, store, prefix, "change")? {
-        let status = twin::latest(index, store, &sid, "status")
+        let (status_at, status) = twin::latest_at(index, store, &sid, "status")
             .map_err(|e| e.to_string())?
-            .unwrap_or_default();
+            .unwrap_or((0, String::new()));
         if !matches!(status.as_str(), "proposed" | "applied") {
             continue; // broken/indeterminate already arrive as coherence findings
         }
         let slug = labels.get("slug").cloned().unwrap_or_default();
         let (stage, note) = say::change_stage(&status);
         let what = labels.get("title").cloned().unwrap_or_else(|| slug.clone());
-        // Name the file it touches. Four tidy moves share a title and are
-        // told apart only by what they moved — a collapsed count is worth
-        // nothing if unfolding it repeats the same sentence four times.
+        // Name the file it touches and how long it has waited. Four tidy
+        // moves share a title and are told apart only by what they moved —
+        // a collapsed count is worth nothing if unfolding it repeats the
+        // same sentence four times, and limbo without an age looks fresh.
+        let waited = format!("{stage} {}", say::ago(now, status_at));
         let reason = match labels.get("target") {
-            Some(path) => format!("{what} — {path}: {note}"),
-            None => format!("{what}: {note}"),
+            Some(path) => format!("{what} — {path}: {note} · {waited}"),
+            None => format!("{what}: {note} · {waited}"),
+        };
+        // The command is the way OUT of the stage, not a look at it.
+        let fix = match status.as_str() {
+            "proposed" => format!("brain change apply {prefix} {slug} --cap fs"),
+            _ => format!("brain change verify {prefix} {slug}"),
         };
         needs_you.push(Concern {
             severity: "note".to_string(),
             title: format!("a governed change is {stage}"),
             reason,
-            fix_command: Some(format!("brain change show {prefix} {slug}")),
+            fix_command: Some(fix),
             target: Some(query::make_ref(index, store, &sid)),
             repeats: 1,
             also: Vec::new(),
         });
     }
 
-    // Records aging quietly: one line, never a list.
-    let info_stale = insights
+    // Records aging quietly: collapsed by the grouper, each one named on
+    // unfolding — a count that cannot be unfolded cannot be checked.
+    for doc in insights
         .stale_docs
         .iter()
         .filter(|d| d.severity == twin::Severity::Info)
-        .count();
-    if info_stale > 0 {
+    {
         needs_you.push(Concern {
             severity: "note".to_string(),
-            title: format!(
-                "{} written before later changes",
-                say::count(info_stale as u64, "record was", "records were")
+            title: "a record was written before later changes".to_string(),
+            reason: format!(
+                "{} ({}) — kept as history; it is not expected to track the code",
+                doc.slug,
+                say::kind_noun(&doc.kind)
             ),
-            reason: "records are kept as history — they are not expected to track the code"
-                .to_string(),
-            fix_command: None,
+            fix_command: Some(format!("brain twin stale {prefix}")),
             target: None,
             repeats: 1,
             also: Vec::new(),
@@ -162,7 +169,7 @@ pub fn build(loaded: &Loaded, seen: Option<usize>) -> Result<NowView, String> {
     let needs_you = group(needs_you);
 
     let proof = census(loaded)?;
-    let (headline, subhead) = headline(&needs_you, insights, &proof);
+    let (headline, subhead) = headline(&needs_you, insights, &proof, now);
     let since = since_last_session(loaded, now)?;
     let attention_cards = attention_cards(loaded, ranked);
 
@@ -174,7 +181,7 @@ pub fn build(loaded: &Loaded, seen: Option<usize>) -> Result<NowView, String> {
         since_you_looked,
         headline,
         subhead,
-        quality: quality_lines(insights),
+        quality: quality_lines(insights, now),
         needs_you,
         since,
         attention: attention_cards,
@@ -185,7 +192,7 @@ pub fn build(loaded: &Loaded, seen: Option<usize>) -> Result<NowView, String> {
 /// The quality strip: every measure judged here — direction, deadband,
 /// tone — so the client only draws. Worst first: a worsening line
 /// outranks a holding one, which outranks an improving one.
-fn quality_lines(insights: &twin::Insights) -> Vec<QualityLine> {
+fn quality_lines(insights: &twin::Insights, now: u64) -> Vec<QualityLine> {
     // Under this many percentage points a ratio's move reads flat — an
     // arrow that twitches on every run would cry wolf.
     const DEADBAND_PP: f64 = 2.0;
@@ -198,12 +205,16 @@ fn quality_lines(insights: &twin::Insights) -> Vec<QualityLine> {
     let mut lines: Vec<(usize, QualityLine)> = Vec::new();
 
     // Tests: percent passing, counting only readings that had a run.
+    // The run's age rides along — a level without its moment can read
+    // calm long after anyone last ran anything.
     let tests: Vec<(usize, usize)> = readings.iter().filter_map(|p| p.tests).collect();
     if let Some(&(passed, total)) = tests.last() {
         let points: Vec<f64> = tests.iter().map(|&(p, t)| ratio(p, t)).collect();
         let prev = (tests.len() >= 2).then(|| tests[tests.len() - 2]);
         let trend = ratio_trend(&points, DEADBAND_PP);
-        let (current, sentence) = say::quality_tests(passed, total, prev, trend);
+        let ran = insights.last_run.map(|(at, ..)| say::ago(now, at));
+        let (current, sentence) =
+            say::quality_tests(passed, total, prev, trend, ran.as_deref());
         lines.push((0, line("tests", "Tests passing", points, current, trend, tone(trend, true), sentence)));
     }
 
@@ -230,12 +241,16 @@ fn quality_lines(insights: &twin::Insights) -> Vec<QualityLine> {
     let (current, sentence) = say::quality_docs(n, prev, trend);
     lines.push((2, line("docs", "Documents in doubt", docs, current, trend, tone(trend, false), sentence)));
 
+    // "Feature claims", not "claims": the census above this strip counts
+    // every claim the graph makes, this line counts only what features
+    // declare and nothing corroborates — one word for both bred a
+    // contradiction three centimetres apart.
     let claims: Vec<f64> = readings.iter().map(|p| p.uncorroborated as f64).collect();
     let n = readings.last().map(|p| p.uncorroborated).unwrap_or(0);
     let prev = (readings.len() >= 2).then(|| readings[readings.len() - 2].uncorroborated);
     let trend = count_trend(&claims);
     let (current, sentence) = say::quality_claims(n, prev, trend);
-    lines.push((3, line("claims", "Claims without proof", claims, current, trend, tone(trend, false), sentence)));
+    lines.push((3, line("claims", "Feature claims", claims, current, trend, tone(trend, false), sentence)));
 
     // Regressions first, then holding, then improving; canonical order
     // within a rank so the strip never reshuffles without cause.
@@ -386,10 +401,11 @@ fn census(loaded: &Loaded) -> Result<ProofCensus, String> {
     })
 }
 
-fn headline(
+pub(crate) fn headline(
     concerns: &[Concern],
     insights: &twin::Insights,
     proof: &ProofCensus,
+    now: u64,
 ) -> (String, String) {
     let acts = concerns.iter().filter(|c| c.severity == "act").count();
     let watches = concerns.iter().filter(|c| c.severity == "watch").count();
@@ -412,21 +428,27 @@ fn headline(
                 .to_string(),
         );
     }
+    // A test count without its age can stay calm long after the tests
+    // stopped being run — the run's moment is part of the truth.
     let passing = insights
         .last_run
-        .map(|(_, total, passed, _)| format!("{passed} of {total} tests passing"))
+        .map(|(at, total, passed, _)| {
+            format!("{passed} of {total} tests passed {}", say::ago(now, at))
+        })
         .unwrap_or_else(|| "no test run imported yet".to_string());
 
-    // "Everything checks out" while five things sit under Needs you is the
-    // kind of cheerful lie this product exists to refuse.
+    // Only notes remain: the calm sentence has earned the headline, and
+    // the notes are the footnote — but still counted, because "everything
+    // checks out" while things sit under Needs you would be a cheerful
+    // lie, and an uncounted footnote is how notes rot unread.
     let notes: usize = concerns.iter().map(|c| c.repeats).sum();
     if notes > 0 {
         return (
+            "Nothing is broken.".to_string(),
             format!(
-                "{} worth knowing about.",
-                say::count(notes as u64, "thing is", "things are")
+                "{passing}, no contradictions — {} below for when you have a minute.",
+                say::count(notes as u64, "note", "notes")
             ),
-            format!("Nothing is broken: {passing}, and no contradictions."),
         );
     }
     if proof.proven < proof.total {
@@ -514,8 +536,11 @@ fn attention_cards(loaded: &Loaded, ranked: &[attention::Attention]) -> Vec<Atte
                 .iter()
                 .filter_map(|raw| say::attention_reason(raw))
                 .collect();
-            // A card with nothing to say is noise.
-            if reasons.is_empty() {
+            // A card with nothing to say is noise — and a card whose
+            // only claim is "widely imported" is not pressure, it is
+            // centrality. Pressure needs change or a missing test; the
+            // quiet hubs keep their rank in `brain attend` and the Map.
+            if reasons.is_empty() || reasons.iter().all(|r| r.contains("import this")) {
                 return None;
             }
             let sid = StableId::derive(&["file", &item.label]);

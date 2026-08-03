@@ -93,7 +93,7 @@ pub fn working_tree_unavailable() -> String {
 /// implementation vocabulary; these are what a person would say.
 pub fn kind_noun(kind: &str) -> &'static str {
     match kind {
-        "source_file" => "file",
+        "source_file" | "file" => "file",
         "symbol" => "function or type",
         "module" => "external dependency",
         "repo" => "repository",
@@ -255,7 +255,9 @@ pub fn attention_reason(raw: &str) -> Option<String> {
         return Some(format!("{subject} — edits here ripple widest"));
     }
     if raw == "untested hub" {
-        return Some("no test covers it".to_string());
+        // "Covers" is file-granular: a widely-exercised file with no
+        // test naming it still earns this line — say exactly that much.
+        return Some("no test names it directly".to_string());
     }
     if let Some(rest) = raw.strip_prefix("churn ") {
         // "churn 4 (1 recent)"
@@ -833,24 +835,33 @@ pub fn past_omissions() -> &'static str {
      those are only measurable now, so they are left out rather than guessed."
 }
 
-/// The tests line of the quality strip: (current, full sentence).
+/// The tests line of the quality strip: (current, full sentence). The
+/// run's age is part of the truth — a level without its moment reads
+/// calm long after anyone last ran anything.
 pub fn quality_tests(
     passed: usize,
     total: usize,
     prev: Option<(usize, usize)>,
     trend: &str,
+    ran: Option<&str>,
 ) -> (String, String) {
     let noun = if total == 1 { "test" } else { "tests" };
-    let current = format!("{passed} of {total} {noun} passing");
-    let sentence = match (trend, prev) {
+    let mut current = format!("{passed} of {total} {noun} passing");
+    if let Some(when) = ran {
+        current.push_str(&format!(" · ran {when}"));
+    }
+    let mut sentence = match (trend, prev) {
         ("falling", Some((pp, pt))) => {
             format!("Tests are slipping: {passed} of {total} passing, down from {pp} of {pt}.")
         }
         ("rising", Some((pp, _))) => {
             format!("Tests recovered: {passed} of {total} passing, up from {pp}.")
         }
-        _ => format!("{current}, holding steady."),
+        _ => format!("{passed} of {total} {noun} passing, holding steady."),
     };
+    if let Some(when) = ran {
+        sentence.push_str(&format!(" The run was {when}."));
+    }
     (current, sentence)
 }
 
@@ -910,35 +921,40 @@ pub fn quality_docs(n: usize, prev: Option<usize>, trend: &str) -> (String, Stri
     (current, sentence)
 }
 
-/// The unbacked-claims line of the quality strip: (current, sentence).
+/// The feature-claims line of the quality strip: (current, sentence).
+/// Deliberately "feature claims", never bare "claims" — the census
+/// counts every claim the graph makes, this line only what features
+/// declare and nothing observed corroborates, and one word for both
+/// once put a contradiction three centimetres from itself.
 pub fn quality_claims(n: usize, prev: Option<usize>, trend: &str) -> (String, String) {
     let current = if n == 0 {
-        "every claim has something to show".to_string()
+        "every feature claim is backed".to_string()
+    } else if n == 1 {
+        "1 feature claim with nothing behind it".to_string()
     } else {
-        format!(
-            "{} with nothing to show",
-            count(n as u64, "claim", "claims")
-        )
+        format!("{n} feature claims with nothing behind them")
     };
     let sentence = match (trend, prev) {
         ("rising", Some(p)) if n - p == 1 => {
-            format!("One more claim has nothing to show for itself: {n} now.")
+            format!("One more feature claim has nothing observed behind it: {n} now.")
         }
-        ("rising", Some(p)) => {
-            format!("{} more claims have nothing to show for themselves: {n} now.", n - p)
-        }
+        ("rising", Some(p)) => format!(
+            "{} more feature claims have nothing observed behind them: {n} now.",
+            n - p
+        ),
         ("falling", Some(_)) if n == 0 => {
-            "The last claims found their proof: every claim has something to show now.".to_string()
+            "The last feature claims found their backing: every one is corroborated now."
+                .to_string()
         }
         ("falling", Some(p)) if p - n == 1 => {
-            format!("One claim found its proof: {n} still have nothing to show.")
+            format!("One feature claim found its backing: {n} still bare.")
         }
         ("falling", Some(p)) => {
-            format!("{} claims found their proof: {n} still have nothing to show.", p - n)
+            format!("{} feature claims found their backing: {n} still bare.", p - n)
         }
-        _ if n == 0 => "Every claim has something to show.".to_string(),
-        _ if n == 1 => "1 claim still has nothing to show for itself.".to_string(),
-        _ => format!("{n} claims still have nothing to show for themselves."),
+        _ if n == 0 => "Every feature claim has something observed behind it.".to_string(),
+        _ if n == 1 => "1 feature claim still has nothing observed behind it.".to_string(),
+        _ => format!("{n} feature claims still have nothing observed behind them."),
     };
     (current, sentence)
 }
@@ -964,7 +980,10 @@ mod tests {
             attention_reason("hub 29").unwrap(),
             "29 files import this — edits here ripple widest"
         );
-        assert_eq!(attention_reason("untested hub").unwrap(), "no test covers it");
+        assert_eq!(
+            attention_reason("untested hub").unwrap(),
+            "no test names it directly"
+        );
         // Nothing recent is nothing to say.
         assert_eq!(attention_reason("churn 2 (0 recent)"), None);
         assert_eq!(

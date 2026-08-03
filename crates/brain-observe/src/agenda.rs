@@ -64,6 +64,16 @@ pub fn queue(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<NextIt
                 why: format!("governed change is {status} — reconcile before retrying"),
                 via: format!("brain change show {prefix} {slug}"),
             }),
+            // Applied is unfinished: the file was written but the tests
+            // have not vouched for it. Skipping it here once let the
+            // queue read empty while Work counted four changes waiting.
+            "applied" => items.push(NextItem {
+                score: 65,
+                kind: "change".into(),
+                label: slug.clone(),
+                why: "applied, but the tests have not vouched for it".into(),
+                via: format!("brain change verify {prefix} {slug}"),
+            }),
             "proposed" => items.push(NextItem {
                 score: 55,
                 kind: "change".into(),
@@ -186,6 +196,48 @@ mod tests {
     use crate::twin::refresh;
     use brain_index::replay;
     use std::fs;
+
+    /// An applied change is unfinished until the tests vouch for it —
+    /// skipping it once let the queue read empty while the work surface
+    /// counted four changes waiting.
+    #[test]
+    fn an_applied_change_stays_in_the_queue_until_verified() {
+        let src = tempfile::tempdir().unwrap();
+        fs::create_dir_all(src.path().join("src")).unwrap();
+        fs::write(src.path().join("src/main.rs"), "pub fn main() {}\n").unwrap();
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = brain_store::Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        let proposal = crate::govern::propose(
+            &store,
+            src.path(),
+            "twin/app",
+            "src/main.rs",
+            "pub fn main() { /* v2 */ }\n",
+            "tighten",
+        )
+        .unwrap();
+        crate::govern::apply(
+            &store,
+            src.path(),
+            "twin/app",
+            &proposal.slug,
+            &["fs".to_string()],
+        )
+        .unwrap();
+
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+        let items = queue(&store, &index, "twin/app").unwrap();
+        let row = items
+            .iter()
+            .find(|i| i.kind == "change")
+            .expect("the applied change is queued: {items:?}");
+        assert!(row.why.contains("vouched"), "{}", row.why);
+        assert!(row.via.contains("change verify"), "{}", row.via);
+        assert_eq!(row.score, 65);
+    }
 
     #[test]
     fn queue_ranks_rot_above_open_plans() {

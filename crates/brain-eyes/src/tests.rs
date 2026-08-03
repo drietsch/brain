@@ -219,6 +219,62 @@ fn now_speaks_in_sentences_and_names_the_fix() {
     }
 }
 
+/// When only notes remain, the calm sentence takes the headline and the
+/// notes become a counted footnote — but the count is the sum of what
+/// the collapsed cards hold, so "5 notes" never floats over two rows
+/// with no arithmetic a reader can check. The test run's age is part of
+/// the calm sentence: a level without its moment can stay reassuring
+/// long after anyone last ran anything.
+#[test]
+fn a_calm_day_leads_with_the_calm_and_counts_its_notes() {
+    let note = |repeats: usize| crate::dto::Concern {
+        severity: "note".to_string(),
+        title: "a note".to_string(),
+        reason: "background".to_string(),
+        fix_command: None,
+        target: None,
+        repeats,
+        also: Vec::new(),
+    };
+    let mut insights = brain_observe::twin::Insights::default();
+    insights.last_run = Some((1_000, 10, 10, 0));
+    let proof = crate::dto::ProofCensus {
+        proven: 3,
+        total: 3,
+        sentence: String::new(),
+        groups: Vec::new(),
+    };
+    let (headline, subhead) =
+        crate::query::now::headline(&[note(4), note(1)], &insights, &proof, 61_000);
+    assert_eq!(headline, "Nothing is broken.");
+    assert!(subhead.contains("10 of 10 tests passed"), "{subhead}");
+    assert!(subhead.contains("1 minute ago"), "the run is dated: {subhead}");
+    assert!(subhead.contains("5 notes"), "collapsed cards still count: {subhead}");
+}
+
+/// The aging-records card unfolds to the records themselves and names
+/// the command that lists them — a count you cannot unfold is a count
+/// you cannot check.
+#[test]
+fn the_records_note_unfolds_and_names_its_command() {
+    let f = fixture();
+    let now = f.state.read(|loaded| crate::query::now::build(loaded, None)).unwrap();
+    let records = now
+        .needs_you
+        .iter()
+        .find(|c| c.title.contains("record was written before later changes"))
+        .expect("the fixture's aged decision surfaces");
+    assert!(
+        records.reason.contains("(") && records.reason.contains(")"),
+        "the shown row names a record and its kind: {}",
+        records.reason
+    );
+    assert_eq!(
+        records.fix_command.as_deref(),
+        Some("brain twin stale twin/app")
+    );
+}
+
 /// The quality strip is judged server-side — sentences, direction,
 /// worst-first order — and a regression is louder than an improvement.
 #[test]
@@ -248,6 +304,7 @@ fn now_carries_quality_lines() {
         .find(|l| l.id == "tests")
         .expect("the run is a reading");
     assert!(tests.current.contains("1 of 2"), "{}", tests.current);
+    assert!(tests.current.contains("ran "), "the run is dated: {}", tests.current);
 
     // A run that flips the remaining pass to fail: the tests line turns
     // bad and moves to the front — the regression is the loudest thing.

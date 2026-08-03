@@ -50,6 +50,13 @@ pub fn build(loaded: &Loaded) -> Result<NextView, String> {
                 "it must be reconciled before anything retries it".to_string(),
                 Some(item.via.clone()),
             ),
+            "change" if item.why.contains("vouched") => push(
+                item.score,
+                "watch",
+                format!("the change {} is not finished", item.label),
+                "the file was written, but the tests have not vouched for it".to_string(),
+                Some(item.via.clone()),
+            ),
             "change" => push(
                 item.score,
                 "watch",
