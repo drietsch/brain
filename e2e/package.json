@@ -1,0 +1,11 @@
+{
+  "name": "eyes-e2e",
+  "private": true,
+  "description": "Browser evidence for the eyes cockpit — the report imports into the graph via `brain testrun import`.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

@@ -1390,6 +1390,10 @@ fn the_server_answers_over_a_real_socket_and_refuses_the_rest() {
     assert!(snapshot.contains("X-Content-Type-Options: nosniff"));
     assert!(snapshot.contains("Content-Security-Policy"));
 
+    // The favicon answers — a 404 here dirtied every browser console.
+    let favicon = request("GET /favicon.ico HTTP/1.1");
+    assert!(favicon.starts_with("HTTP/1.1 200"), "{favicon}");
+
     // Unknown routes and write attempts get a sentence, not a stack trace.
     let missing = request("GET /api/nope HTTP/1.1");
     assert!(missing.starts_with("HTTP/1.1 404"), "{missing}");

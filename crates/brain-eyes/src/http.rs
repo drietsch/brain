@@ -21,6 +21,9 @@ const LIST_JS: &str = include_str!("../assets/list.js");
 /// The shape vocabulary, inlined into the page so nothing is fetched.
 pub const ICONS_SVG: &str = include_str!("../assets/icons.svg");
 const STYLES_CSS: &str = include_str!("../assets/styles.css");
+/// Browsers ask for a favicon on every visit; a 404 here put an error in
+/// the console of every session — found by the first e2e run.
+const FAVICON_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="#2e7d5b" stroke-width="1.6"/><circle cx="8" cy="8" r="2.4" fill="#2e7d5b"/></svg>"##;
 const WORKERS: usize = 4;
 
 pub fn serve(config: Config) -> Result<(), String> {
@@ -100,6 +103,7 @@ fn handle(request: Request, state: &Arc<AppState>) {
         "/assets/mri.js" => text(request, 200, MRI_JS, "text/javascript; charset=utf-8"),
         "/assets/list.js" => text(request, 200, LIST_JS, "text/javascript; charset=utf-8"),
         "/assets/icons.svg" => text(request, 200, ICONS_SVG, "image/svg+xml; charset=utf-8"),
+        "/favicon.ico" => text(request, 200, FAVICON_SVG, "image/svg+xml; charset=utf-8"),
         "/assets/styles.css" => text(request, 200, STYLES_CSS, "text/css; charset=utf-8"),
 
         "/api/snapshot" => json_result(request, state.snapshot()),

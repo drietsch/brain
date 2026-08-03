@@ -210,6 +210,15 @@ A past moment costs no second store and no replay: as-of reads are
 filters over the same warm index, so Compare recomputes per request and
 caches nothing.
 
+The client answers to a browser, not only to the compiler: the suite in
+`e2e/eyes.spec.ts` drives the running cockpit through Chrome — every
+surface, the search, the plain register, Compare, the approvals desk —
+and fails any test whose console was not clean (its first run caught
+the missing favicon 404 that had dirtied every session). Run it with
+`cd e2e && npm install && npx playwright test`; the report imports with
+`brain testrun import e2e/test-results/eyes-report.json`, so the
+browser evidence lands in the graph beside every other protocol.
+
 Eyes binds to `127.0.0.1`, answers only GET, serves file bytes only
 through a graph-recorded path that resolves inside the workspace, sends
 everything that is not media as plain text, and supports byte ranges so

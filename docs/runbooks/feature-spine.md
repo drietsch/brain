@@ -244,6 +244,7 @@ brain feature link twin/self eyes-core documented_in eyes --kind doc
 
 brain feature link twin/self eyes-http implemented_by crates/brain-eyes/src/http.rs
 brain feature link twin/self eyes-http tested_by crates/brain-eyes/src/tests.rs
+brain feature link twin/self eyes-http tested_by e2e/eyes.spec.ts
 brain feature link twin/self eyes-http decided_by adr-023-eyes-read-only-human-projection --kind decision
 brain feature link twin/self eyes-http documented_in eyes --kind doc
 
@@ -268,6 +269,7 @@ brain feature link twin/self eyes-ux implemented_by crates/brain-eyes/src/query/
 brain feature link twin/self eyes-ux implemented_by crates/brain-eyes/src/query/compare.rs
 brain feature link twin/self eyes-ux tested_by crates/brain-eyes/src/tests.rs
 brain feature link twin/self eyes-ux tested_by crates/brain-eyes/src/say.rs
+brain feature link twin/self eyes-ux tested_by e2e/eyes.spec.ts
 brain feature link twin/self eyes-ux decided_by adr-024-eyes-shows-judgments-and-content --kind decision
 brain feature link twin/self eyes-ux decided_by adr-026-the-anatomy-is-drawn-in-full --kind decision
 brain feature link twin/self eyes-ux decided_by adr-029-type-encodes-epistemology --kind decision
