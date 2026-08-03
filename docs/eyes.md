@@ -48,6 +48,7 @@ a path (ADR-030).
 | **Artifacts** | Show me everything the brain holds, so I can read it |
 | **Evidence** | What is claimed, and what stands behind it? |
 | **History** | What happened? |
+| **Compare** | What was true then, and what changed since? |
 | **Map** | What is this made of, and where is the risk? |
 | **MRI** | What shape is this system, and what is moving? |
 | **Search** (⌘K) | Take me to X |
@@ -58,6 +59,14 @@ whole system, and it answers the product's own question in one line —
 *how much of what this thing asserts can it actually show?* Below it: what
 needs a person (identical concerns collapsed and counted), then what moved
 since your last `brain sleep`, then where the pressure is.
+
+After the census comes **Direction of travel**: four small charts — tests
+passing, features ready, documents in doubt, claims without proof — each
+ending in an arrow. The derivative is the alarm: a falling line leads the
+strip and speaks in fault ink, a rising one is a footnote, and moves too
+small to mean anything read flat. Readings accrue in the graph only when
+a refresh or a sleep found the numbers moved, so the series is bounded by
+change, not by time.
 
 **Work** shows the coding-agent sessions that ran in this workspace: what
 each was asked to do, which model, how long, which files it edited, and
@@ -97,6 +106,17 @@ with what template fitness learned about each contract.
 
 **Evidence** is claim on the left, proof on the right, unsupported first.
 A claim is never shown stronger than what backs it.
+
+**Compare** puts two moments side by side. The picker is keyed by cause,
+not by clock: the commits the twin saw as HEAD, and named baselines
+(`brain baseline add <prefix> <name>` records one; the surface renders
+the command for the moment you are looking at). A past view opens with a
+loud banner restating its own moment, and closes with what a past moment
+honestly cannot show — the working tree and what needs attention are
+only measurable now, so they are left out rather than guessed. The diff
+is feature-level, regressions first, a readiness flip always above a
+slipped check count; tests, feature readiness, and file counts get
+then-and-now rows. The past is judged by today's definition of done.
 
 **MRI** draws every entity, laid out once per graph version on the server
 so the anatomy never rearranges while you read it. Height is dependency
@@ -154,6 +174,10 @@ The personal layer never moves state to the server: the browser keeps the
 viewer's last-visit cursor and week-scoped acknowledgements (restorable),
 and sends the cursor back as a query parameter so the "since you last
 looked" sentence is still composed in the one voice, server-side.
+
+A past moment costs no second store and no replay: as-of reads are
+filters over the same warm index, so Compare recomputes per request and
+caches nothing.
 
 Eyes binds to `127.0.0.1`, answers only GET, serves file bytes only
 through a graph-recorded path that resolves inside the workspace, sends

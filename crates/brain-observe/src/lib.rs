@@ -28,6 +28,7 @@ pub mod assets;
 pub mod assoc;
 pub mod attention;
 pub mod backfill;
+pub mod baseline;
 pub mod briefing;
 pub mod coherence;
 pub mod docs;

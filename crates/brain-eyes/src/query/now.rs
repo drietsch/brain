@@ -174,11 +174,148 @@ pub fn build(loaded: &Loaded, seen: Option<usize>) -> Result<NowView, String> {
         since_you_looked,
         headline,
         subhead,
+        quality: quality_lines(insights),
         needs_you,
         since,
         attention: attention_cards,
         proof,
     })
+}
+
+/// The quality strip: every measure judged here — direction, deadband,
+/// tone — so the client only draws. Worst first: a worsening line
+/// outranks a holding one, which outranks an improving one.
+fn quality_lines(insights: &twin::Insights) -> Vec<QualityLine> {
+    // Under this many percentage points a ratio's move reads flat — an
+    // arrow that twitches on every run would cry wolf.
+    const DEADBAND_PP: f64 = 2.0;
+
+    let readings = &insights.quality;
+    if readings.is_empty() {
+        return Vec::new();
+    }
+
+    let mut lines: Vec<(usize, QualityLine)> = Vec::new();
+
+    // Tests: percent passing, counting only readings that had a run.
+    let tests: Vec<(usize, usize)> = readings.iter().filter_map(|p| p.tests).collect();
+    if let Some(&(passed, total)) = tests.last() {
+        let points: Vec<f64> = tests.iter().map(|&(p, t)| ratio(p, t)).collect();
+        let prev = (tests.len() >= 2).then(|| tests[tests.len() - 2]);
+        let trend = ratio_trend(&points, DEADBAND_PP);
+        let (current, sentence) = say::quality_tests(passed, total, prev, trend);
+        lines.push((0, line("tests", "Tests passing", points, current, trend, tone(trend, true), sentence)));
+    }
+
+    // Features: percent ready, counting only readings that had features.
+    let feats: Vec<(usize, usize)> = readings
+        .iter()
+        .filter(|p| p.features_total > 0)
+        .map(|p| (p.features_done, p.features_total))
+        .collect();
+    if let Some(&(done, total)) = feats.last() {
+        let points: Vec<f64> = feats.iter().map(|&(d, t)| ratio(d, t)).collect();
+        let prev = (feats.len() >= 2).then(|| feats[feats.len() - 2]);
+        let trend = ratio_trend(&points, DEADBAND_PP);
+        let (current, sentence) = say::quality_features(done, total, prev, trend);
+        lines.push((1, line("features", "Features ready", points, current, trend, tone(trend, true), sentence)));
+    }
+
+    // Documents in doubt and claims without proof: plain counts, where
+    // any step is a real move and zero is said, not hidden.
+    let docs: Vec<f64> = readings.iter().map(|p| p.stale_warnings as f64).collect();
+    let n = readings.last().map(|p| p.stale_warnings).unwrap_or(0);
+    let prev = (readings.len() >= 2).then(|| readings[readings.len() - 2].stale_warnings);
+    let trend = count_trend(&docs);
+    let (current, sentence) = say::quality_docs(n, prev, trend);
+    lines.push((2, line("docs", "Documents in doubt", docs, current, trend, tone(trend, false), sentence)));
+
+    let claims: Vec<f64> = readings.iter().map(|p| p.uncorroborated as f64).collect();
+    let n = readings.last().map(|p| p.uncorroborated).unwrap_or(0);
+    let prev = (readings.len() >= 2).then(|| readings[readings.len() - 2].uncorroborated);
+    let trend = count_trend(&claims);
+    let (current, sentence) = say::quality_claims(n, prev, trend);
+    lines.push((3, line("claims", "Claims without proof", claims, current, trend, tone(trend, false), sentence)));
+
+    // Regressions first, then holding, then improving; canonical order
+    // within a rank so the strip never reshuffles without cause.
+    lines.sort_by_key(|(idx, l)| {
+        let rank = match l.tone.as_str() {
+            "bad" => 0,
+            "quiet" => 1,
+            _ => 2,
+        };
+        (rank, *idx)
+    });
+    lines.into_iter().map(|(_, l)| l).collect()
+}
+
+fn line(
+    id: &str,
+    label: &str,
+    points: Vec<f64>,
+    current: String,
+    trend: &str,
+    tone: &str,
+    sentence: String,
+) -> QualityLine {
+    QualityLine {
+        id: id.to_string(),
+        label: label.to_string(),
+        points,
+        current,
+        trend: trend.to_string(),
+        tone: tone.to_string(),
+        sentence,
+    }
+}
+
+fn ratio(part: usize, whole: usize) -> f64 {
+    if whole == 0 {
+        0.0
+    } else {
+        part as f64 * 100.0 / whole as f64
+    }
+}
+
+/// Direction of a ratio line, with the deadband applied.
+pub(crate) fn ratio_trend(points: &[f64], deadband: f64) -> &'static str {
+    if points.len() < 2 {
+        return "flat";
+    }
+    let step = points[points.len() - 1] - points[points.len() - 2];
+    if step.abs() < deadband {
+        "flat"
+    } else if step > 0.0 {
+        "rising"
+    } else {
+        "falling"
+    }
+}
+
+/// Direction of a count line: any step is a real move.
+pub(crate) fn count_trend(points: &[f64]) -> &'static str {
+    if points.len() < 2 {
+        return "flat";
+    }
+    let step = points[points.len() - 1] - points[points.len() - 2];
+    if step > 0.0 {
+        "rising"
+    } else if step < 0.0 {
+        "falling"
+    } else {
+        "flat"
+    }
+}
+
+/// Judge a direction: for measures where higher is better, a falling
+/// line is the alarm; for debts, a rising one.
+fn tone(trend: &str, higher_is_better: bool) -> &'static str {
+    match (trend, higher_is_better) {
+        ("flat", _) => "quiet",
+        ("rising", true) | ("falling", false) => "good",
+        _ => "bad",
+    }
 }
 
 /// Four identical concerns are one concern that happened four times.

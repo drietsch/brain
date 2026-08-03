@@ -78,6 +78,12 @@ objects, memoising the put feed and packing the bytes took a commit from
 adopted. The seam stays open; the question is worth re-asking when the
 graph no longer fits in memory, which at 2.6 MB is a long way off.
 
+The quality series added to every refresh in 2026-07 (tests, features,
+document drift, uncorroborated claims — the last needs a spine build)
+was measured against that budget before landing: ~10 ms on a warm index,
+refresh 0.42 s → 0.43 s, so the spine runs on every refresh rather than
+behind a change-gate.
+
 ## Authority model
 
 - Possibility is never permission: the existence of a foreign symbol does not

@@ -138,12 +138,35 @@ pub struct ProofCensus {
     pub groups: Vec<ProofGroup>,
 }
 
+/// One quality measure over time, already judged — the client only
+/// draws. Points are oldest first; the trend compares the last two
+/// readings with a deadband so small moves read flat. A worsening line
+/// is the alarm; an improving one is the footnote.
+#[derive(Debug, Clone, Serialize)]
+pub struct QualityLine {
+    pub id: String,
+    pub label: String,
+    /// Percent for ratios (tests, features), plain counts otherwise.
+    pub points: Vec<f64>,
+    pub current: String,
+    /// "rising" | "falling" | "flat" — the direction of the line itself.
+    pub trend: String,
+    /// "bad" when the quality worsened, "good" when it improved,
+    /// "quiet" when it held.
+    pub tone: String,
+    /// The full spoken line; doubles as the accessible description.
+    pub sentence: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct NowView {
     pub snapshot: Snapshot,
     /// The worst true thing, in one sentence.
     pub headline: String,
     pub subhead: String,
+    /// Where the numbers are heading, worst first. Empty until the
+    /// graph has readings.
+    pub quality: Vec<QualityLine>,
     pub needs_you: Vec<Concern>,
     /// Personal: what the graph recorded since this viewer's last visit.
     /// The viewer's marker lives in their browser; the sentence is still
@@ -153,6 +176,74 @@ pub struct NowView {
     pub attention: Vec<AttentionCard>,
     /// The state of every claim in the graph, at a glance.
     pub proof: ProofCensus,
+}
+
+// ---------------------------------------------------------------------------
+// Compare: two moments, and what changed between them
+// ---------------------------------------------------------------------------
+
+/// A pickable moment: a commit the twin saw as HEAD, or a named
+/// baseline. Time travel is keyed by cause — "when this was current" —
+/// never by a bare clock.
+#[derive(Debug, Clone, Serialize)]
+pub struct MomentRef {
+    /// What to pass as ?from= / ?to=.
+    pub value: String,
+    /// "commit" | "baseline" | "live".
+    pub kind: String,
+    pub label: String,
+    pub at_ms: u64,
+    pub when: String,
+}
+
+/// The moments a person can ask about, newest first.
+#[derive(Debug, Clone, Serialize)]
+pub struct MomentsView {
+    pub snapshot: Snapshot,
+    pub headline: String,
+    pub moments: Vec<MomentRef>,
+}
+
+/// One headline number on both sides of the comparison.
+#[derive(Debug, Clone, Serialize)]
+pub struct MetricDelta {
+    pub label: String,
+    pub then_value: String,
+    pub now_value: String,
+    pub sentence: String,
+    /// "bad" | "good" | "quiet".
+    pub tone: String,
+}
+
+/// One feature that moved between the two moments.
+#[derive(Debug, Clone, Serialize)]
+pub struct FeatureDelta {
+    pub slug: String,
+    pub title: String,
+    pub sentence: String,
+    /// "bad" | "good" | "quiet".
+    pub tone: String,
+}
+
+/// What was true then, what is true now, and what moved — regressions
+/// before improvements, always.
+#[derive(Debug, Clone, Serialize)]
+pub struct CompareView {
+    pub snapshot: Snapshot,
+    pub then_moment: MomentRef,
+    pub vs_moment: MomentRef,
+    /// Present when the view shows the past: the loud restatement.
+    pub banner: Option<String>,
+    pub headline: String,
+    pub metrics: Vec<MetricDelta>,
+    pub regressions: Vec<FeatureDelta>,
+    pub improvements: Vec<FeatureDelta>,
+    pub appeared: Vec<FeatureDelta>,
+    pub removed: Vec<FeatureDelta>,
+    /// What a past moment honestly cannot show.
+    pub omissions: String,
+    /// The governed command that names the "from" moment for later.
+    pub baseline_command: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

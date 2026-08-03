@@ -77,6 +77,7 @@ fn main() -> ExitCode {
         Some("tidy") => cmd_tidy(&args[1..]),
         Some("deliverable") => cmd_deliverable(&args[1..]),
         Some("feature") => cmd_feature(&args[1..]),
+        Some("baseline") => cmd_baseline(&args[1..]),
         Some("done") => cmd_done(&args[1..]),
         Some("testrun") => cmd_testrun(&args[1..]),
         Some("sessions") => cmd_sessions(&args[1..]),
@@ -737,7 +738,12 @@ fn cmd_twin(args: &[String]) -> Result<(), String> {
         Some("at") => {
             let (prefix, when) = match (args.get(1), args.get(2)) {
                 (Some(p), Some(w)) => (p, w),
-                _ => return Err("usage: brain twin at <prefix> <ms|30m|2h|1d|git-commit>".into()),
+                _ => {
+                    return Err(
+                        "usage: brain twin at <prefix> <ms|30m|2h|1d|git-commit|baseline-name>"
+                            .into(),
+                    )
+                }
             };
             let store = open_store()?;
             let index = build_index(&store)?;
@@ -2962,41 +2968,53 @@ fn cmd_bench(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// Resolve a point in time: epoch ms, a relative `30m`/`2h`/`1d` ago, or
-/// a git commit hash looked up in the repo entity's observation timeline.
+/// Resolve a point in time — the shared resolver in the observe layer:
+/// epoch ms, relative `30m`/`2h`/`1d`, a baseline name, or a commit.
 fn resolve_when(store: &Store, index: &MemIndex, prefix: &str, when: &str) -> Result<u64, String> {
-    if when.chars().all(|c| c.is_ascii_digit()) && when.len() >= 12 {
-        return when.parse().map_err(|e| format!("bad timestamp: {e}"));
-    }
-    if let Some(unit) = when.chars().last().filter(|c| "smhd".contains(*c)) {
-        if let Ok(n) = when[..when.len() - 1].parse::<u64>() {
-            let secs = match unit {
-                's' => n,
-                'm' => n * 60,
-                'h' => n * 3600,
-                _ => n * 86_400,
+    brain_observe::twin::resolve_when(store, index, prefix, when)
+}
+
+/// `brain baseline ...` — name a moment so it can be asked about later.
+fn cmd_baseline(args: &[String]) -> Result<(), String> {
+    let usage = "usage: brain baseline add <prefix> <name> [--at <ms|30m|2h|1d|commit>] | list <prefix>";
+    match args.first().map(String::as_str) {
+        Some("add") => {
+            let (prefix, name) = match (args.get(1), args.get(2)) {
+                (Some(p), Some(n)) if !n.starts_with("--") => (p, n),
+                _ => return Err(usage.to_string()),
             };
-            return Ok(now_ms().saturating_sub(secs * 1000));
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let at = args
+                .iter()
+                .position(|a| a == "--at")
+                .and_then(|i| args.get(i + 1));
+            let at_ms = match at {
+                Some(when) => resolve_when(&store, &index, prefix, when)?,
+                None => now_ms(),
+            };
+            brain_observe::baseline::add(&store, &index, prefix, name, at_ms)?;
+            println!(
+                "baseline '{name}' names that moment — `brain twin at {prefix} {name}` reads it back"
+            );
+            Ok(())
         }
-    }
-    // A commit hash (prefix): when the twin observed that commit as HEAD.
-    let repo = brain_core::ids::StableId::derive(&["repo", prefix]);
-    for id in index.observations_of(&repo) {
-        if let Object::Observation {
-            property,
-            value,
-            observed_at_ms,
-            ..
-        } = store.get(&id).map_err(|e| e.to_string())?
-        {
-            if property == "git_commit" && value.starts_with(when) {
-                return Ok(observed_at_ms);
+        Some("list") => {
+            let prefix = args.get(1).ok_or(usage)?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let baselines = brain_observe::baseline::list(&store, &index, prefix)
+                .map_err(|e| e.to_string())?;
+            if baselines.is_empty() {
+                println!("no baselines yet — brain baseline add {prefix} <name> records one");
             }
+            for b in baselines {
+                println!("{}  {}", b.at_ms, b.name);
+            }
+            Ok(())
         }
+        _ => Err(usage.to_string()),
     }
-    Err(format!(
-        "cannot resolve '{when}' (epoch ms, 30m/2h/1d, or a twinned commit hash)"
-    ))
 }
 
 /// `brain change ...` — governed mode: the motor system. Changes to

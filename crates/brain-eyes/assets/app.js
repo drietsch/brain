@@ -264,6 +264,9 @@ views.now = async () => {
   }
   parts.push(census(data.proof));
 
+  const quality = qualityStrip(data.quality);
+  if (quality) parts.push(quality);
+
   const inbox = splitAcked(data.needs_you);
   if (inbox.shown.length || inbox.acked.length) {
     parts.push(h("h2", { class: "section", text: "Needs you" }));
@@ -340,6 +343,47 @@ function census(proof) {
         h("p", { class: "census-label" },
           h("span", { text: group.label }),
           h("span", { class: "census-count", text: `${group.proven}/${group.total}` }))))));
+}
+
+/* Direction of travel: the quality lines, already judged by the server
+   and ordered worst first. The stroke stays quiet; the arrow carries the
+   alarm — a falling line is loud, a rising one is a footnote. */
+function qualityStrip(lines) {
+  if (!lines || !lines.length) return null;
+  return h("section", { class: "quality" },
+    h("h2", { class: "section", text: "Direction of travel" }),
+    h("div", { class: "quality-lines" }, lines.map(qualityCell)));
+}
+
+function qualityCell(line) {
+  const W = 120, H = 28;
+  const pts = line.points;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("class", "quality-chart");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", line.sentence);
+  const min = Math.min(...pts);
+  const span = (Math.max(...pts) - min) || 1;
+  const x = (i) => (pts.length === 1 ? W / 2 : 4 + (i / (pts.length - 1)) * (W - 8));
+  const y = (v) => H - 5 - ((v - min) / span) * (H - 10);
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("class", "quality-path");
+  path.setAttribute("d", pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" "));
+  svg.append(path);
+  const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  dot.setAttribute("class", "quality-dot");
+  dot.setAttribute("cx", x(pts.length - 1).toFixed(1));
+  dot.setAttribute("cy", y(pts[pts.length - 1]).toFixed(1));
+  dot.setAttribute("r", "2");
+  svg.append(dot);
+  const arrow = { rising: "↗", falling: "↘", flat: "→" }[line.trend] ?? "→";
+  return h("div", { class: `quality-cell ${line.tone}`, title: line.sentence },
+    h("div", { class: "quality-head" },
+      h("span", { class: "quality-label", text: line.label }),
+      pts.length > 1 ? h("span", { class: "quality-arrow", text: arrow, "aria-hidden": "true" }) : null),
+    svg,
+    h("p", { class: "quality-now", text: line.current }));
 }
 
 /* The one orchestrated moment: the census resolves like an instrument
@@ -611,6 +655,72 @@ views.timeline = async () => {
               // What that batch of work was on.
               featureTag(episode.features, (f) => openThing(f.id))))))
       : h("p", { class: "empty", text: "Nothing recorded yet." }));
+};
+
+/* ---------------------------------------------------------------- compare */
+
+views.compare = async (params) => {
+  if (!params.from) {
+    const data = await api("/api/moments");
+    state.snapshot = data.snapshot;
+    paintChrome(data.snapshot);
+    stage.replaceChildren(
+      h("div", { class: "page-head" }, h("h1", { text: "Compare" })),
+      h("p", { class: "page-note", text: data.headline }),
+      data.moments.length
+        ? h("div", { class: "moments" }, data.moments.map((moment) =>
+            h("button", { class: "moment", onclick: () => go("compare", { from: moment.value }) },
+              h("span", { class: "moment-label", text: moment.label }),
+              h("span", { class: "moment-when", text: moment.when }))))
+        : null);
+    return;
+  }
+  const to = params.to || "live";
+  const data = await api(
+    `/api/compare?from=${encodeURIComponent(params.from)}&to=${encodeURIComponent(to)}`);
+  state.snapshot = data.snapshot;
+  paintChrome(data.snapshot);
+
+  const parts = [];
+  if (data.banner) {
+    parts.push(h("div", { class: "asof-banner" },
+      h("p", { text: data.banner }),
+      h("button", { class: "ghost", text: "Back to live", onclick: () => go("now") })));
+  }
+  parts.push(h("h1", { class: "hero", text: data.headline }));
+  parts.push(h("p", { class: "hero-sub",
+    text: `${data.then_moment.label}, ${data.then_moment.when} — against ${data.vs_moment.label}.` }));
+
+  parts.push(h("div", { class: "delta-strip" }, data.metrics.map((metric) =>
+    h("div", { class: `delta ${metric.tone}`, title: metric.sentence, "aria-label": metric.sentence },
+      h("span", { class: "delta-label", text: metric.label }),
+      h("span", { class: "delta-values" },
+        h("span", { text: metric.then_value }),
+        h("span", { class: "delta-arrow", "aria-hidden": "true", text: "→" }),
+        h("span", { text: metric.now_value }))))));
+
+  // Regressions physically first — the loudest thing leads.
+  const section = (label, rows) => {
+    if (!rows.length) return;
+    parts.push(h("h2", { class: "section", text: label }));
+    parts.push(h("div", { class: "diff-rows" }, rows.map((row) =>
+      h("div", { class: "diff-row" },
+        h("i", { class: `mark ${({ bad: "bad", good: "good" })[row.tone] ?? "quiet"}` }),
+        h("div", {},
+          h("h3", { text: row.title }),
+          h("p", { text: row.sentence }))))));
+  };
+  section("Regressions", data.regressions);
+  section("Improvements", data.improvements);
+  section("Appeared since", data.appeared);
+  section("No longer present", data.removed);
+
+  parts.push(h("p", { class: "omissions", text: data.omissions }));
+  if (data.baseline_command) {
+    parts.push(h("h2", { class: "section", text: "Name this moment" }));
+    parts.push(commandLine(data.baseline_command));
+  }
+  stage.replaceChildren(h("div", { class: "page" }, ...parts));
 };
 
 /* ------------------------------------------------------------------ thing */

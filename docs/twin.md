@@ -501,8 +501,13 @@ a checkpoint (`.brain/cortex.json`) plus delta-replay from a cursor:
 - recursive traversal powers `--transitive` on imports/rdeps (the true
   blast radius) — `brain twin rdeps <file> --transitive`;
 - bi-temporal reads power `brain twin at <prefix> <when>` — the twin as
-  it was at an epoch, `30m`/`2h`/`1d` ago, or **at a git commit** (hashes
-  resolve through the repo entity's observation timeline);
+  it was at an epoch, `30m`/`2h`/`1d` ago, **at a git commit** (hashes
+  resolve through the repo entity's observation timeline), or **at a
+  named baseline**. `brain baseline add <prefix> <name> [--at <when>]`
+  records one as a repo observation whose value carries the moment it
+  names (`name@ms`) — recorded now, naming then, so the event log stays
+  time-honest — and `brain baseline list <prefix>` reads them back.
+  Eyes' Compare surface picks moments from the same two sources;
 - `brain bench index` is the standing earn-adoption gate: it verifies
   both backends answer identically over real probes before printing
   timings, and `BRAIN_INDEX=mem` always forces reference behavior.

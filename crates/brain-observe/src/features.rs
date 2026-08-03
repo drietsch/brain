@@ -22,7 +22,7 @@
 //! is exactly the old behaviour.
 
 use crate::templates;
-use crate::twin::{latest, observe_src, relate};
+use crate::twin::{latest, latest_at_before, observe_src, relate};
 use brain_core::ids::StableId;
 use brain_core::object::Object;
 use brain_index::{replay, Index, MemIndex};
@@ -292,9 +292,19 @@ pub fn children(
     index: &MemIndex,
     sid: &StableId,
 ) -> Result<Vec<(StableId, String)>, StoreError> {
+    children_at(store, index, sid, u64::MAX)
+}
+
+/// The parts of a feature as they stood at `t`.
+pub fn children_at(
+    store: &Store,
+    index: &MemIndex,
+    sid: &StableId,
+    t: u64,
+) -> Result<Vec<(StableId, String)>, StoreError> {
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
-    for (_, from) in crate::twin::live_to(index, store, sid, PART_OF)? {
+    for (_, from) in crate::twin::live_to_at(index, store, sid, PART_OF, t)? {
         if !seen.insert(from.clone()) {
             continue;
         }
@@ -370,11 +380,26 @@ pub fn evaluate(
     prefix: &str,
     slug: &str,
 ) -> Result<DoneReport, StoreError> {
-    let requires = dod(store, index)?;
-    let mut seen = BTreeSet::new();
-    evaluate_with(store, index, prefix, slug, &requires, &mut seen, 0)
+    evaluate_at(store, index, prefix, slug, u64::MAX)
 }
 
+/// The feature judged as it stood at `t`: links and parts that existed
+/// then, counted then. The definition of done is read from the present
+/// template — the past is judged by today's bar, and any surface that
+/// renders a past judgment says so.
+pub fn evaluate_at(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    slug: &str,
+    t: u64,
+) -> Result<DoneReport, StoreError> {
+    let requires = dod(store, index)?;
+    let mut seen = BTreeSet::new();
+    evaluate_with(store, index, prefix, slug, &requires, &mut seen, 0, t)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn evaluate_with(
     store: &Store,
     index: &MemIndex,
@@ -383,12 +408,13 @@ fn evaluate_with(
     requires: &[String],
     seen: &mut BTreeSet<StableId>,
     depth: usize,
+    t: u64,
 ) -> Result<DoneReport, StoreError> {
     let sid = feature_sid(prefix, slug);
     let mut checks = Vec::new();
     for predicate in requires {
         let mut targets: BTreeSet<StableId> = BTreeSet::new();
-        for (_, to) in crate::twin::live_from(index, store, &sid, predicate)? {
+        for (_, to) in crate::twin::live_from_at(index, store, &sid, predicate, t)? {
             targets.insert(to);
         }
         checks.push(DoneCheck {
@@ -401,10 +427,10 @@ fn evaluate_with(
     // rather than following the loop.
     let mut parts = Vec::new();
     if depth < MAX_DEPTH && seen.insert(sid.clone()) {
-        for (child, child_slug) in children(store, index, &sid)? {
+        for (child, child_slug) in children_at(store, index, &sid, t)? {
             let _ = child;
             let report =
-                evaluate_with(store, index, prefix, &child_slug, requires, seen, depth + 1)?;
+                evaluate_with(store, index, prefix, &child_slug, requires, seen, depth + 1, t)?;
             let (met, total) = report.score();
             parts.push(PartReport {
                 title: title_of(store, index, prefix, &child_slug),
@@ -498,6 +524,50 @@ pub fn list(store: &Store, index: &MemIndex, prefix: &str) -> Result<Vec<Feature
     Ok(out)
 }
 
+/// Features as they existed at `t`. An Entity object carries no time of
+/// its own, so the first guarded observation — a title or a status — is
+/// the honest birth certificate: a feature registered after `t` has
+/// neither and does not appear.
+pub fn list_at(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    t: u64,
+) -> Result<Vec<FeatureRow>, StoreError> {
+    let mut seen: BTreeSet<StableId> = BTreeSet::new();
+    let mut out = Vec::new();
+    for node in index.entities_by_kind("feature") {
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
+        if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
+            continue;
+        }
+        let title_at = latest_at_before(index, store, &id, "title", t)?;
+        let status_at = latest_at_before(index, store, &id, "status", t)?;
+        if title_at.is_none() && status_at.is_none() {
+            continue;
+        }
+        let slug = labels.get("slug").cloned().unwrap_or_default();
+        let title = title_at
+            .map(|(_, v)| v)
+            .or_else(|| labels.get("title").cloned())
+            .unwrap_or_else(|| slug.clone());
+        let status = status_at
+            .map(|(_, v)| v)
+            .unwrap_or_else(|| "planned".to_string());
+        let done = latest_at_before(index, store, &id, "done", t)?.map(|(_, v)| v);
+        out.push(FeatureRow {
+            slug,
+            title,
+            status,
+            done,
+        });
+    }
+    out.sort_by(|a, b| a.slug.cmp(&b.slug));
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -542,6 +612,79 @@ mod tests {
         ] {
             link(store, "twin/app", slug, predicate, target).unwrap();
         }
+    }
+
+    /// A feature is judged by the links that existed at the moment asked
+    /// about: a link added later does not reach back, and a link
+    /// retracted later still counts at a moment before the retraction.
+    #[test]
+    fn a_feature_is_judged_at_the_moment_you_ask() {
+        let (_dir, store) = world();
+        add(&store, "twin/app", "aged", "Aged", "building").unwrap();
+        let file = StableId::derive(&["file", "src/lib.rs"]);
+        link(&store, "twin/app", "aged", "implemented_by", &file).unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let t = now_ms();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        link(&store, "twin/app", "aged", "tested_by", &file).unwrap();
+
+        let index = fresh_index(&store);
+        let count_of = |r: &DoneReport, p: &str| {
+            r.checks
+                .iter()
+                .find(|c| c.predicate == p)
+                .map(|c| c.count)
+                .unwrap_or(0)
+        };
+        let now_report = evaluate(&store, &index, "twin/app", "aged").unwrap();
+        let then_report = evaluate_at(&store, &index, "twin/app", "aged", t).unwrap();
+        assert_eq!(count_of(&now_report, "tested_by"), 1);
+        assert_eq!(
+            count_of(&then_report, "tested_by"),
+            0,
+            "a later link does not reach back"
+        );
+        assert_eq!(count_of(&then_report, "implemented_by"), 1);
+
+        // Retraction is equally time-honest: gone now, held then.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let before_retraction = now_ms();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        crate::twin::retract(&store, &feature_sid("twin/app", "aged"), "implemented_by", &file)
+            .unwrap();
+        let index = fresh_index(&store);
+        let now_report = evaluate(&store, &index, "twin/app", "aged").unwrap();
+        let then_report =
+            evaluate_at(&store, &index, "twin/app", "aged", before_retraction).unwrap();
+        assert_eq!(count_of(&now_report, "implemented_by"), 0);
+        assert_eq!(
+            count_of(&then_report, "implemented_by"),
+            1,
+            "the past keeps its link"
+        );
+    }
+
+    /// Entities carry no time; the first guarded observation is the
+    /// birth certificate list_at reads.
+    #[test]
+    fn a_feature_registered_later_did_not_exist_then() {
+        let (_dir, store) = world();
+        add(&store, "twin/app", "first", "First", "building").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let t = now_ms();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        add(&store, "twin/app", "second", "Second", "building").unwrap();
+
+        let index = fresh_index(&store);
+        let then = list_at(&store, &index, "twin/app", t).unwrap();
+        assert!(then.iter().any(|f| f.slug == "first"));
+        assert!(
+            !then.iter().any(|f| f.slug == "second"),
+            "not yet registered at that moment"
+        );
+        let present = list_at(&store, &index, "twin/app", u64::MAX).unwrap();
+        assert!(present.iter().any(|f| f.slug == "second"));
     }
 
     #[test]

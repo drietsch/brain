@@ -158,6 +158,12 @@ pub fn sleep(store: &Store, prefix: &str) -> Result<SleepReport, StoreError> {
 
     let delta = delta_since(store, &index, prefix, since)?;
 
+    // A closing session takes the day's quality reading. Sleep is rare
+    // and deliberate, so it always affords the fresh claims count —
+    // even a session that changed nothing else may have settled claims.
+    let ins = crate::twin::insights_with(store, &index, prefix)?;
+    crate::twin::record_quality(store, &index, prefix, &repo_sid, &ins, now, true)?;
+
     // Memory digest for files with real history (≥3 versions).
     let mut memories = 0usize;
     for (sid, versions) in &delta.file_versions {
@@ -232,6 +238,33 @@ mod tests {
     use super::*;
     use crate::twin::refresh;
     use std::fs;
+
+    #[test]
+    fn sleep_appends_quality_point_when_metrics_moved() {
+        let src = tempfile::tempdir().unwrap();
+        fs::create_dir_all(src.path().join("src")).unwrap();
+        fs::write(src.path().join("src/main.rs"), "pub fn main() {}\n").unwrap();
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        // A run imported after the refresh: the closing session takes
+        // the reading the refresh never saw.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let run = "test t_one ... ok\n";
+        crate::testing::record_run(&store, "twin/app", &crate::testing::parse_report(run), run)
+            .unwrap();
+        sleep(&store, "twin/app").unwrap();
+        let ins = crate::twin::insights(&store, "twin/app").unwrap();
+        assert_eq!(ins.quality.len(), 2, "sleep appended the reading");
+        assert_eq!(ins.quality.last().unwrap().tests, Some((1, 1)));
+
+        // A sleep with nothing moved appends nothing.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        sleep(&store, "twin/app").unwrap();
+        let ins = crate::twin::insights(&store, "twin/app").unwrap();
+        assert_eq!(ins.quality.len(), 2, "rest takes no reading");
+    }
 
     #[test]
     fn sleep_consolidates_activity_then_rests_idempotently() {

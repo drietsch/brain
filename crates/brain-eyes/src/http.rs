@@ -151,6 +151,17 @@ fn handle(request: Request, state: &Arc<AppState>) {
                 Err(message) => error(request, 404, &message),
             }
         }
+        "/api/moments" => json_result(request, state.read(query::compare::moments)),
+        "/api/compare" => {
+            let Some(from) = param("from") else {
+                return error(request, 400, "Which moment? Pass ?from=…");
+            };
+            let to = param("to").unwrap_or_else(|| "live".to_string());
+            match state.read(|loaded| query::compare::build(loaded, &from, &to)) {
+                Ok(view) => json(request, &view),
+                Err(message) => error(request, 400, &message),
+            }
+        }
         "/api/find" => {
             let text_query = param("q").unwrap_or_default();
             let limit = param("limit")

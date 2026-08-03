@@ -555,9 +555,66 @@ fn run(
                 observe(store, &repo_sid, prop, &value.to_string(), now)?;
             }
         }
+        record_quality(store, &index, prefix, &repo_sid, &ins, now, true)?;
     }
 
     Ok(report)
+}
+
+/// Record one quality reading on the repo entity, guarded like the
+/// growth totals: all six properties land together at the same moment,
+/// and an unchanged picture writes nothing. `with_spine` decides whether
+/// the claims count is measured fresh; without it the last measured
+/// value is carried forward, keeping the point complete without
+/// vouching for a number this pass did not take.
+pub(crate) fn record_quality(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    repo_sid: &StableId,
+    ins: &Insights,
+    now: u64,
+    with_spine: bool,
+) -> Result<bool, StoreError> {
+    let (tests_passed, tests_total) = match ins.last_run {
+        Some((_, total, passed, _)) => (passed, total),
+        None => (0, 0),
+    };
+    let features_done = ins.features.iter().filter(|f| f.done).count();
+    let stale_warn = ins
+        .stale_docs
+        .iter()
+        .filter(|d| d.severity == Severity::Warn)
+        .count();
+    let uncorroborated = if with_spine {
+        crate::spine::build(store, index, prefix)?
+            .uncorroborated()
+            .len()
+    } else {
+        latest(index, store, repo_sid, "uncorroborated_total")?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0)
+    };
+    let values = [
+        ("tests_passed", tests_passed),
+        ("tests_total", tests_total),
+        ("features_done", features_done),
+        ("features_total", ins.features.len()),
+        ("stale_warn_total", stale_warn),
+        ("uncorroborated_total", uncorroborated),
+    ];
+    let mut any_changed = false;
+    for (prop, value) in values {
+        if latest(index, store, repo_sid, prop)?.as_deref() != Some(value.to_string().as_str()) {
+            any_changed = true;
+        }
+    }
+    if any_changed {
+        for (prop, value) in values {
+            observe(store, repo_sid, prop, &value.to_string(), now)?;
+        }
+    }
+    Ok(any_changed)
 }
 
 // ---------------------------------------------------------------------------
@@ -582,6 +639,23 @@ pub struct FeatureProgress {
     pub by_parts: bool,
 }
 
+/// One quality reading of the codebase at a moment: what the tests said,
+/// how many features are ready, how many documents drifted, and how many
+/// claims nothing corroborates. Complete or absent, never partial — all
+/// six numbers land together, so a reader never sees a half-measured
+/// moment. Points accrue only when a refresh or sleep found the numbers
+/// moved; the series is bounded by change, not by time.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct QualityPoint {
+    pub at_ms: u64,
+    /// (passed, total) of the latest imported run; None until a run exists.
+    pub tests: Option<(usize, usize)>,
+    pub features_done: usize,
+    pub features_total: usize,
+    pub stale_warnings: usize,
+    pub uncorroborated: usize,
+}
+
 #[derive(Debug, Default, serde::Serialize)]
 pub struct Insights {
     pub files: usize,
@@ -603,6 +677,9 @@ pub struct Insights {
     /// Growth series from the repo entity, oldest first: (at_ms, files,
     /// symbols, relations) — one point per refresh that changed the totals.
     pub series: Vec<(u64, usize, usize, usize)>,
+    /// Quality series from the repo entity, oldest first — one point per
+    /// refresh or sleep that found a quality number moved.
+    pub quality: Vec<QualityPoint>,
     /// Decisions (ADRs) under the prefix, newest first: (slug, title, status).
     pub decisions: Vec<(String, String, String)>,
     /// Plans under the prefix, newest first: (slug, title).
@@ -1011,8 +1088,21 @@ pub fn insights_with(
     ins.git_commit = latest(index, store, &repo_sid, "git_commit")?;
     ins.git_branch = latest(index, store, &repo_sid, "git_branch")?;
 
-    // Growth series: pair up the repo entity's totals observations by time.
+    // Growth and quality series: pair up the repo entity's observations
+    // by time, one pass for both. A quality point is kept by presence,
+    // not by being non-zero — an all-zero first reading is a real point.
+    #[derive(Default)]
+    struct QRaw {
+        tests_passed: usize,
+        tests_total: usize,
+        features_done: usize,
+        features_total: usize,
+        stale: usize,
+        uncorr: usize,
+        seen: bool,
+    }
     let mut points: BTreeMap<u64, (usize, usize, usize)> = BTreeMap::new();
+    let mut qpoints: BTreeMap<u64, QRaw> = BTreeMap::new();
     for id in index.observations_of(&repo_sid) {
         if let Object::Observation {
             property,
@@ -1024,11 +1114,21 @@ pub fn insights_with(
             let Ok(n) = value.parse::<usize>() else {
                 continue;
             };
-            let point = points.entry(observed_at_ms).or_insert((0, 0, 0));
+            let mut quality = |set: fn(&mut QRaw, usize)| {
+                let q = qpoints.entry(observed_at_ms).or_default();
+                set(q, n);
+                q.seen = true;
+            };
             match property.as_str() {
-                "files_present" => point.0 = n,
-                "symbols_total" => point.1 = n,
-                "relations_total" => point.2 = n,
+                "files_present" => points.entry(observed_at_ms).or_insert((0, 0, 0)).0 = n,
+                "symbols_total" => points.entry(observed_at_ms).or_insert((0, 0, 0)).1 = n,
+                "relations_total" => points.entry(observed_at_ms).or_insert((0, 0, 0)).2 = n,
+                "tests_passed" => quality(|q, n| q.tests_passed = n),
+                "tests_total" => quality(|q, n| q.tests_total = n),
+                "features_done" => quality(|q, n| q.features_done = n),
+                "features_total" => quality(|q, n| q.features_total = n),
+                "stale_warn_total" => quality(|q, n| q.stale = n),
+                "uncorroborated_total" => quality(|q, n| q.uncorr = n),
                 _ => {}
             }
         }
@@ -1037,6 +1137,18 @@ pub fn insights_with(
         .into_iter()
         .filter(|(_, (f, s, r))| *f + *s + *r > 0)
         .map(|(at, (f, s, r))| (at, f, s, r))
+        .collect();
+    ins.quality = qpoints
+        .into_iter()
+        .filter(|(_, q)| q.seen)
+        .map(|(at, q)| QualityPoint {
+            at_ms: at,
+            tests: (q.tests_total > 0).then_some((q.tests_passed, q.tests_total)),
+            features_done: q.features_done,
+            features_total: q.features_total,
+            stale_warnings: q.stale,
+            uncorroborated: q.uncorr,
+        })
         .collect();
 
     Ok(ins)
@@ -1211,10 +1323,29 @@ pub fn live_from(
     from: &StableId,
     kind: &str,
 ) -> Result<Vec<(NodeId, StableId)>, StoreError> {
+    live_from_at(index, store, from, kind, u64::MAX)
+}
+
+/// Outgoing edges of one predicate as they stood at `t`. An edge exists
+/// at `t` only if it was recorded by then AND no retraction had landed
+/// by then — with no retraction recorded an edge reads active at any
+/// moment, so the recording time is the load-bearing half of the check.
+pub fn live_from_at(
+    index: &MemIndex,
+    store: &Store,
+    from: &StableId,
+    kind: &str,
+    t: u64,
+) -> Result<Vec<(NodeId, StableId)>, StoreError> {
     let mut out = Vec::new();
     for id in index.relations_from(from, kind) {
-        if let Object::Relation { to, .. } = store.get(&id)? {
-            if brain_index::edge_active(index, store, from, kind, &to)? {
+        if let Object::Relation {
+            to, observed_at_ms, ..
+        } = store.get(&id)?
+        {
+            if observed_at_ms <= t
+                && brain_index::edge_active_at(index, store, from, kind, &to, t)?
+            {
                 out.push((id, to));
             }
         }
@@ -1229,15 +1360,88 @@ pub fn live_to(
     to: &StableId,
     kind: &str,
 ) -> Result<Vec<(NodeId, StableId)>, StoreError> {
+    live_to_at(index, store, to, kind, u64::MAX)
+}
+
+/// Incoming edges of one predicate as they stood at `t`; the same
+/// two-part check as `live_from_at`.
+pub fn live_to_at(
+    index: &MemIndex,
+    store: &Store,
+    to: &StableId,
+    kind: &str,
+    t: u64,
+) -> Result<Vec<(NodeId, StableId)>, StoreError> {
     let mut out = Vec::new();
     for id in index.relations_to(to, kind) {
-        if let Object::Relation { from, .. } = store.get(&id)? {
-            if brain_index::edge_active(index, store, &from, kind, to)? {
+        if let Object::Relation {
+            from,
+            observed_at_ms,
+            ..
+        } = store.get(&id)?
+        {
+            if observed_at_ms <= t
+                && brain_index::edge_active_at(index, store, &from, kind, to, t)?
+            {
                 out.push((id, from));
             }
         }
     }
     Ok(out)
+}
+
+/// Resolve a point in time: epoch ms, a relative `30m`/`2h`/`1d` ago, a
+/// named baseline, a git commit hash looked up in the repo entity's
+/// observation timeline, or the literal `live` — the present.
+pub fn resolve_when(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    when: &str,
+) -> Result<u64, String> {
+    if when == "live" {
+        return Ok(u64::MAX);
+    }
+    if when.chars().all(|c| c.is_ascii_digit()) && when.len() >= 12 {
+        return when.parse().map_err(|e| format!("bad timestamp: {e}"));
+    }
+    if let Some(unit) = when.chars().last().filter(|c| "smhd".contains(*c)) {
+        if let Ok(n) = when[..when.len() - 1].parse::<u64>() {
+            let secs = match unit {
+                's' => n,
+                'm' => n * 60,
+                'h' => n * 3600,
+                _ => n * 86_400,
+            };
+            return Ok(now_ms().saturating_sub(secs * 1000));
+        }
+    }
+    // A named baseline: the moment it recorded.
+    if let Some(b) = crate::baseline::list(store, index, prefix)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|b| b.name == when)
+    {
+        return Ok(b.at_ms);
+    }
+    // A commit hash (prefix): when the twin observed that commit as HEAD.
+    let repo = StableId::derive(&["repo", prefix]);
+    for id in index.observations_of(&repo) {
+        if let Object::Observation {
+            property,
+            value,
+            observed_at_ms,
+            ..
+        } = store.get(&id).map_err(|e| e.to_string())?
+        {
+            if property == "git_commit" && value.starts_with(when) {
+                return Ok(observed_at_ms);
+            }
+        }
+    }
+    Err(format!(
+        "cannot resolve '{when}' (epoch ms, 30m/2h/1d, a baseline name, or a twinned commit hash)"
+    ))
 }
 
 /// Retract live edges of `kinds` from `from` that this pass did not
@@ -2256,6 +2460,89 @@ mod tests {
             .notes
             .iter()
             .any(|(_, e, t)| e == "run.py" && t.contains("rewrote")));
+    }
+
+    /// Every spelling of a moment resolves, and a spelling that means
+    /// nothing gets a sentence naming the accepted forms.
+    #[test]
+    fn resolve_when_reads_every_spelling_of_a_moment() {
+        let (src, store_dir) = fixture();
+        let store = Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let index = fresh_index(&store);
+
+        assert_eq!(
+            resolve_when(&store, &index, "twin/app", "live").unwrap(),
+            u64::MAX
+        );
+        assert_eq!(
+            resolve_when(&store, &index, "twin/app", "1785400000000").unwrap(),
+            1785400000000
+        );
+        let five_min = resolve_when(&store, &index, "twin/app", "5m").unwrap();
+        assert!(five_min <= now_ms().saturating_sub(5 * 60 * 1000) + 1000);
+
+        // A baseline name resolves to the moment it names.
+        crate::baseline::add(&store, &index, "twin/app", "mark", 123_456_789_012).unwrap();
+        let index = fresh_index(&store);
+        assert_eq!(
+            resolve_when(&store, &index, "twin/app", "mark").unwrap(),
+            123_456_789_012
+        );
+
+        // A commit prefix resolves to when the twin saw it as HEAD.
+        let repo = StableId::derive(&["repo", "twin/app"]);
+        observe_src(&store, &repo, "git_commit", "abcdef1234567890", "twin", 424_242).unwrap();
+        let index = fresh_index(&store);
+        assert_eq!(
+            resolve_when(&store, &index, "twin/app", "abcdef12").unwrap(),
+            424_242
+        );
+
+        let err = resolve_when(&store, &index, "twin/app", "nonsense").unwrap_err();
+        assert!(err.contains("cannot resolve"), "{err}");
+    }
+
+    #[test]
+    fn quality_series_appends_on_change_and_holds_when_idle() {
+        let (src, store_dir) = fixture();
+        let store = Store::open(store_dir.path()).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+
+        // The first refresh takes a complete baseline reading.
+        let ins = insights(&store, "twin/app").unwrap();
+        assert_eq!(ins.quality.len(), 1, "baseline reading recorded");
+        let q = &ins.quality[0];
+        assert_eq!(q.tests, None, "no run imported yet");
+        assert_eq!((q.features_done, q.features_total), (0, 0));
+        assert_eq!(q.uncorroborated, 0);
+
+        // A test run moves the picture; the next refresh takes a reading.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let run = "test calc::tests::t_add ... ok\ntest web::render ... FAILED\n";
+        testing::record_run(&store, "twin/app", &testing::parse_report(run), run).unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert_eq!(ins.quality.len(), 2, "a moved number appends a reading");
+        let q = ins.quality.last().unwrap();
+        assert_eq!(q.tests, Some((1, 2)), "one of two tests passing");
+
+        // Idempotent refresh appends nothing to either series.
+        let readings = ins.quality.len();
+        let growth = ins.series.len();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert_eq!(ins.quality.len(), readings);
+        assert_eq!(ins.series.len(), growth);
+
+        // A growth-only change moves the growth series and not the
+        // quality series — the two are guarded independently.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        fs::write(src.path().join("more.py"), "def more():\n    pass\n").unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let ins = insights(&store, "twin/app").unwrap();
+        assert!(ins.series.len() > growth, "growth series moved");
+        assert_eq!(ins.quality.len(), readings, "quality series held");
     }
 
     #[test]

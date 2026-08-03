@@ -5,6 +5,7 @@
 //! workspace already computes — that is how Eyes and the CLI stay in
 //! agreement, and how a dossier stopped costing nine passes over the store.
 
+pub mod compare;
 pub mod evidence;
 pub mod features;
 pub mod find;

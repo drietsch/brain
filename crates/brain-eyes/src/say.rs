@@ -635,6 +635,239 @@ pub fn change_stage(status: &str) -> (&'static str, &'static str) {
     }
 }
 
+/// A moment named by its cause: "as it was 2 days ago, when commit
+/// 4f2a91c was current". Cause over clock — a bare timestamp answers
+/// nothing a person actually asked.
+pub fn moment_phrase(now: u64, at: u64, kind: &str, label: &str) -> String {
+    let when = ago(now, at);
+    match kind {
+        "commit" => format!("as it was {when}, when {label} was current"),
+        "baseline" => format!("as it was {when}, at '{label}'"),
+        "live" => "as it is now".to_string(),
+        _ => format!("as it was {when}"),
+    }
+}
+
+/// The loud restatement every past view carries.
+pub fn asof_banner(moment: &str) -> String {
+    format!(
+        "You are looking at the past — the system {moment}. The live view keeps moving underneath."
+    )
+}
+
+/// What the comparison found, in one line.
+pub fn compare_headline(regressed: usize, improved: usize, appeared: usize, removed: usize) -> String {
+    if regressed + improved + appeared + removed == 0 {
+        return "Nothing about the features changed between these two moments.".to_string();
+    }
+    let mut parts = Vec::new();
+    if regressed > 0 {
+        parts.push(format!("{} regressed", count(regressed as u64, "feature", "features")));
+    }
+    if improved > 0 {
+        parts.push(format!("{} improved", count(improved as u64, "feature", "features")));
+    }
+    if appeared > 0 {
+        parts.push(format!("{} appeared", count(appeared as u64, "feature", "features")));
+    }
+    if removed > 0 {
+        parts.push(format!("{} disappeared", count(removed as u64, "feature", "features")));
+    }
+    format!("{} between then and now.", parts.join(", "))
+}
+
+/// How a feature moved between two moments, both sides in its own terms.
+pub fn feature_moved(
+    then_done: bool,
+    then_met: usize,
+    then_total: usize,
+    now_done: bool,
+    now_met: usize,
+    now_total: usize,
+) -> String {
+    let then = if then_done {
+        "was ready then".to_string()
+    } else if then_met == 0 {
+        "had nothing backing it then".to_string()
+    } else {
+        format!("had {then_met} of {then_total} checks met then")
+    };
+    let now = if now_done {
+        "it is ready now".to_string()
+    } else if now_met == 0 {
+        "nothing backs it now".to_string()
+    } else {
+        format!("{now_met} of {now_total} are met now")
+    };
+    format!("{then}; {now}")
+}
+
+/// A feature the earlier moment did not know.
+pub fn feature_appeared(now_done: bool, now_met: usize, now_total: usize) -> String {
+    let now = if now_done {
+        "it is ready now".to_string()
+    } else if now_met == 0 {
+        "nothing backs it yet".to_string()
+    } else {
+        format!("{now_met} of {now_total} checks are met now")
+    };
+    format!("did not exist then; {now}")
+}
+
+/// A feature the later moment no longer knows.
+pub fn feature_removed() -> &'static str {
+    "existed then; it is gone now"
+}
+
+/// The tests picture on both sides of a comparison.
+pub fn tests_delta(then: Option<(usize, usize)>, now: Option<(usize, usize)>) -> String {
+    let side = |value: Option<(usize, usize)>| match value {
+        None => "no test run had been recorded".to_string(),
+        Some((passed, total)) if passed == total => {
+            format!("all {} passed", count(total as u64, "test", "tests"))
+        }
+        Some((passed, total)) => format!("{} of {total} tests failing", total - passed),
+    };
+    format!("then: {} · now: {}", side(then), side(now))
+}
+
+/// Features-ready on both sides of a comparison.
+pub fn ready_delta(
+    then_ready: usize,
+    then_total: usize,
+    now_ready: usize,
+    now_total: usize,
+) -> String {
+    format!("then: {then_ready} of {then_total} ready · now: {now_ready} of {now_total}")
+}
+
+/// Files-present on both sides of a comparison. Growth is neither good
+/// nor bad; it is just said.
+pub fn files_delta(then_files: usize, now_files: usize) -> String {
+    let then = count(then_files as u64, "file", "files");
+    match (now_files as i64) - (then_files as i64) {
+        0 => format!("{then} then and now"),
+        d if d > 0 => format!("{then} then; {d} more since"),
+        d => format!("{then} then; {} fewer now", -d),
+    }
+}
+
+/// What a past moment honestly cannot show, stated rather than hidden.
+pub fn past_omissions() -> &'static str {
+    "A past moment cannot show the working tree or what needs attention — \
+     those are only measurable now, so they are left out rather than guessed."
+}
+
+/// The tests line of the quality strip: (current, full sentence).
+pub fn quality_tests(
+    passed: usize,
+    total: usize,
+    prev: Option<(usize, usize)>,
+    trend: &str,
+) -> (String, String) {
+    let noun = if total == 1 { "test" } else { "tests" };
+    let current = format!("{passed} of {total} {noun} passing");
+    let sentence = match (trend, prev) {
+        ("falling", Some((pp, pt))) => {
+            format!("Tests are slipping: {passed} of {total} passing, down from {pp} of {pt}.")
+        }
+        ("rising", Some((pp, _))) => {
+            format!("Tests recovered: {passed} of {total} passing, up from {pp}.")
+        }
+        _ => format!("{current}, holding steady."),
+    };
+    (current, sentence)
+}
+
+/// The features line of the quality strip: (current, full sentence).
+pub fn quality_features(
+    done: usize,
+    total: usize,
+    prev: Option<(usize, usize)>,
+    trend: &str,
+) -> (String, String) {
+    let noun = if total == 1 { "feature" } else { "features" };
+    let current = format!("{done} of {total} {noun} ready");
+    let sentence = match (trend, prev) {
+        ("falling", Some((pd, pt))) => format!(
+            "A feature slipped back to not ready: {done} of {total} now, was {pd} of {pt}."
+        ),
+        ("rising", Some((pd, _))) if done == pd + 1 => {
+            format!("Another feature is ready: {done} of {total} now.")
+        }
+        ("rising", Some((pd, _))) => {
+            format!("More features are ready: {done} of {total} now, up from {pd}.")
+        }
+        _ => format!("{current}, unchanged."),
+    };
+    (current, sentence)
+}
+
+/// The drifted-documents line of the quality strip: (current, sentence).
+pub fn quality_docs(n: usize, prev: Option<usize>, trend: &str) -> (String, String) {
+    let current = if n == 0 {
+        "no documents in doubt".to_string()
+    } else {
+        format!("{} may be wrong", count(n as u64, "document", "documents"))
+    };
+    let sentence = match (trend, prev) {
+        ("rising", Some(p)) if n - p == 1 => {
+            format!("One more document drifted from the code: {n} may be wrong now.")
+        }
+        ("rising", Some(p)) => {
+            format!("{} more documents drifted from the code: {n} may be wrong now.", n - p)
+        }
+        ("falling", Some(_)) if n == 0 => {
+            "The last document caught up: none are in doubt now.".to_string()
+        }
+        ("falling", Some(p)) if p - n == 1 => {
+            format!("One document caught up: {n} may still be wrong.")
+        }
+        ("falling", Some(p)) => {
+            format!("{} documents caught up: {n} may still be wrong.", p - n)
+        }
+        _ if n == 0 => "No document has drifted from the code.".to_string(),
+        _ => format!(
+            "{} may be wrong, same as before.",
+            count(n as u64, "document", "documents")
+        ),
+    };
+    (current, sentence)
+}
+
+/// The unbacked-claims line of the quality strip: (current, sentence).
+pub fn quality_claims(n: usize, prev: Option<usize>, trend: &str) -> (String, String) {
+    let current = if n == 0 {
+        "every claim has something to show".to_string()
+    } else {
+        format!(
+            "{} with nothing to show",
+            count(n as u64, "claim", "claims")
+        )
+    };
+    let sentence = match (trend, prev) {
+        ("rising", Some(p)) if n - p == 1 => {
+            format!("One more claim has nothing to show for itself: {n} now.")
+        }
+        ("rising", Some(p)) => {
+            format!("{} more claims have nothing to show for themselves: {n} now.", n - p)
+        }
+        ("falling", Some(_)) if n == 0 => {
+            "The last claims found their proof: every claim has something to show now.".to_string()
+        }
+        ("falling", Some(p)) if p - n == 1 => {
+            format!("One claim found its proof: {n} still have nothing to show.")
+        }
+        ("falling", Some(p)) => {
+            format!("{} claims found their proof: {n} still have nothing to show.", p - n)
+        }
+        _ if n == 0 => "Every claim has something to show.".to_string(),
+        _ if n == 1 => "1 claim still has nothing to show for itself.".to_string(),
+        _ => format!("{n} claims still have nothing to show for themselves."),
+    };
+    (current, sentence)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

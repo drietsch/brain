@@ -111,6 +111,11 @@ fn fixture() -> Fixture {
     let parsed = brain_observe::testing::parse_report(report);
     brain_observe::testing::record_run_in(&store, root, "twin/app", &parsed, report).unwrap();
 
+    // The refresh after the protocol: the quality series takes the
+    // reading with the tests in it.
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    twin::refresh(&store, root, "twin/app").unwrap();
+
     let state = AppState::new(Config {
         store_root: store_dir.path().to_path_buf(),
         content_root: root.to_path_buf(),
@@ -200,6 +205,194 @@ fn now_speaks_in_sentences_and_names_the_fix() {
     for jargon in ["b3:", "cursor", "StableId", "predicate", "entity_kind"] {
         assert!(!prose.contains(jargon), "leaked {jargon:?} into: {prose}");
     }
+}
+
+/// The quality strip is judged server-side — sentences, direction,
+/// worst-first order — and a regression is louder than an improvement.
+#[test]
+fn now_carries_quality_lines() {
+    let f = fixture();
+    let now = f.state.read(|loaded| crate::query::now::build(loaded, None)).unwrap();
+    assert!(!now.quality.is_empty(), "the graph has readings");
+    for line in &now.quality {
+        assert!(!line.sentence.is_empty(), "{} says nothing", line.id);
+        assert!(!line.points.is_empty(), "{} has no points", line.id);
+        assert!(
+            ["rising", "falling", "flat"].contains(&line.trend.as_str()),
+            "{}: {}",
+            line.id,
+            line.trend
+        );
+        assert!(
+            ["bad", "good", "quiet"].contains(&line.tone.as_str()),
+            "{}: {}",
+            line.id,
+            line.tone
+        );
+    }
+    let tests = now
+        .quality
+        .iter()
+        .find(|l| l.id == "tests")
+        .expect("the run is a reading");
+    assert!(tests.current.contains("1 of 2"), "{}", tests.current);
+
+    // A run that flips the remaining pass to fail: the tests line turns
+    // bad and moves to the front — the regression is the loudest thing.
+    let store = Store::open(f._store_dir.path()).unwrap();
+    let run = "test signs_in ... FAILED\ntest rejects ... FAILED\n";
+    brain_observe::testing::record_run(
+        &store,
+        "twin/app",
+        &brain_observe::testing::parse_report(run),
+        run,
+    )
+    .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    twin::refresh(&store, f._workspace.path(), "twin/app").unwrap();
+    let now = f.state.read(|loaded| crate::query::now::build(loaded, None)).unwrap();
+    let first = &now.quality[0];
+    assert_eq!(first.id, "tests", "the regression leads the strip");
+    assert_eq!(first.tone, "bad");
+    assert_eq!(first.trend, "falling");
+}
+
+/// The diff between two moments ranks regressions first, a done-flip
+/// above a met-count slip, and keeps appearing features out of the
+/// improvement ledger — new is not better, it is just new.
+#[test]
+fn compare_orders_regressions_first() {
+    let f = fixture();
+    let store = Store::open(f._store_dir.path()).unwrap();
+    let file = StableId::derive(&["file", "crates/core-lib/src/lib.rs"]);
+    let decision = StableId::derive(&["decision", "twin/app", "adr-001-shape"]);
+    let doc = StableId::derive(&["file", "README.md"]);
+
+    // A fully backed feature, and a partly backed one.
+    brain_observe::features::add(&store, "twin/app", "flip", "Flip", "building").unwrap();
+    for (predicate, target) in [
+        ("implemented_by", &file),
+        ("tested_by", &file),
+        ("decided_by", &decision),
+        ("documented_in", &doc),
+    ] {
+        brain_observe::features::link(&store, "twin/app", "flip", predicate, target).unwrap();
+    }
+    brain_observe::features::add(&store, "twin/app", "extra", "Extra", "building").unwrap();
+    brain_observe::features::link(&store, "twin/app", "extra", "implemented_by", &file).unwrap();
+
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    let t = brain_store::now_ms();
+    std::thread::sleep(std::time::Duration::from_millis(5));
+
+    // After the moment: one done-flip, one met slip, one improvement,
+    // one birth.
+    brain_observe::twin::retract(
+        &store,
+        &brain_observe::features::feature_sid("twin/app", "flip"),
+        "documented_in",
+        &doc,
+    )
+    .unwrap();
+    brain_observe::twin::retract(
+        &store,
+        &brain_observe::features::feature_sid("twin/app", "core"),
+        "decided_by",
+        &decision,
+    )
+    .unwrap();
+    brain_observe::features::link(&store, "twin/app", "extra", "tested_by", &file).unwrap();
+    brain_observe::features::add(&store, "twin/app", "born", "Born", "building").unwrap();
+
+    let view = f
+        .state
+        .read(|loaded| crate::query::compare::build(loaded, &t.to_string(), "live"))
+        .unwrap();
+    let slugs = |rows: &[crate::dto::FeatureDelta]| {
+        rows.iter().map(|r| r.slug.clone()).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        slugs(&view.regressions),
+        vec!["flip", "core"],
+        "a done flip outranks a met slip"
+    );
+    assert_eq!(slugs(&view.improvements), vec!["extra"]);
+    assert_eq!(slugs(&view.appeared), vec!["born"]);
+    assert!(view.headline.contains("regressed"), "{}", view.headline);
+    assert!(view.banner.is_some(), "a past view restates its moment");
+    assert!(
+        view.baseline_command
+            .as_deref()
+            .is_some_and(|c| c.starts_with("brain baseline add twin/app")),
+        "{:?}",
+        view.baseline_command
+    );
+    for row in view.regressions.iter().chain(&view.improvements) {
+        assert!(!row.sentence.is_empty());
+    }
+}
+
+/// The picker lists baselines even where no git repository exists, and
+/// says so instead of erroring.
+#[test]
+fn moments_lists_baselines_without_git() {
+    let f = fixture();
+    let store = Store::open(f._store_dir.path()).unwrap();
+    let mut index = brain_index::MemIndex::new();
+    brain_index::replay(&store, &mut index).unwrap();
+    brain_observe::baseline::add(&store, &index, "twin/app", "mark", 123_456_789_012).unwrap();
+
+    let view = f.state.read(crate::query::compare::moments).unwrap();
+    assert!(
+        view.moments
+            .iter()
+            .any(|m| m.kind == "baseline" && m.label == "mark"),
+        "{:?}",
+        view.moments
+    );
+    assert!(
+        view.moments.iter().all(|m| m.kind != "commit"),
+        "the fixture workspace has no git history"
+    );
+}
+
+/// A past view names its own moment loudly and says what it cannot
+/// know, rather than rendering the unknowable as zero.
+#[test]
+fn a_past_view_states_its_moment_and_omits_what_it_cannot_know() {
+    let f = fixture();
+    let view = f
+        .state
+        .read(|loaded| crate::query::compare::build(loaded, "5m", "live"))
+        .unwrap();
+    let banner = view.banner.expect("the banner is not optional for the past");
+    assert!(banner.contains("the past"), "{banner}");
+    // Even a moment with no name speaks in the past tense — the banner
+    // must never claim a past view is current.
+    assert!(banner.contains("as it was"), "{banner}");
+    assert!(!view.omissions.is_empty());
+    assert_eq!(view.vs_moment.kind, "live");
+    // Five minutes ago the fixture did not exist: everything appeared.
+    assert!(
+        view.appeared.iter().any(|d| d.slug == "core"),
+        "{:?}",
+        view.appeared
+    );
+    assert!(view.regressions.is_empty());
+}
+
+/// Small moves read flat: the deadband keeps the arrows honest, and a
+/// count is never deadbanded — one more failing thing is a real move.
+#[test]
+fn the_deadband_stills_small_moves() {
+    use crate::query::now::{count_trend, ratio_trend};
+    assert_eq!(ratio_trend(&[93.0, 94.5], 2.0), "flat");
+    assert_eq!(ratio_trend(&[100.0, 90.7], 2.0), "falling");
+    assert_eq!(ratio_trend(&[90.7, 100.0], 2.0), "rising");
+    assert_eq!(ratio_trend(&[50.0], 2.0), "flat");
+    assert_eq!(count_trend(&[2.0, 3.0]), "rising");
+    assert_eq!(count_trend(&[3.0, 3.0]), "flat");
+    assert_eq!(count_trend(&[3.0, 2.0]), "falling");
 }
 
 #[test]
@@ -679,6 +872,11 @@ fn prose_of(f: &Fixture) -> String {
     let now = f.state.read(|loaded| crate::query::now::build(loaded, None)).unwrap();
     prose.push(now.headline.clone());
     prose.push(now.subhead.clone());
+    for line in &now.quality {
+        prose.push(line.label.clone());
+        prose.push(line.current.clone());
+        prose.push(line.sentence.clone());
+    }
     for concern in &now.needs_you {
         prose.push(concern.title.clone());
         prose.push(concern.reason.clone());
@@ -695,6 +893,33 @@ fn prose_of(f: &Fixture) -> String {
     for group in &now.proof.groups {
         prose.push(group.label.clone());
         prose.extend(group.cells.iter().map(|cell| cell.text.clone()));
+    }
+    let moments = f.state.read(crate::query::compare::moments).unwrap();
+    prose.push(moments.headline.clone());
+    for moment in &moments.moments {
+        prose.push(moment.label.clone());
+        prose.push(moment.when.clone());
+    }
+    let compare = f
+        .state
+        .read(|loaded| crate::query::compare::build(loaded, "5m", "live"))
+        .unwrap();
+    prose.extend(compare.banner.clone());
+    prose.push(compare.headline.clone());
+    prose.push(compare.omissions.clone());
+    for metric in &compare.metrics {
+        prose.push(metric.label.clone());
+        prose.push(metric.sentence.clone());
+    }
+    for delta in compare
+        .regressions
+        .iter()
+        .chain(&compare.improvements)
+        .chain(&compare.appeared)
+        .chain(&compare.removed)
+    {
+        prose.push(delta.title.clone());
+        prose.push(delta.sentence.clone());
     }
     for shelf in ["decisions", "plans", "documents", "features"] {
         let view = f
@@ -909,6 +1134,15 @@ fn the_server_answers_over_a_real_socket_and_refuses_the_rest() {
     // A thing that does not exist is a 404, not a 500.
     let unknown = request("GET /api/thing?id=sid:doesnotexist HTTP/1.1");
     assert!(unknown.starts_with("HTTP/1.1 404"), "{unknown}");
+
+    // A comparison without a moment, or with one that means nothing,
+    // is a 400 with a sentence — never a 500.
+    let no_from = request("GET /api/compare HTTP/1.1");
+    assert!(no_from.starts_with("HTTP/1.1 400"), "{no_from}");
+    assert!(no_from.contains("Which moment?"), "{no_from}");
+    let bad_from = request("GET /api/compare?from=nonsense HTTP/1.1");
+    assert!(bad_from.starts_with("HTTP/1.1 400"), "{bad_from}");
+    assert!(bad_from.contains("cannot resolve"), "{bad_from}");
 }
 
 #[test]
