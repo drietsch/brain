@@ -240,10 +240,8 @@ async function render() {
     button.classList.toggle("on", target === route.view ||
       (home !== null && target === home));
   }
-  // The full-bleed dark canvas belongs to the MRI lens, which draws its
-  // own background and wants no stage padding.
-  stage.classList.toggle("dark", inMri);
-  document.body.classList.toggle("in-mri", inMri);
+  // The MRI draws its own dark theatre inside a framed card; the stage
+  // around it stays lit like every other surface.
   // On Now the verdict band carries freshness, drift and the promise
   // itself — the topbar saying the same three things a centimetre above
   // would be the page repeating itself.
@@ -573,7 +571,7 @@ views.proof = async (params) => {
   ].map(([id, label]) =>
     h("button", { class: tab === id ? "on" : "", onclick: () => go("proof", { tab: id }) }, label)));
   stage.replaceChildren(h("div", { class: "page" },
-    h("p", { class: "kicker", text: "Prove · Proof" }),
+    h("p", { class: "kicker" }, icon("diamond"), "Prove · Proof"),
     bar, host));
   if (tab === "evidence") await evidencePanel(host, params);
   else if (tab === "artifacts") await artifactsPanel(host, params);
@@ -823,7 +821,7 @@ views.time = async (params) => {
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
   stage.replaceChildren(h("div", { class: "page" },
-    h("p", { class: "kicker", text: "Explore · Time" }),
+    h("p", { class: "kicker" }, icon("history"), "Explore · Time"),
     h("div", { class: "page-head" }, h("h1", { text: "Timeline" })),
     h("p", { class: "page-note",
       text: "Everything the graph recorded, grouped into the batches it actually happened in. Pick a moment below to hold it against the present." }),
@@ -870,7 +868,7 @@ async function compareBody(params) {
       h("p", { text: data.banner }),
       h("button", { class: "ghost", text: "Back to live", onclick: () => go("time") })));
   }
-  parts.push(h("p", { class: "kicker", text: "Explore · Time" }));
+  parts.push(h("p", { class: "kicker" }, icon("history"), "Explore · Time"));
   parts.push(h("h1", { class: "hero", text: data.headline }));
   parts.push(h("p", { class: "hero-sub",
     text: `${data.then_moment.label}, ${data.then_moment.when} — against ${data.vs_moment.label}.` }));
@@ -1848,7 +1846,7 @@ views.media = async () => {
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
   const parts = [
-    h("p", { class: "kicker" },
+    h("p", { class: "kicker" }, icon("frame"),
       h("button", { class: "row-link", text: "Proof · Artifacts",
         onclick: () => go("proof", { tab: "artifacts" }) }),
       " · Tour"),
