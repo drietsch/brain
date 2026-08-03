@@ -27,18 +27,19 @@ async function settled(page: Page) {
 
 test("the cockpit opens on Now and takes its reading", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".hero")).toBeVisible();
+  // The verdict band: sentence, claim spine, sparkrow, trust stamp.
+  await expect(page.locator(".verdict .hero")).toBeVisible();
   await expect(page.locator(".census")).toBeVisible();
-  await expect(page.getByText("Direction of travel")).toBeVisible();
-  // Every quality cell speaks: the sentence is the accessible label.
-  const cells = page.locator(".quality-cell");
-  expect(await cells.count()).toBeGreaterThan(0);
-  for (const cell of await cells.all()) {
-    expect(await cell.getAttribute("title")).toBeTruthy();
+  await expect(page.locator(".stamp")).toContainText("read only");
+  // Every trend speaks: the sentence is the accessible label.
+  const sparks = page.locator(".spark-item");
+  expect(await sparks.count()).toBeGreaterThan(0);
+  for (const item of await sparks.all()) {
+    expect(await item.getAttribute("title")).toBeTruthy();
   }
-  // And every tile opens the surface that holds its evidence — a trend
+  // And every trend opens the surface that holds its evidence — a trend
   // is never the end of the trail.
-  await page.locator('.quality-cell:has-text("Tests passing")').click();
+  await page.locator('.spark-item:has-text("Tests passing")').click();
   await expect(page).toHaveURL(/#tests/);
 });
 

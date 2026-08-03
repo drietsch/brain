@@ -155,7 +155,7 @@ function saveAcks(acks) { localStorage.setItem("eyes-acks", JSON.stringify(acks)
 function ackId(item) { return `${item.severity}|${item.title}|${item.reason}`; }
 function ackButton(item) {
   return h("button", {
-    class: "ack", text: "noted", title: "Acknowledge — hidden here for a week, in this browser only",
+    class: "ack", text: "acknowledge", title: "Absorbed — hidden here for a week, in this browser only",
     onclick: (event) => {
       event.stopPropagation();
       const acks = loadAcks();
@@ -205,6 +205,10 @@ async function render() {
   // panel sat on near-black.
   stage.classList.toggle("dark", route.view === "mri");
   document.body.classList.toggle("in-mri", route.view === "mri");
+  // On Now the verdict band carries freshness, drift and the promise
+  // itself — the topbar saying the same three things a centimetre above
+  // would be the page repeating itself.
+  document.body.classList.toggle("in-now", route.view === "now");
   if (route.view !== "mri" && mriHandle) { mriHandle.destroy(); mriHandle = null; }
   stopSpeaking();
   stage.replaceChildren(h("p", { class: "loading", text: "Reading the graph…" }));
@@ -255,22 +259,30 @@ views.now = async () => {
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
 
-  const parts = [
+  /* The verdict band: one instrument, one reading. The sentence, the
+     claim spine, the trend row and the trust stamp share one ground —
+     everything below it decays in weight. */
+  const verdict = [
     h("h1", { class: "hero", text: data.headline }),
-    h("p", { class: "hero-sub", text: data.subhead }),
+    h("p", { class: "verdict-sub" },
+      data.subhead,
+      data.since_you_looked
+        ? h("span", { class: "visit-inline", text: ` · ${data.since_you_looked}` })
+        : null),
+    census(data.proof),
+    sparkrow(data.quality),
+    h("p", { class: "stamp" }, ...stampLine(data.snapshot)),
   ];
-  if (data.since_you_looked) {
-    parts.push(h("p", { class: "visit-note", text: data.since_you_looked }));
-  }
-  parts.push(census(data.proof));
 
-  const quality = qualityStrip(data.quality);
-  if (quality) parts.push(quality);
-
+  const main = [];
   const inbox = splitAcked(data.needs_you);
+  main.push(h("h2", { class: "section", text: "Needs you" }));
+  if (!inbox.shown.length) {
+    // Calm rendered as content, not as absence.
+    main.push(h("p", { class: "quiet-verdict", text: "Nothing needs you." }));
+  }
   if (inbox.shown.length || inbox.acked.length) {
-    parts.push(h("h2", { class: "section", text: "Needs you" }));
-    parts.push(h("div", { class: "concerns" }, inbox.shown.map((concern) => {
+    main.push(h("div", { class: "concerns" }, inbox.shown.map((concern) => {
       const node = h("div", { class: `concern ${concern.severity}` },
         h("i", { class: `mark ${({ act: "bad", watch: "watch" })[concern.severity] ?? "quiet"}` }),
         h("div", {},
@@ -310,28 +322,50 @@ views.now = async () => {
       return node;
     })));
     const toggle = ackedToggle(inbox.acked);
-    if (toggle) parts.push(toggle);
+    if (toggle) main.push(toggle);
   }
 
-  parts.push(h("h2", { class: "section", text: data.since.known ? `Since your last session, ${data.since.when}` : "Recently" }));
-  parts.push(h("p", { class: "sub", text: data.since.summary }));
-  // The summary already said "nothing changed" when it did — a second
-  // empty-state box saying it again was the same fact three times.
+  /* The lighter registers keep to the side column: the delta, then the
+     pressure as the ranked list it actually is. */
+  const side = [];
+  side.push(h("h2", { class: "section", text: data.since.known ? `Since your last session, ${data.since.when}` : "Recently" }));
+  side.push(h("p", { class: "sub", text: data.since.summary }));
   if (data.since.episodes.length) {
-    parts.push(h("div", { class: "episodes" }, data.since.episodes.map(episodeRow)));
+    side.push(h("div", { class: "episodes" }, data.since.episodes.map(episodeRow)));
   }
 
   if (data.attention.length) {
-    parts.push(h("h2", { class: "section", text: "Where the pressure is" }));
-    parts.push(h("div", { class: "attention" }, data.attention.map((card) =>
-      h("button", { title: `a ${card.noun}`, onclick: () => card.id && openThing(card.id) },
-        h("div", { class: "who" }, glyph(card.glyph), card.label),
-        h("ul", {}, card.reasons.map((reason) => h("li", { text: reason })))))));
+    side.push(h("h2", { class: "section", text: "Where the pressure is" }));
+    side.push(h("div", { class: "pressure-list" }, data.attention.map((card, index) =>
+      h("button", { class: "pressure-row", title: `a ${card.noun}`, onclick: () => card.id && openThing(card.id) },
+        h("span", { class: "pressure-rank", text: String(index + 1) }),
+        h("span", { class: "pressure-body" },
+          h("span", { class: "pressure-path", text: card.label }),
+          h("span", { class: "pressure-why", text: card.reasons.join(" · ") }))))));
   }
 
-  stage.replaceChildren(...parts);
+  stage.replaceChildren(
+    h("section", { class: "verdict" }, ...verdict),
+    h("div", { class: "now-columns" },
+      h("div", { class: "now-main" }, ...main),
+      h("aside", { class: "now-side" }, ...side)));
   settleCensus();
 };
+
+/* The trust stamp: how fresh the reading is, whether the tree has moved
+   past it, and the standing promise — one quiet line under the verdict.
+   On Now the topbar's own whisper of the same facts stands down. */
+function stampLine(snapshot) {
+  const parts = [];
+  const freshness = document.getElementById("freshness")?.textContent;
+  if (freshness) parts.push(h("span", { text: freshness }));
+  if (snapshot.working_tree) {
+    const ahead = snapshot.working_tree.state === "ahead";
+    parts.push(h("span", { class: ahead ? "stamp-drift" : "", text: snapshot.working_tree.sentence }));
+  }
+  parts.push(h("span", { text: "read only" }));
+  return parts.flatMap((part, index) => (index ? [" · ", part] : [part]));
+}
 
 /**
  * The census: every claim the system makes, one mark each.
@@ -344,8 +378,8 @@ function census(proof) {
   if (!proof || !proof.total) return null;
   return h("section", { class: "census" },
     h("p", { class: "census-line", text: proof.sentence }),
-    h("div", { class: "census-groups" }, proof.groups.map((group) =>
-      h("div", { class: "census-group" },
+    h("div", { class: "spine" }, proof.groups.map((group) =>
+      h("div", { class: "spine-group" },
         h("div", { class: "census-cells" }, group.cells.map((cell) =>
           h("button", {
             class: "census-cell", "data-cell": cell.state, title: cell.text,
@@ -378,49 +412,46 @@ function chipFold(chips) {
   return fold;
 }
 
-/* Direction of travel: the quality lines, already judged by the server
-   and ordered worst first. The stroke stays quiet; the arrow carries the
-   alarm — a falling line is loud, a rising one is a footnote. */
-function qualityStrip(lines) {
+/* The sparkrow: the four trends as one instrument line under the spine.
+   The stroke stays quiet; the arrow carries the alarm — a falling line
+   is loud, a rising one is a footnote, and every item opens the surface
+   that holds its evidence: a trend is never the end of the trail. */
+function sparkrow(lines) {
   if (!lines || !lines.length) return null;
-  return h("section", { class: "quality" },
-    h("h2", { class: "section", text: "Direction of travel" }),
-    h("div", { class: "quality-lines" }, lines.map(qualityCell)));
+  return h("div", { class: "sparkrow" }, lines.map(sparkItem));
 }
 
-function qualityCell(line) {
-  const W = 120, H = 28;
+function sparkItem(line) {
+  const W = 92, H = 22;
   const pts = line.points;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.setAttribute("class", "quality-chart");
+  svg.setAttribute("class", "spark");
   svg.setAttribute("role", "img");
   svg.setAttribute("aria-label", line.sentence);
   const min = Math.min(...pts);
   const span = (Math.max(...pts) - min) || 1;
-  const x = (i) => (pts.length === 1 ? W / 2 : 4 + (i / (pts.length - 1)) * (W - 8));
-  const y = (v) => H - 5 - ((v - min) / span) * (H - 10);
+  const x = (i) => (pts.length === 1 ? W / 2 : 3 + (i / (pts.length - 1)) * (W - 6));
+  const y = (v) => H - 4 - ((v - min) / span) * (H - 8);
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("class", "quality-path");
+  path.setAttribute("class", "spark-path");
+  path.setAttribute("pathLength", "1");
   path.setAttribute("d", pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" "));
   svg.append(path);
   const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-  dot.setAttribute("class", "quality-dot");
+  dot.setAttribute("class", "spark-dot");
   dot.setAttribute("cx", x(pts.length - 1).toFixed(1));
   dot.setAttribute("cy", y(pts[pts.length - 1]).toFixed(1));
-  dot.setAttribute("r", "2");
+  dot.setAttribute("r", "1.8");
   svg.append(dot);
   const arrow = { rising: "↗", falling: "↘", flat: "→" }[line.trend] ?? "→";
-  // Every number unfolds: the tile opens the surface that holds its
-  // evidence, so a trend is never the end of the trail.
   const home = ({ tests: "tests", claims: "evidence", features: "features", docs: "library" })[line.id];
-  return h("button", { class: `quality-cell ${line.tone}`, title: line.sentence,
+  return h("button", { class: `spark-item ${line.tone}`, title: line.sentence,
       onclick: () => home && go(home) },
-    h("div", { class: "quality-head" },
-      h("span", { class: "quality-label", text: line.label }),
-      pts.length > 1 ? h("span", { class: "quality-arrow", text: arrow, "aria-hidden": "true" }) : null),
+    h("span", { class: "spark-label", text: line.label }),
     svg,
-    h("p", { class: "quality-now", text: line.current }));
+    pts.length > 1 ? h("span", { class: "spark-arrow", text: arrow, "aria-hidden": "true" }) : null,
+    h("span", { class: "spark-now", text: line.current }));
 }
 
 /* The one orchestrated moment: the census resolves like an instrument

@@ -60,20 +60,26 @@ a path (ADR-030).
 | **MRI** | What shape is this system, and what is moving? |
 | **Search** (⌘K) | Take me to X |
 
-**Now** opens with the **census**: every claim the graph makes, one mark
-each, grouped by kind. It is the dimension strip read at the scale of the
-whole system, and it answers the product's own question in one line —
-*how much of what this thing asserts can it actually show?* Below it: what
-needs a person (identical concerns collapsed and counted), then what moved
-since your last `brain sleep`, then where the pressure is.
+**Now** opens with the **verdict band** — one instrument taking one
+reading, on its own ground. In it: the verdict sentence; the **claim
+spine** — every claim the graph makes as one mark on one line, grouped
+by kind, solid where proven, hollow where not, the dimension strip read
+at the scale of the whole system; the **sparkrow** — tests passing,
+features ready, feature claims, documents in doubt as four trends on a
+single baseline, each ending in an arrow, where the derivative is the
+alarm (a falling line speaks in fault ink; a rising one is a footnote;
+moves too small to mean anything read flat); and the **trust stamp** —
+how fresh the reading is, whether the working tree has moved past it,
+and the standing read-only promise in one quiet line, so on Now the
+topbar's own whisper of those facts stands down. Readings accrue in the
+graph only when a refresh or a sleep found the numbers moved, so the
+series is bounded by change, not by time.
 
-After the census comes **Direction of travel**: four small charts — tests
-passing, features ready, documents in doubt, claims without proof — each
-ending in an arrow. The derivative is the alarm: a falling line leads the
-strip and speaks in fault ink, a rising one is a footnote, and moves too
-small to mean anything read flat. Readings accrue in the graph only when
-a refresh or a sleep found the numbers moved, so the series is bounded by
-change, not by time.
+Below the band the weight decays into two columns: what **needs you**
+(identical concerns collapsed and counted; an empty desk says "Nothing
+needs you" out loud) carries the wide column, while the delta since
+your last `brain sleep` and the **pressure** — a ranked list, because a
+ranking should look like one — keep to the side.
 
 **Work** leads with the control room's two warnings when they fire: a
 collision (two live sessions converging on the same file) and a stall (a

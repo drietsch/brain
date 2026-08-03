@@ -126,6 +126,11 @@ a:hover { text-decoration: underline; }
   color: var(--signal); background: var(--signal-fill);
   border: 1px solid var(--signal-edge); border-radius: 999px; padding: 5px 10px;
 }
+/* Now's verdict band states freshness, drift and the promise itself;
+   the topbar stands down there rather than say everything twice. */
+body.in-now .freshness,
+body.in-now .tree-drift,
+body.in-now .readonly { display: none; }
 .visit-note {
   font: 400 13px/1.5 var(--judgment); color: var(--trace);
   border-left: 2px solid var(--trace-edge); padding-left: 10px; margin: 4px 0 2px;
@@ -230,16 +235,18 @@ body.plain .fix { display: none; }
 }
 .hero-sub { color: var(--meta); font-size: 13px; margin: 0 0 22px; max-width: 62ch; }
 
-.census { margin: 0 0 34px; }
+.census { margin: 0 0 6px; }
 .census-line {
-  font: 400 15px/1.5 var(--judgment); color: var(--body);
-  margin: 0 0 14px; max-width: 60ch;
+  font: 400 17px/1.5 var(--judgment); color: var(--body);
+  margin: 0 0 14px; max-width: 64ch;
 }
-.census-groups { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
-.census-group { display: flex; flex-direction: column; gap: 7px; }
-.census-cells { display: flex; gap: 3px; flex-wrap: wrap; max-width: 260px; }
+/* The claim spine: every claim as one mark on one line, grouped by
+   gaps — the cardiogram the whole page stands on. */
+.spine { display: flex; gap: 30px; flex-wrap: wrap; align-items: flex-end; }
+.spine-group { display: flex; flex-direction: column; gap: 8px; }
+.census-cells { display: flex; gap: 3px; flex-wrap: wrap; max-width: 340px; }
 .census-cell {
-  width: 11px; height: 22px; border-radius: 2px; padding: 0;
+  width: 13px; height: 28px; border-radius: 2px; padding: 0;
   background: var(--proof); border: 1px solid transparent; box-sizing: border-box;
 }
 .census-cell[data-cell="unproven"] { background: transparent; border: 2px solid var(--unproven); }
@@ -262,30 +269,57 @@ body.plain .fix { display: none; }
    Small charts whose arrow, not height, is the alarm. A worsening cell
    speaks in fault ink; an improving one stays almost as quiet as a
    holding one — good news is a footnote here. */
-.quality { margin: 0 0 34px; }
-.quality-lines { display: flex; gap: 18px; flex-wrap: wrap; }
-.quality-cell {
-  display: flex; flex-direction: column; gap: 5px; width: 138px;
-  padding: 9px 11px 8px; border: 1px solid var(--line); border-radius: 4px;
-  background: var(--sunk); text-align: left; cursor: pointer;
+/* ----------------------------------------------- the verdict band
+   The page's one reading: the sentence, the claim spine, the trend row
+   and the trust stamp on their own ground. Everything below decays. */
+.verdict {
+  margin: -24px -26px 30px; padding: 30px 26px 16px;
+  background: var(--sunk); border-bottom: 1px solid var(--line);
 }
-.quality-cell:hover { border-color: var(--control); background: var(--hover); }
-.quality-cell.bad:hover { border-color: var(--fault); background: var(--fault-fill); }
-.quality-cell.bad { border-color: var(--fault-edge); background: var(--fault-fill); }
-.quality-cell.good { border-color: var(--proof-edge); }
-.quality-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.quality-label {
+.verdict .hero { font-size: 40px; max-width: 30ch; margin: 0 0 10px; }
+.verdict-sub { color: var(--meta); font-size: 13px; margin: 0 0 24px; max-width: 82ch; }
+.visit-inline { color: var(--trace); }
+
+/* The sparkrow: four trends on one baseline. The arrow is the alarm. */
+.sparkrow {
+  display: flex; flex-wrap: wrap; gap: 10px 36px; align-items: center;
+  margin: 20px 0 18px;
+}
+.spark-item {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 3px 0; color: var(--meta); text-align: left; cursor: pointer;
+}
+.spark-item:hover .spark-label, .spark-item:hover .spark-now { color: var(--ink); }
+.spark-label {
   font: 500 10px/1.2 var(--record); text-transform: uppercase;
-  letter-spacing: .09em; color: var(--muted);
+  letter-spacing: .08em; color: var(--muted); white-space: nowrap;
 }
-.quality-arrow { font: 600 13px/1 var(--ui); color: var(--meta); }
-.quality-cell.bad .quality-arrow { color: var(--fault); }
-.quality-cell.good .quality-arrow { color: var(--proof); }
-.quality-chart { width: 100%; height: 28px; color: var(--meta); display: block; }
-.quality-cell.bad .quality-chart { color: var(--fault); }
-.quality-path { stroke: currentColor; fill: none; stroke-width: 1.5; }
-.quality-dot { fill: currentColor; }
-.quality-now { margin: 0; font-size: 11.5px; color: var(--meta); }
+.spark { width: 92px; height: 22px; color: var(--meta); flex: none; }
+.spark-path { stroke: currentColor; fill: none; stroke-width: 1.4; }
+.spark-dot { fill: currentColor; }
+.spark-arrow { font: 600 12.5px/1 var(--ui); color: var(--meta); }
+.spark-now { font: 400 11px/1.4 var(--record); color: var(--muted); max-width: 230px; }
+.spark-item.bad, .spark-item.bad .spark-label, .spark-item.bad .spark-arrow { color: var(--fault); }
+.spark-item.good .spark-arrow { color: var(--proof); }
+
+/* The trust stamp: the reading dates itself; a moved tree speaks in
+   signal ink even here. */
+.stamp {
+  margin: 0; font: 400 10px/1.4 var(--record);
+  text-transform: uppercase; letter-spacing: .08em; color: var(--faint);
+}
+.stamp-drift { color: var(--signal); }
+
+/* Below the band: decisions carry the weight, context keeps to the side. */
+.now-columns {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 3fr);
+  gap: 4px 44px; align-items: start;
+}
+.now-main { min-width: 0; }
+.now-side { min-width: 0; }
+.quiet-verdict {
+  font: 400 17px/1.5 var(--judgment); color: var(--muted); margin: 4px 0 20px;
+}
 
 /* ------------------------------------------------------- approvals desk
    A waiting decision leads Work. The diff unfolds beneath its one-line
@@ -612,17 +646,26 @@ button.strip:hover i { transform: scale(1.18); }
 .episode strong { font: 400 14px/1.45 var(--judgment); font-weight: 400; color: var(--ink); }
 .episode p { margin: 3px 0 0; color: var(--meta); font-size: 12px; }
 
-.attention { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
-.attention button {
-  padding: 14px 16px; background: var(--paper); border: 1px solid var(--line);
-  border-radius: 10px; text-align: left;
+/* The pressure is a ranking; it renders as one. */
+.pressure-list { display: flex; flex-direction: column; }
+.pressure-row {
+  display: flex; gap: 12px; align-items: baseline; width: 100%;
+  padding: 9px 2px; border-bottom: 1px solid var(--line-soft); text-align: left;
 }
-.attention button:hover { border-color: var(--control); }
-.attention .who {
-  display: flex; align-items: center; gap: 8px; font: 400 12.5px/1.4 var(--record);
-  color: var(--ink); word-break: break-all;
+.pressure-row:hover .pressure-path { color: var(--trace); }
+.pressure-rank { font: 400 11px/1 var(--record); color: var(--faint); min-width: 14px; }
+.pressure-body { min-width: 0; }
+.pressure-path {
+  display: block; font: 500 12px/1.4 var(--record); color: var(--body);
+  word-break: break-all;
 }
-.attention ul { margin: 8px 0 0; padding: 0; list-style: none; color: var(--meta); font-size: 11.5px; }
+.pressure-why { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Hashes and sources name their author in the record voice. */
+.who {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 400 11px/1.4 var(--record); color: var(--muted); word-break: break-all;
+}
 
 .concerns { display: flex; flex-direction: column; gap: 8px; }
 .concern {
@@ -991,12 +1034,17 @@ body.in-mri { --page: #070b10; }
 /* ------------------------------------------------- narrow components
    Wide instruments scroll inside their own frame on a narrow screen;
    the surface itself never pans sideways. */
+@media (max-width: 1020px) {
+  .now-columns { grid-template-columns: 1fr; }
+}
 @media (max-width: 700px) {
   .hero { font-size: 26px; }
+  .verdict { margin: -14px -12px 22px; padding: 20px 12px 14px; }
+  .verdict .hero { font-size: 28px; }
+  .spark-now { max-width: none; }
   .panel { overflow-x: auto; }
   .thead, .trow { min-width: 620px; }
   .diff-lines { max-width: calc(100vw - 60px); }
-  .quality-cell { flex: 1 1 40%; }
   .moment { max-width: none; }
   .asof-banner { flex-direction: column; align-items: flex-start; }
   .census-cells { max-width: none; }
