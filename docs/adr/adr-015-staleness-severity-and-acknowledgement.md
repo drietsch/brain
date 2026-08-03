@@ -40,3 +40,4 @@ stops being invalidated by it.
   ack path covers the gap at the cost of one explicit judgment.
 - A kind can opt out entirely (`--rot none`) — right for changelog-like
   artifacts whose whole nature is being a snapshot.
+- The severity split is read where the brain orients: `crates/brain-observe/src/wake.rs` reports warn-level rot on every wake.

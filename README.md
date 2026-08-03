@@ -63,7 +63,8 @@ and what comes next.
 ## Where things live
 
 - **Code** — on the filesystem, under git, as ever. The twin observes it:
-  symbols, imports, churn, blast radius.
+  symbols, imports, churn, blast radius. The one CLI over all of it
+  enters at `crates/brain-cli/src/main.rs`.
 - **Deliverables** — plans, ADRs, features, task lists, test protocols,
   agent sessions, notes — are persisted only in the graph. Agents (Claude
   Code, Codex, ...) author and modify them exclusively through the `brain`

@@ -22,6 +22,10 @@ schema-constrained output; nobody hand-writes it — that is the point).
 | `foreign` | `symbol`, `arg` | The only gate to the world. The runtime registry declares each symbol's effect class (`pure`/`external`) and required capability. |
 | `hole` | `id`, `expected?` | Typed hole. Evaluation suspends with `Incomplete`; partial programs are first-class. |
 
+The evaluator and the effect port live in
+`crates/brain-runtime/src/lib.rs`; the compact notation's parser in
+`crates/brain-cli/src/notation.rs`.
+
 ## Semantics
 
 - Eager, deterministic, environment-based tree-walking evaluation.

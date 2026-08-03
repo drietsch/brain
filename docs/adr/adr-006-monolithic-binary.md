@@ -37,3 +37,4 @@ run — anything more is friction that keeps the graph empty.
   narration text.
 - The embedded helpers version with the binary — no skew between the
   installed tool and its pipeline.
+- The one binary's entry is `crates/brain-cli/src/main.rs`.

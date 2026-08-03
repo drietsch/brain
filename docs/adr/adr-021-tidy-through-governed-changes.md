@@ -40,3 +40,4 @@ still intent/receipt-logged.
 - The safe/unsafe boundary is legible: re-render and move are safe
   because the graph can always reproduce or revert them; deletion and
   edits to hand-written content never happen implicitly.
+- Tidy moves through `crates/brain-observe/src/govern.rs`, over the intent/receipt boundary in `crates/brain-store/src/intents.rs`.

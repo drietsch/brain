@@ -41,3 +41,4 @@ Exit codes: 0 ok, 1 error, 2 usage, **3 deliberate refusal**. The
   organs; the gate is the only fail-closed path and it is doubly opt-in.
 - Advisory kinds still get warnings everywhere a violation is visible —
   enforcement changes the consequence, never the observation.
+- The gate consults the registry in `crates/brain-observe/src/kinds.rs`; the pre-commit gate itself lives in `crates/brain-cli/src/hooks.rs`.

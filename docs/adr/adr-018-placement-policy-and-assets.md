@@ -46,3 +46,4 @@ of lingering.
   cost is declaring `--depicts` at capture, one flag.
 - Graph-first kinds cannot format-drift between agents: the file is a
   render, and the render is deterministic.
+- The placement registry lives in `crates/brain-observe/src/kinds.rs`; the read-only projection contract in `crates/brain-observe/src/projection.rs`.

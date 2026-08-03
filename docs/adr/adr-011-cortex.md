@@ -60,3 +60,4 @@ the earn-adoption gate, kept honest.
   `src/` trees (crate-root fallback for item imports), and
   `brain twin refresh --full` reprocesses existing files after any such
   extractor upgrade.
+- The engine lives in `crates/brain-cortex/src/lib.rs`, behind the `Index` trait in `crates/brain-index/src/lib.rs`.

@@ -79,3 +79,4 @@ and ADR-023 keeps it offline.
   during warm-up and shared, so no request pays for it.
 - A browser without WebGL2 gets a sentence naming where the same
   information lives, not a blank canvas.
+- The renderer lives in `crates/brain-eyes/assets/mri.js`, laid out server-side in `crates/brain-eyes/src/query/mri.rs`.

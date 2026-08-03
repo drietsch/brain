@@ -57,7 +57,7 @@ brain feature link twin/self store implemented_by crates/brain-store/src/sync.rs
 brain feature link twin/self store tested_by crates/brain-store/src/lib.rs
 brain feature link twin/self store tested_by crates/brain-store/src/intents.rs
 brain feature link twin/self store tested_by crates/brain-store/src/sync.rs
-brain feature link twin/self store decided_by adr-014-relation-currency-via-edge-tombstones --kind decision
+brain feature link twin/self semantic-twin decided_by adr-014-relation-currency-via-edge-tombstones --kind decision
 brain feature link twin/self store documented_in architecture --kind doc
 ```
 
@@ -140,7 +140,7 @@ brain feature link twin/self artifact-registry decided_by adr-018-placement-poli
 brain feature link twin/self artifact-registry decided_by adr-019-read-only-projection-contract --kind decision
 brain feature link twin/self artifact-registry decided_by adr-020-opt-in-enforcement-gates --kind decision
 brain feature link twin/self artifact-registry decided_by adr-022-template-fitness --kind decision
-brain feature link twin/self artifact-registry documented_in authoring --kind doc
+brain feature link twin/self artifact-registry documented_in twin --kind doc
 ```
 
 ### 8. Governed changes (already registered)
@@ -193,7 +193,7 @@ brain feature link twin/self evidence-and-assets tested_by crates/brain-observe/
 brain feature link twin/self evidence-and-assets tested_by crates/brain-cli/src/docsgen.rs
 brain feature link twin/self evidence-and-assets decided_by adr-005-docs-as-projections --kind decision
 brain feature link twin/self evidence-and-assets decided_by adr-027-evidence-you-can-look-at --kind decision
-brain feature link twin/self evidence-and-assets documented_in architecture --kind doc
+brain feature link twin/self evidence-and-assets documented_in twin --kind doc
 ```
 
 ### 12. The command line

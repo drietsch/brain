@@ -46,3 +46,4 @@ only its hash).
 - Renames leave a `renamed_to` edge (same-run delete + add of identical
   bytes; backfill maps git's R status), so a moved file's identity trail
   survives where before it just leaked.
+- The retraction sweeps live in `crates/brain-observe/src/twin.rs`; `edge_active_at` in `crates/brain-index/src/lib.rs`.

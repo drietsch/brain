@@ -52,6 +52,9 @@ brain observations twin/app/src/main.rs      # full observation timeline
 
 ## The refresh contract
 
+The observer that writes all of this lives in
+`crates/brain-observe/src/twin.rs`.
+
 - **Only drift is recorded.** Unchanged files write nothing; an immediately
   repeated refresh writes zero objects. Changed and new files get fresh
   observations, symbols, and relations; vanished files get `present=false`;
@@ -127,6 +130,18 @@ like all graph objects), and are ordered by the event log — the intended use
 is agents recording what they learned (*"this module is the entry point"*,
 *"tests here are flaky because of X"*) so the next session starts oriented
 instead of from zero.
+
+## Agent sessions — who worked here
+
+Coding-agent transcripts become first-class graph records (ADR-025):
+`brain sessions import . --prefix <p>` reads every transcript that ran in
+the workspace and records who worked, on what instruction, for how long,
+with which tools, and which twinned files it `touched`. Outcomes are
+judgments added later — `brain sessions annotate <id> shipped|abandoned|
+superseded` — so the workforce ledger records what *became* of the work,
+not only that it happened. The reader and importer live in
+`crates/brain-observe/src/sessions.rs`; a session grants nothing and
+gates nothing.
 
 ## Decisions and plans — the *why* documents
 
@@ -214,7 +229,8 @@ reverse-relation query.
 
 ## Templates, the definition of done, and the feature registry
 
-The deliverable contract itself lives in the graph. `brain init` (or `brain
+The deliverable contract itself lives in the graph
+(`crates/brain-observe/src/templates.rs`). `brain init` (or `brain
 template seed`) writes `template` entities under `brain/templates/` — each
 with a `content` scaffold, machine-checkable `requires` fields, and the
 entity kind it `applies_to`. Because templates are graph objects:
@@ -254,7 +270,8 @@ cell change in a spreadsheet.
 ## Tests and test protocols
 
 Tests are graph citizens on both axes — what test code *exists*, and what
-happened when it *ran*:
+happened when it *ran* (both live in
+`crates/brain-observe/src/testing.rs`):
 
 **Static (zero-config, at refresh).** Twinned files are classified by
 framework — Rust `#[test]`, Playwright/Jest specs (`.test.` / `.spec.` /
@@ -270,7 +287,9 @@ covering spec, the concentrated-risk list.
 pytest, PHPUnit, and Jest all export), or Playwright's own JSON reporter.
 Prefer the JSON one for browser tests: it is the only report that names
 the screenshots, videos and traces a run produced, and those become
-assets owned by the case that produced them. With `brain hook install --tests`,
+assets owned by the case that produced them (capture and declaration
+live in `crates/brain-observe/src/assets.rs`; the narrated tour in
+`crates/brain-observe/src/tour.rs`). With `brain hook install --tests`,
 this happens automatically on every commit: the test command (inferred
 from the repo's manifest, or set with `--test-cmd`) is stored as a
 `test_command` observation on the repo entity — change it any time
@@ -311,7 +330,8 @@ What the graph gives you:
 
 The built-in detectors (ADRs, plans, skills, agent config, tests) are just
 conveniences. Any *other* artifact family — runbooks, incidents, RFCs,
-postmortems — can be taught to the store as **data on its template**:
+postmortems — can be taught to the store as **data on its template**,
+read through the kind registry in `crates/brain-observe/src/kinds.rs`:
 
 ```bash
 brain template set runbook \
@@ -426,6 +446,10 @@ exact memory it thinks against):
 | **Consolidation** | `brain sleep <prefix>` — distill history into durable memory |
 | **Association** | `brain related <name>` — what is related, and why |
 | **Hygiene** | `brain tidy <prefix>` — drifted projections, retired artifacts, legacy assets; fixes are governed changes (ADR-021) |
+
+The organs live beside the observer:
+`crates/brain-observe/src/attention.rs`, `crates/brain-observe/src/sleep.rs`,
+`crates/brain-observe/src/wake.rs`, `crates/brain-observe/src/assoc.rs`.
 
 ```bash
 brain wake twin/app            # one command, the whole present (~40 lines)

@@ -35,3 +35,4 @@ offline fallback.
   happens instead of when a reader trips over it.
 - Media artifacts (png, webm, wav) are twinned; docs/generated/ carries a
   do-not-edit contract — the graph is the source, files are output.
+- The projection pipeline lives in `crates/brain-cli/src/docsgen.rs`.

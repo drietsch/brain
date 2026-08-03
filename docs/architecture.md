@@ -21,22 +21,25 @@ gradient — describe → observe → govern → absorb — not an event.
 
 ## The six founding components
 
-1. **Core calculus** (`brain-core::object::Term`) — 12 operations, no ambient
-   authority, typed holes, references by content hash.
-2. **Canonical encoding + CAS** (`brain-core::canonical`, `brain-store`) —
+1. **Core calculus** (`crates/brain-core/src/object.rs`) — 12 operations,
+   no ambient authority, typed holes, references by content hash.
+2. **Canonical encoding + CAS** (`crates/brain-core/src/canonical.rs`,
+   `crates/brain-store/src/lib.rs`) —
    identical meaning ⇒ identical bytes ⇒ identical `NodeId`. The store
    persists exactly the canonical bytes and verifies them on read.
 3. **Namespace layer** (`brain-store`) — the graph as a codebase: name→hash
    maps as immutable `Namespace` objects chained by `parent`. Version control,
    branching and history are this chain; nothing is ever edited in place.
-4. **Effect boundary** (`brain-store::intents`, `brain-runtime::EffectPort`) —
+4. **Effect boundary** (`crates/brain-store/src/intents.rs`,
+   `brain-runtime::EffectPort`) —
    durable intent before, receipt after, indeterminate on crash, reconcile
-   before retry.
+   before retry. Governed changes to twinned software ride this boundary
+   (`crates/brain-observe/src/govern.rs`).
 5. **Observer frame** (`brain-observe`) — reflective mode, the project's
    first deliverable: drift-aware `twin refresh`/`status`, per-language
    symbol and import extraction into `Relation` edges, agent notes as
    durable observations, and deletion-as-observation. See `docs/twin.md`.
-6. **Replication** (`brain-store::sync`) — content-addressed sync between
+6. **Replication** (`crates/brain-store/src/sync.rs`) — content-addressed sync between
    stores; how code moves, replacing deployment. Objects are a conflict-free
    set union (immutable + content-addressed; every ingest re-hashed, with a
    distinct canonicalization-epoch error when a source predates the current
@@ -52,7 +55,9 @@ gradient — describe → observe → govern → absorb — not an event.
 
 The CAS and event log are the only systems of record. Everything that makes
 them queryable — reverse edges, subject lookups, eventually similarity search
-— is a *derived* structure behind the `brain-index::Index` trait: disposable,
+— is a *derived* structure behind the `Index` trait in
+`crates/brain-index/src/lib.rs`, with the persistent engine in
+`crates/brain-cortex/src/lib.rs`: disposable,
 rebuilt by replaying `Store::put_history()`, and never a second source of
 truth. Backends must be idempotent under replay. `MemIndex` is the naive
 reference implementation and the baseline any embedded graph engine

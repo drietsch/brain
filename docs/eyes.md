@@ -183,13 +183,15 @@ to see its parts in the same grid.
 - **It never presents a guess as a record.** Anything Eyes worked out
   rather than read — the CLI command equivalent to a past change, for
   instance — is labelled as reconstructed.
-- **It never composes its own wording.** All prose comes from `say.rs` on
+- **It never composes its own wording.** All prose comes from
+  `crates/brain-eyes/src/say.rs` on
   the server, so the CLI and Eyes cannot drift apart. A test fails the
   build if machine vocabulary reaches a human surface.
 
 ## How it stays fast and truthful
 
-One `Store` and one warm `Cortex` are held for the life of a graph
+One `Store` and one warm `Cortex` are held (in
+`crates/brain-eyes/src/state.rs`) for the life of a graph
 version. Freshness is a `stat` on the append-only event log. Everything
 derived — insights, attention, coherence findings, the kind registry,
 fitness, the event scan, the MRI layout — is computed once per version

@@ -83,3 +83,4 @@ occupy a worker thread for a local tool that changes on commit.
   come from the kind registry.
 - Adding a phrase means editing `say.rs`, not a template — and any jargon that
   escapes there fails the build.
+- The one voice lives in `crates/brain-eyes/src/say.rs`; the per-version caches in `crates/brain-eyes/src/state.rs`.

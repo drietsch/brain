@@ -93,3 +93,4 @@ was recorded or worked out.**
   defensively — unknown fields are ignored, a missing `results` array skips
   the case — and JUnit remains supported for every framework including
   Playwright.
+- Capture and declaration live in `crates/brain-observe/src/assets.rs`; the narrated tour in `crates/brain-observe/src/tour.rs`.

@@ -81,3 +81,4 @@ principal.**
   session.
 - This is deliberately *not* an authorization model. A session records who
   worked; it grants nothing and gates nothing. Approvals remain unmodelled.
+- The transcript reader and importer live in `crates/brain-observe/src/sessions.rs`.

@@ -69,3 +69,4 @@ intent/receipt boundary; an HTTP handler never writes around governance.
   binding, authentication, and write capabilities are separate decisions.
 - The design draft is a visual reference, not runtime source or an
   authoritative schema.
+- The GET-only boundary is enforced in `crates/brain-eyes/src/http.rs`.
