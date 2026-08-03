@@ -75,7 +75,13 @@ small to mean anything read flat. Readings accrue in the graph only when
 a refresh or a sleep found the numbers moved, so the series is bounded by
 change, not by time.
 
-**Work** opens with the approvals desk when a governed change is waiting:
+**Work** leads with the control room's two warnings when they fire: a
+collision (two live sessions converging on the same file) and a stall (a
+live session running long with nothing written). Both are derived from
+imported transcripts, so each sentence carries its own caveat — the
+picture is as fresh as the last `brain sessions import`; watching
+transcripts live remains future work. Then the approvals desk when a
+governed change is waiting:
 the recorded diff (unfolding beneath its one-line summary), the pre-apply
 briefing of the target file — what an apply would reach, what covers it,
 what past sessions learned there — and the exact `brain change apply`
@@ -120,7 +126,9 @@ with what template fitness learned about each contract.
 A claim is never shown stronger than what backs it.
 
 **Compare** puts two moments side by side. The picker is keyed by cause,
-not by clock: the commits the twin saw as HEAD, and named baselines
+not by clock — and when history grows long it trims its commit tail (a
+named baseline always survives the trim, and the headline counts what
+was dropped): the commits the twin saw as HEAD, and named baselines
 (`brain baseline add <prefix> <name>` records one; the surface renders
 the command for the moment you are looking at). A past view opens with a
 loud banner restating its own moment, and closes with what a past moment
@@ -134,6 +142,15 @@ then-and-now rows. The past is judged by today's definition of done.
 so the anatomy never rearranges while you read it. Height is dependency
 depth. Colour is the lens you choose. Motion means something happened.
 Nothing is hidden as you zoom — detail resolves (ADR-026).
+
+The **plain register** is the same facts told for a stakeholder: one
+topbar toggle and the nav recedes to Roadmap, Features, and the Tour
+while operator affordances — commands, badges — disappear. Nothing is
+computed differently; it is a telling, not a filter, and it is
+per-viewer in the browser like the theme. The cockpit also reads on a
+phone: below 700 px the rail becomes a scrollable strip and wide
+instruments scroll inside their own frame — the page never pans
+sideways.
 
 The **inspector** opens beside any surface without navigating away, and
 **Brief me** reads the current screen aloud using the browser's own

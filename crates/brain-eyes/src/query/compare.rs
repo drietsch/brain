@@ -57,13 +57,22 @@ pub fn moments(loaded: &Loaded) -> Result<MomentsView, String> {
         }
     }
     moments.sort_by(|a, b| b.at_ms.cmp(&a.at_ms).then(a.label.cmp(&b.label)));
+    let total = moments.len();
+    let moments = cap(moments);
     let headline = if moments.is_empty() {
         "Nothing to return to yet — commits and baselines appear here as the graph records them."
             .to_string()
+    } else if total > moments.len() {
+        format!(
+            "{} worth returning to; the newest {} are listed, {} older ones are not.",
+            say::count(total as u64, "moment", "moments"),
+            moments.len(),
+            total - moments.len()
+        )
     } else {
         format!(
             "{} worth returning to.",
-            say::count(moments.len() as u64, "moment", "moments")
+            say::count(total as u64, "moment", "moments")
         )
     };
     Ok(MomentsView {
@@ -71,6 +80,27 @@ pub fn moments(loaded: &Loaded) -> Result<MomentsView, String> {
         headline,
         moments,
     })
+}
+
+/// Trim a long picker to the newest moments. Baselines always make the
+/// cut — a person named them on purpose; only the commit tail is
+/// dropped, and the headline counts what was.
+pub(crate) fn cap(moments: Vec<MomentRef>) -> Vec<MomentRef> {
+    const SHOWN: usize = 40;
+    if moments.len() <= SHOWN {
+        return moments;
+    }
+    let mut commits = 0;
+    moments
+        .into_iter()
+        .filter(|m| {
+            if m.kind == "baseline" {
+                return true;
+            }
+            commits += 1;
+            commits <= SHOWN
+        })
+        .collect()
 }
 
 /// The comparison: `from` is "then", `to` is "now" (usually `live`).

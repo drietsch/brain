@@ -269,6 +269,77 @@ fn now_carries_quality_lines() {
     assert_eq!(first.trend, "falling");
 }
 
+/// Two live sessions on one file is a collision; a long live session
+/// with nothing written may be stuck. Both signals carry the caveat
+/// that they are only as fresh as the last import.
+#[test]
+fn work_warns_when_live_sessions_collide_or_stall() {
+    let f = fixture();
+    let store = Store::open(f._store_dir.path()).unwrap();
+    let root = f._workspace.path();
+    let now = brain_store::now_ms();
+    let shared = root
+        .join("crates/core-lib/src/lib.rs")
+        .to_string_lossy()
+        .to_string();
+
+    let session = |id: &str, agent: &str, started: u64, touched: Vec<String>| {
+        brain_observe::sessions::SessionFacts {
+            id: id.to_string(),
+            agent: agent.to_string(),
+            cwd: root.to_string_lossy().to_string(),
+            model: None,
+            branch: None,
+            started_at_ms: started,
+            ended_at_ms: now,
+            turns: 2,
+            tool_calls: 5,
+            tools: std::collections::BTreeMap::new(),
+            touched: touched.into_iter().collect(),
+            objective: "test the control room".to_string(),
+            lines: 10,
+        }
+    };
+    for facts in [
+        session("s-one", "claude", now - 5 * 60 * 1000, vec![shared.clone()]),
+        session("s-two", "codex", now - 5 * 60 * 1000, vec![shared.clone()]),
+        session("s-idle", "claude", now - 2 * 60 * 60 * 1000, vec![]),
+    ] {
+        brain_observe::sessions::record_facts(&store, "twin/app", &facts, root).unwrap();
+    }
+
+    let view = f.state.read(crate::query::work::build).unwrap();
+    let collision = view
+        .signals
+        .iter()
+        .find(|s| s.severity == "act")
+        .expect("two live sessions on one file collide");
+    assert!(
+        collision.title.contains("converging on"),
+        "{}",
+        collision.title
+    );
+    assert!(
+        collision.reason.contains("Claude Code") && collision.reason.contains("Codex"),
+        "{}",
+        collision.reason
+    );
+    assert!(
+        collision.reason.contains("as fresh as the last import"),
+        "the caveat is part of the sentence: {}",
+        collision.reason
+    );
+    let stuck = view
+        .signals
+        .iter()
+        .find(|s| s.title.contains("may be stuck"))
+        .expect("the idle session is flagged");
+    assert_eq!(stuck.severity, "watch");
+    assert!(stuck.reason.contains("without touching a file"), "{}", stuck.reason);
+    // Collisions outrank stalls in the list.
+    assert_eq!(view.signals.first().unwrap().severity, "act");
+}
+
 /// A symbol's name finds the file that declares it — the graph's
 /// ranking, not a label match, and the reason says so in words.
 #[test]
@@ -495,6 +566,27 @@ fn moments_lists_baselines_without_git() {
     assert!(
         view.moments.iter().all(|m| m.kind != "commit"),
         "the fixture workspace has no git history"
+    );
+}
+
+/// A long picker trims its commit tail and never a named baseline.
+#[test]
+fn the_moment_picker_keeps_every_baseline_when_it_trims() {
+    let moment = |kind: &str, at: u64| crate::dto::MomentRef {
+        value: at.to_string(),
+        kind: kind.to_string(),
+        label: format!("{kind} {at}"),
+        at_ms: at,
+        when: String::new(),
+    };
+    let mut moments: Vec<crate::dto::MomentRef> =
+        (0..50).map(|i| moment("commit", 1000 - i)).collect();
+    moments.push(moment("baseline", 3));
+    let capped = crate::query::compare::cap(moments);
+    assert_eq!(capped.iter().filter(|m| m.kind == "commit").count(), 40);
+    assert!(
+        capped.iter().any(|m| m.kind == "baseline"),
+        "the old baseline survives the trim"
     );
 }
 

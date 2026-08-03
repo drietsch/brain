@@ -549,6 +549,10 @@ pub struct Approval {
 pub struct WorkView {
     pub snapshot: Snapshot,
     pub headline: String,
+    /// The control room's derived warnings: live sessions converging on
+    /// the same file, or running long with nothing to show. Only as
+    /// fresh as the last import, and each sentence says so.
+    pub signals: Vec<Concern>,
     /// Proposed changes waiting for a decision, oldest first — the
     /// longest-waiting decision leads.
     pub approvals: Vec<Approval>,

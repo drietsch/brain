@@ -635,6 +635,36 @@ pub fn change_stage(status: &str) -> (&'static str, &'static str) {
     }
 }
 
+/// Two live sessions converging on one file: (title, reason). The
+/// freshness caveat is part of the sentence — a signal read from
+/// imported transcripts can only be as fresh as the last import.
+pub fn collision(file_label: &str, names: &[String]) -> (String, String) {
+    let title = format!(
+        "{} are converging on {file_label}",
+        count(names.len() as u64, "agent", "agents")
+    );
+    let all_same = names.windows(2).all(|w| w[0] == w[1]);
+    let who = if all_same {
+        format!("{} {} sessions at once", names.len(), names[0])
+    } else {
+        names.join(" and ")
+    };
+    (
+        title,
+        format!("{who} touched it inside the last twenty minutes — decide who owns it; the picture is as fresh as the last import"),
+    )
+}
+
+/// A live session running long with nothing written: (title, reason).
+pub fn stuck(agent: &str, ran_for: &str) -> (String, String) {
+    (
+        format!("{agent} may be stuck"),
+        format!(
+            "running for {ran_for} without touching a file — look at what it is doing; the picture is as fresh as the last import"
+        ),
+    )
+}
+
 /// The reasons the graph's search gives, said without machine
 /// vocabulary. Unknown reasons pass through — "declares foo" already
 /// reads as a sentence.

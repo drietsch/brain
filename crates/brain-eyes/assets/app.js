@@ -1136,6 +1136,25 @@ views.work = async () => {
     h("p", { class: "sub", text: "Agent sessions, governed changes, and plans still open." }),
   ];
 
+  // The live warnings lead everything: intervene or trust is decided
+  // here, in seconds.
+  if (data.signals.length) {
+    parts.push(h("h2", { class: "section", text: "Live now" }));
+    parts.push(h("div", { class: "concerns" }, data.signals.map((item) => {
+      const node = h("div", { class: `concern ${item.severity}` },
+        h("i", { class: `mark ${({ act: "bad", watch: "watch" })[item.severity] ?? "quiet"}` }),
+        h("div", {},
+          h("h3", { text: item.title }),
+          h("p", { text: item.reason }),
+          fixLine(item.fix_command)));
+      if (item.target) {
+        node.style.cursor = "pointer";
+        node.addEventListener("click", () => openThing(item.target.id));
+      }
+      return node;
+    })));
+  }
+
   // The desk leads: a decision that is waiting outranks history.
   if (data.approvals.length) {
     parts.push(h("h2", { class: "section", text: "Waiting for your decision" }));
@@ -1934,6 +1953,27 @@ themeButton.addEventListener("click", () => {
   const next = dark ? "light" : "dark";
   document.documentElement.dataset.theme = next;
   localStorage.setItem("eyes-theme", next);
+});
+
+/* The register: the same facts in two tellings. Plain view leads with
+   the features, the roadmap, and the tour; the operator chrome —
+   commands, badges, dense surfaces — recedes. Per-viewer, in this
+   browser only, like the theme. */
+const registerButton = document.getElementById("register");
+function applyRegister(plain) {
+  document.body.classList.toggle("plain", plain);
+  registerButton.textContent = plain ? "Full view" : "Plain view";
+}
+applyRegister(localStorage.getItem("eyes-register") === "plain");
+if (document.body.classList.contains("plain")
+    && ["", "#", "#now"].includes(location.hash)) {
+  go("features");
+}
+registerButton.addEventListener("click", () => {
+  const plain = !document.body.classList.contains("plain");
+  localStorage.setItem("eyes-register", plain ? "plain" : "full");
+  applyRegister(plain);
+  go(plain ? "features" : "now");
 });
 
 /* Counts on the rail, so the nav says where the trouble is. */

@@ -178,6 +178,41 @@ a:hover { text-decoration: underline; }
 .page { max-width: 1180px; }
 .loading { color: var(--muted); }
 
+/* ---- the plain register: same facts, told for a stakeholder ----
+   The nav recedes to the features, the roadmap, and the tour; the
+   operator affordances — commands, badges — disappear. Nothing is
+   computed differently: this is a telling, not a filter. */
+.rail button[data-plain-only] { display: none; }
+body.plain .rail button:not([data-plain]):not([data-plain-only]) { display: none; }
+body.plain .rail button[data-plain-only] { display: flex; }
+body.plain .rail-count,
+body.plain .command,
+body.plain .fix { display: none; }
+
+/* ---- narrow viewports: the cockpit in one column ----
+   The rail becomes a scrollable strip under the topbar. Nothing is
+   computed differently and almost nothing is hidden — the phone gets
+   the same truth in a narrower telling. */
+@media (max-width: 700px) {
+  body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: "top" "rail" "stage";
+  }
+  .topbar { flex-wrap: wrap; padding: 8px 12px; gap: 8px; row-gap: 6px; }
+  .finder { min-width: 0; flex: 1 1 140px; }
+  .finder kbd { display: none; }
+  .readonly { display: none; }
+  .rail {
+    flex-direction: row; overflow-x: auto; gap: 2px;
+    border-right: 0; border-bottom: 1px solid var(--line);
+    padding: 6px 8px;
+  }
+  .rail button { flex: none; white-space: nowrap; padding: 7px 9px; }
+  .rail-count { margin-left: 6px; }
+  .stage { padding: 14px 12px 64px; }
+}
+
 /* ---- end of the shell ----------------------------------------------
    `stage`, `rail`, `topbar` and `page` name the application frame. A
    component that reuses one of those names does not style itself, it
@@ -925,3 +960,17 @@ body.in-mri { --page: #070b10; }
 .glyph { display: inline-flex; width: 15px; height: 15px; color: var(--meta); }
 .rail-mri .rail-mark { opacity: .9; }
 .speakable { outline: 2px solid var(--trace); outline-offset: 3px; border-radius: 4px; }
+
+/* ------------------------------------------------- narrow components
+   Wide instruments scroll inside their own frame on a narrow screen;
+   the surface itself never pans sideways. */
+@media (max-width: 700px) {
+  .hero { font-size: 26px; }
+  .panel { overflow-x: auto; }
+  .thead, .trow { min-width: 620px; }
+  .diff-lines { max-width: calc(100vw - 60px); }
+  .quality-cell { flex: 1 1 40%; }
+  .moment { max-width: none; }
+  .asof-banner { flex-direction: column; align-items: flex-start; }
+  .census-cells { max-width: none; }
+}

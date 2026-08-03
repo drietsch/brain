@@ -503,6 +503,27 @@ pub fn import(
     Ok(out)
 }
 
+/// Record one session's parsed facts — the unit `import` applies per
+/// transcript, public so tests and other ingest paths can record a
+/// session without a transcript file on disk.
+pub fn record_facts(
+    store: &Store,
+    prefix: &str,
+    facts: &SessionFacts,
+    workspace: &Path,
+) -> Result<bool, StoreError> {
+    let mut index = MemIndex::new();
+    replay(store, &mut index)?;
+    let files = crate::twin::twinned_paths(store, prefix)?;
+    let mut written = BTreeSet::new();
+    let workspace = workspace
+        .canonicalize()
+        .unwrap_or_else(|_| workspace.to_path_buf());
+    record(
+        store, &index, &mut written, prefix, facts, &files, &workspace, now_ms(),
+    )
+}
+
 pub fn session_sid(prefix: &str, id: &str) -> StableId {
     StableId::derive(&["session", prefix, id])
 }

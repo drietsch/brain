@@ -23,6 +23,9 @@ use brain_observe::{lifecycle, sessions, twin};
 /// considered to be running.
 const LIVE_WITHIN_MS: u64 = 20 * 60 * 1000;
 
+/// A live session older than this that has touched nothing may be stuck.
+const STUCK_AFTER_MS: u64 = 30 * 60 * 1000;
+
 pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
     let store = &loaded.store;
     let index = &loaded.index;
@@ -35,12 +38,35 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
         brain_core::ids::StableId,
         std::collections::BTreeSet<brain_core::ids::StableId>,
     > = std::collections::BTreeMap::new();
+    // The control room's two derived warnings, gathered as the sessions
+    // stream past: who is converging on the same file right now, and who
+    // has run long with nothing to show. Both are only as fresh as the
+    // last import — the sentence says so.
+    let mut live_files: std::collections::BTreeMap<brain_core::ids::StableId, Vec<String>> =
+        std::collections::BTreeMap::new();
+    let mut maybe_stuck: Vec<(String, String)> = Vec::new();
     for row in rows.iter().take(25) {
         let live = now.saturating_sub(row.ended_at_ms) < LIVE_WITHIN_MS;
         let touched_all = twin::live_from(index, store, &row.sid, "touched")
             .map_err(|e| e.to_string())?;
         for (_, file) in &touched_all {
             editors.entry(file.clone()).or_default().insert(row.sid.clone());
+        }
+        if live {
+            for (_, file) in &touched_all {
+                live_files
+                    .entry(file.clone())
+                    .or_default()
+                    .push(say::agent_noun(&row.agent).to_string());
+            }
+            if touched_all.is_empty()
+                && now.saturating_sub(row.started_at_ms) > STUCK_AFTER_MS
+            {
+                maybe_stuck.push((
+                    say::agent_noun(&row.agent).to_string(),
+                    say::span(row.started_at_ms, row.ended_at_ms),
+                ));
+            }
         }
         let touched: Vec<Ref> = touched_all
             .iter()
@@ -122,6 +148,39 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
         });
     }
 
+    // Intervene or trust: the two warnings that decision needs, ranked
+    // collision first. A signal can only be as fresh as the last import,
+    // and each sentence carries that caveat.
+    let mut signals: Vec<Concern> = Vec::new();
+    for (file, names) in &live_files {
+        if names.len() < 2 {
+            continue;
+        }
+        let label = query::make_ref(index, store, file).label;
+        let (title, reason) = say::collision(&label, names);
+        signals.push(Concern {
+            severity: "act".to_string(),
+            title,
+            reason,
+            fix_command: Some(format!("brain sessions import . --prefix {prefix}")),
+            target: Some(query::make_ref(index, store, file)),
+            repeats: 1,
+            also: Vec::new(),
+        });
+    }
+    for (agent, ran_for) in &maybe_stuck {
+        let (title, reason) = say::stuck(agent, ran_for);
+        signals.push(Concern {
+            severity: "watch".to_string(),
+            title,
+            reason,
+            fix_command: Some(format!("brain sessions import . --prefix {prefix}")),
+            target: None,
+            repeats: 1,
+            also: Vec::new(),
+        });
+    }
+
     let approvals = approvals(loaded)?;
     // The desk shows proposed changes in full; listing them again below
     // would be the same decision twice.
@@ -188,6 +247,7 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
     Ok(WorkView {
         snapshot: loaded.snapshot.clone(),
         headline,
+        signals,
         approvals,
         sessions: sessions_out,
         changes,
