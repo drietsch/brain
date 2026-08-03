@@ -26,7 +26,30 @@ function chip(label, tone) {
 
 function fixLine(command) {
   if (!command) return null;
-  return h("code", { class: "fix" }, h("span", { text: "run" }), command);
+  return h("span", { class: "cmd-row" },
+    h("code", { class: "fix" }, h("span", { text: "run" }), command),
+    copyButton(command));
+}
+
+/* One toast, reused: the copy promise said out loud, then gone. */
+let toastTimer = null;
+function showToast(message) {
+  document.querySelector(".toast")?.remove();
+  clearTimeout(toastTimer);
+  const node = h("div", { class: "toast", role: "status", text: message });
+  document.body.append(node);
+  toastTimer = setTimeout(() => node.remove(), 2400);
+}
+
+function copyButton(command) {
+  return h("button", {
+    class: "copy-btn", title: "Copy the command — you run it; Eyes never writes",
+    onclick: (event) => {
+      event.stopPropagation();
+      navigator.clipboard?.writeText(command);
+      showToast("Copied — you run it; Eyes never writes.");
+    },
+  }, icon("copy", "sm"), "Copy");
 }
 
 async function api(path) {
@@ -155,7 +178,7 @@ function saveAcks(acks) { localStorage.setItem("eyes-acks", JSON.stringify(acks)
 function ackId(item) { return `${item.severity}|${item.title}|${item.reason}`; }
 function ackButton(item) {
   return h("button", {
-    class: "ack", text: "acknowledge", title: "Absorbed — hidden here for a week, in this browser only",
+    class: "ack", title: "Absorbed — hidden here for a week, in this browser only",
     onclick: (event) => {
       event.stopPropagation();
       const acks = loadAcks();
@@ -163,7 +186,7 @@ function ackButton(item) {
       saveAcks(acks);
       render();
     },
-  });
+  }, icon("dismiss", "sm"), "not now");
 }
 function splitAcked(items) {
   const acks = loadAcks();
@@ -266,6 +289,11 @@ views.now = async () => {
     sparkrow(data.quality),
     h("p", { class: "stamp" }, ...stampLine(data.snapshot)),
   ];
+  // The band wears its reading's tone: fault washes the corner only
+  // when a trend is falling or a concern demands a decision now.
+  const bandTone = (data.quality ?? []).some((line) => line.tone === "bad")
+      || data.needs_you.some((concern) => concern.severity === "act")
+    ? "fault" : "calm";
 
   /* The queue: Now absorbed the standing work list. The rich cards from
      needs_you lead; anything the wider queue holds that they do not
@@ -301,27 +329,29 @@ views.now = async () => {
   /* The lighter registers keep to the side column: the delta, then the
      pressure as the ranked list it actually is. */
   const side = [];
-  side.push(h("h2", { class: "section", text: data.since.known ? `Since your last session, ${data.since.when}` : "Recently" }));
-  side.push(h("p", { class: "sub", text: data.since.summary }));
-  if (data.since.episodes.length) {
-    side.push(h("div", { class: "episodes" }, data.since.episodes.map(episodeRow)));
-  }
+  side.push(h("section", { class: "side-panel" },
+    h("h2", { class: "section", text: data.since.known ? `Since your last session, ${data.since.when}` : "Recently" }),
+    h("p", { class: "sub", text: data.since.summary }),
+    data.since.episodes.length
+      ? h("div", { class: "episodes" }, data.since.episodes.map(episodeRow))
+      : null));
 
   if (data.attention.length) {
-    side.push(h("h2", { class: "section", text: "Where the pressure is" }));
-    side.push(h("div", { class: "pressure-list" }, data.attention.map((card, index) =>
-      h("button", { class: "pressure-row", title: `a ${card.noun}`, onclick: () => card.id && openThing(card.id) },
-        h("span", { class: "pressure-rank", text: String(index + 1) }),
-        h("span", { class: "pressure-body" },
-          h("span", { class: "pressure-path", text: card.label }),
-          h("span", { class: "pressure-why", text: card.reasons.join(" · ") }))))));
+    side.push(h("section", { class: "side-panel" },
+      h("h2", { class: "section", text: "Where the pressure is" }),
+      h("div", { class: "pressure-list" }, data.attention.map((card, index) =>
+        h("button", { class: "pressure-row", title: `a ${card.noun}`, onclick: () => card.id && openThing(card.id) },
+          h("span", { class: "pressure-rank", text: String(index + 1) }),
+          h("span", { class: "pressure-body" },
+            h("span", { class: "pressure-path", text: card.label }),
+            h("span", { class: "pressure-why", text: card.reasons.join(" · ") })))))));
   }
 
-  stage.replaceChildren(
-    h("section", { class: "verdict" }, ...verdict),
+  stage.replaceChildren(h("div", { class: "page" },
+    h("section", { class: "verdict", "data-tone": bandTone }, ...verdict),
     h("div", { class: "now-columns" },
       h("div", { class: "now-main" }, ...main),
-      h("aside", { class: "now-side" }, ...side)));
+      h("aside", { class: "now-side" }, ...side))));
   settleCensus();
 };
 
@@ -400,8 +430,9 @@ function stampLine(snapshot) {
  */
 function census(proof) {
   if (!proof || !proof.total) return null;
+  const missing = proof.groups.some((group) => group.proven < group.total);
   return h("section", { class: "census" },
-    h("p", { class: "census-line", text: proof.sentence }),
+    h("p", { class: "census-line", "data-tone": missing ? "fault" : "calm", text: proof.sentence }),
     h("div", { class: "spine" }, proof.groups.map((group) =>
       h("div", { class: "spine-group" },
         h("div", { class: "census-cells" }, group.cells.map((cell) =>
@@ -417,7 +448,14 @@ function census(proof) {
           }))),
         h("p", { class: "census-label" },
           h("span", { text: group.label }),
-          h("span", { class: "census-count", text: `${group.proven}/${group.total}` }))))));
+          h("span", { class: "census-count", "data-tone": group.proven < group.total ? "fault" : "calm",
+            text: `${group.proven}/${group.total}` }))))),
+    // The legend: the state grammar spelled out once, under the spine.
+    h("p", { class: "census-legend" },
+      h("i", { "data-swatch": "failing" }), " failing",
+      h("i", { "data-swatch": "stale" }), " stale",
+      h("i", { "data-swatch": "unproven" }), " unproven",
+      h("i", { "data-swatch": "proven" }), " proven"));
 }
 
 /* A concern's subjects as a foldable shelf of openable chips. Short
@@ -430,7 +468,8 @@ function chipFold(chips) {
       h("button", {
         class: "chip-ref", title: `a ${ref.noun}`,
         onclick: (event) => { event.stopPropagation(); openThing(ref.id); },
-      }, glyph(ref.glyph), h("span", { text: ref.label })))));
+      }, glyph(ref.glyph), h("span", { text: ref.label }),
+         h("span", { class: "chip-arrow", "aria-hidden": "true", text: "›" })))));
   const speak = () => {
     summary.textContent = fold.open ? "fold them away" : `show all ${chips.length}`;
   };
@@ -450,7 +489,7 @@ function sparkrow(lines) {
 }
 
 function sparkItem(line) {
-  const W = 92, H = 22;
+  const W = 118, H = 22;
   const pts = line.points;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -461,6 +500,15 @@ function sparkItem(line) {
   const span = (Math.max(...pts) - min) || 1;
   const x = (i) => (pts.length === 1 ? W / 2 : 3 + (i / (pts.length - 1)) * (W - 6));
   const y = (v) => H - 4 - ((v - min) / span) * (H - 8);
+  // The area under the trend, barely there — ground, not data.
+  if (pts.length > 1) {
+    const area = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    area.setAttribute("class", "spark-area");
+    area.setAttribute("points", `${x(0).toFixed(1)},${H} ` +
+      pts.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ") +
+      ` ${x(pts.length - 1).toFixed(1)},${H}`);
+    svg.append(area);
+  }
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("class", "spark-path");
   path.setAttribute("pathLength", "1");
@@ -1197,7 +1245,12 @@ function paintChrome(snapshot) {
     : seconds < 5400 ? `updated ${Math.round(seconds / 60)} minutes ago`
     : seconds < 172800 ? `updated ${Math.round(seconds / 3600)} hours ago`
     : `updated ${Math.round(seconds / 86400)} days ago`;
-  document.getElementById("freshness").textContent = freshness;
+  const freshnessNode = document.getElementById("freshness");
+  freshnessNode.textContent = freshness;
+  // The pill's dot takes the working tree's tone: amber when it has
+  // moved past the graph, quiet when the two are in step.
+  freshnessNode.dataset.tone =
+    snapshot.working_tree && snapshot.working_tree.state !== "in_step" ? "signal" : "ok";
   const drift = document.getElementById("drift");
   if (drift) {
     const tree = snapshot.working_tree;
@@ -1390,17 +1443,16 @@ function workItem(item) {
 
 /* A command you can copy. Eyes never runs it. */
 function commandLine(command) {
-  return h("code", {
-    class: "command", text: command, title: "Click to copy",
-    onclick: (event) => {
-      event.stopPropagation();
-      navigator.clipboard?.writeText(command);
-      const node = event.currentTarget;
-      const was = node.textContent;
-      node.textContent = "copied";
-      setTimeout(() => { node.textContent = was; }, 900);
-    },
-  });
+  return h("span", { class: "cmd-row" },
+    h("code", {
+      class: "command", text: command, title: "Click to copy",
+      onclick: (event) => {
+        event.stopPropagation();
+        navigator.clipboard?.writeText(command);
+        showToast("Copied — you run it; Eyes never writes.");
+      },
+    }),
+    copyButton(command));
 }
 
 /* =====================================================================
@@ -1977,13 +2029,21 @@ briefButton.addEventListener("click", () => {
 const themeButton = document.getElementById("theme");
 const savedTheme = localStorage.getItem("eyes-theme");
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
-themeButton.addEventListener("click", () => {
-  const dark = document.documentElement.dataset.theme === "dark"
+function isDark() {
+  return document.documentElement.dataset.theme === "dark"
     || (!document.documentElement.dataset.theme
         && matchMedia("(prefers-color-scheme: dark)").matches);
-  const next = dark ? "light" : "dark";
+}
+/* The button offers the other theme: a moon in the light, a sun in the dark. */
+function paintThemeButton() {
+  themeButton.replaceChildren(icon(isDark() ? "sun" : "moon", "sm"), isDark() ? "Light" : "Dark");
+}
+paintThemeButton();
+themeButton.addEventListener("click", () => {
+  const next = isDark() ? "light" : "dark";
   document.documentElement.dataset.theme = next;
   localStorage.setItem("eyes-theme", next);
+  paintThemeButton();
 });
 
 /* The register: the same facts in two tellings. Plain view leads with
