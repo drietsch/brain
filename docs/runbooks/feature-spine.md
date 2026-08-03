@@ -82,7 +82,9 @@ brain feature link twin/self semantic-twin implemented_by crates/brain-observe/s
 brain feature link twin/self semantic-twin implemented_by crates/brain-observe/src/docs.rs
 brain feature link twin/self semantic-twin implemented_by crates/brain-observe/src/symbols.rs
 brain feature link twin/self semantic-twin implemented_by crates/brain-observe/src/backfill.rs
+brain feature link twin/self semantic-twin implemented_by crates/brain-observe/src/baseline.rs
 brain feature link twin/self semantic-twin tested_by crates/brain-observe/src/twin.rs
+brain feature link twin/self semantic-twin tested_by crates/brain-observe/src/baseline.rs
 brain feature link twin/self semantic-twin tested_by crates/brain-observe/src/docs.rs
 brain feature link twin/self semantic-twin tested_by crates/brain-observe/src/symbols.rs
 brain feature link twin/self semantic-twin tested_by crates/brain-observe/src/backfill.rs
@@ -262,6 +264,8 @@ brain feature link twin/self eyes-ux implemented_by crates/brain-eyes/src/query/
 brain feature link twin/self eyes-ux implemented_by crates/brain-eyes/src/query/work.rs
 brain feature link twin/self eyes-ux implemented_by crates/brain-eyes/src/query/find.rs
 brain feature link twin/self eyes-ux implemented_by crates/brain-eyes/src/query/media.rs
+brain feature link twin/self eyes-ux implemented_by crates/brain-eyes/src/query/next.rs
+brain feature link twin/self eyes-ux implemented_by crates/brain-eyes/src/query/compare.rs
 brain feature link twin/self eyes-ux tested_by crates/brain-eyes/src/tests.rs
 brain feature link twin/self eyes-ux tested_by crates/brain-eyes/src/say.rs
 brain feature link twin/self eyes-ux decided_by adr-024-eyes-shows-judgments-and-content --kind decision
