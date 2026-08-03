@@ -44,21 +44,23 @@ a path (ADR-030).
 
 ## The surfaces
 
+Seven addresses, grouped Operate / Plan / Prove / Explore — the old
+thirteen still resolve: every retired hash redirects to the surface
+that absorbed it.
+
 | | Question it answers |
 |---|---|
-| **Now** | Should I worry, and what changed since I left? |
-| **Next** | What should happen now, worst first — the same queue agents read? |
+| **Now** | Should I worry, what changed since I left, and what should happen next? (absorbed the queue — each concern wears a horizon: decide now, or it can wait) |
 | **Work** | Who is working here, what became of it, and what is unfinished? |
 | **Roadmap** | What is planned, what is moving, and what is done? |
 | **Features** | What do we claim, and what actually backs it? |
-| **Tests** | What passed, what failed, and what did the failure look like? |
-| **Artifacts** | Show me everything the brain holds, so I can read it |
-| **Evidence** | What is claimed, and what stands behind it? |
-| **History** | What happened? |
-| **Compare** | What was true then, and what changed since? |
-| **Map** | What is this made of, and where is the risk? |
-| **MRI** | What shape is this system, and what is moving? |
+| **Proof** | What stands behind it? Three registers as tabs: Tests, Evidence, and Artifacts (shelves, including Media→Tour and Concepts) |
+| **Time** | What happened, and what was true then? (the Timeline is the place; Compare is a mode of it, entered from any moment) |
+| **Structure** | What is this made of, and where is the risk? (the Map is the place; the 3D MRI is a lens on the same anatomy) |
 | **Search** (⌘K) | Take me to X |
+
+One rule on every rail badge: the count is things needing a decision,
+tinted by the worst severity among them.
 
 **Now** opens with the **verdict band** — one instrument taking one
 reading, on its own ground. In it: the verdict sentence; the **claim
@@ -158,7 +160,13 @@ phone: below 700 px the rail becomes a scrollable strip and wide
 instruments scroll inside their own frame — the page never pans
 sideways.
 
-The **inspector** opens beside any surface without navigating away, and
+**Everything navigates.** There is no side-inspector: a census mark, a
+chip, a table row, an MRI node — each opens the thing's own dossier
+page, and Back is the browser's own history. The **dossier** leads with
+what a person about to act needs — the noun, the title and state, then
+"Before you edit" — with the vitals held in a sticky sidebar: At a
+glance, What it serves, The command, Machine detail.
+
 **Brief me** reads the current screen aloud using the browser's own
 speech synthesis — the sentences are the ones `say.rs` wrote, so nothing
 is generated and nothing is written.

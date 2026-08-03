@@ -40,13 +40,14 @@ test("the cockpit opens on Now and takes its reading", async ({ page }) => {
   // And every trend opens the surface that holds its evidence — a trend
   // is never the end of the trail.
   await page.locator('.spark-item:has-text("Tests passing")').click();
-  await expect(page).toHaveURL(/#tests/);
+  await expect(page).toHaveURL(/#proof\?tab=tests/);
 });
 
 test("every surface answers without a loading stub left behind", async ({ page }) => {
   for (const surface of [
-    "next", "work", "roadmap", "features", "tests",
-    "library", "evidence", "timeline", "compare", "map",
+    "work", "roadmap", "features", "proof", "time", "structure",
+    // The retired addresses still land somewhere that renders.
+    "next", "tests", "evidence", "library", "timeline", "compare", "map",
   ]) {
     await page.goto(`/#${surface}`);
     await settled(page);
@@ -55,6 +56,20 @@ test("every surface answers without a loading stub left behind", async ({ page }
       `${surface} renders a heading`
     ).toBeVisible();
   }
+});
+
+test("proof holds three registers under one roof", async ({ page }) => {
+  await page.goto("/#proof");
+  await settled(page);
+  const tabs = page.locator(".proof-tabs button");
+  await expect(tabs).toHaveCount(3);
+  await tabs.filter({ hasText: "Evidence" }).click();
+  await expect(page).toHaveURL(/#proof\?tab=evidence/);
+  await settled(page);
+  await expect(page.locator("#stage .claim").first()).toBeVisible();
+  await tabs.filter({ hasText: "Artifacts" }).click();
+  await settled(page);
+  await expect(page.locator(".shelves button").first()).toBeVisible();
 });
 
 test("search reaches through symbols to the declaring file", async ({ page }) => {
@@ -67,7 +82,8 @@ test("search reaches through symbols to the declaring file", async ({ page }) =>
 test("the plain register retells the same facts and comes back", async ({ page }) => {
   await page.goto("/");
   await page.locator("#register").click();
-  await expect(page).toHaveURL(/#features/);
+  await expect(page).toHaveURL(/#roadmap/);
+  await expect(page.locator(".plain-banner")).toBeVisible();
   // The nav recedes to the plain surfaces; the facts stay.
   const visible = page.locator(".rail button:visible");
   expect(await visible.count()).toBeLessThanOrEqual(3);

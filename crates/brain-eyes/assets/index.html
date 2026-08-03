@@ -13,27 +13,28 @@
     <button class="wordmark" data-go="now">Eyes</button>
     <span class="project" id="project">…</span>
     <button class="finder" id="open-find">
-      <span>Search or ask…</span><kbd>⌘K</kbd>
+      <span>Search names, paths and titles…</span><kbd>⌘K</kbd>
     </button>
-    <button class="ghost" id="brief-me" title="Read this screen out loud">
-      <span aria-hidden="true">◑</span> Brief me
-    </button>
-    <button class="ghost" id="theme" title="Light or dark" aria-label="Switch theme">◐</button>
-    <button class="ghost" id="register" title="The same facts, told plainly">Plain view</button>
     <span class="tree-drift" id="drift" hidden></span>
     <span class="freshness" id="freshness">reading the graph…</span>
     <span class="readonly" title="Eyes never writes. It shows you the command instead.">read only</span>
+    <span class="top-divider" aria-hidden="true"></span>
+    <button class="ghost" id="brief-me" title="Read this screen out loud — the sentences are the server's own">
+      <span aria-hidden="true">◑</span> Brief me
+    </button>
+    <button class="ghost" id="register" title="The same facts, told plainly">Plain view</button>
+    <button class="ghost" id="theme" title="Light or dark" aria-label="Switch theme">◐</button>
   </header>
+
+  <div class="plain-banner"><i aria-hidden="true"></i>
+    Plain view — the same facts, told for a stakeholder. Commands and
+    operator chrome are hidden.</div>
 
   <nav class="rail" aria-label="Sections">
     <span class="rail-group">Operate</span>
     <button data-go="now" data-icon="now" class="on">
       <span class="rail-mark" aria-hidden="true">◍</span><span>Now</span>
       <span class="rail-count" data-count="now" hidden></span>
-    </button>
-    <button data-go="next" data-icon="chevron">
-      <span class="rail-mark" aria-hidden="true">▹</span><span>Next</span>
-      <span class="rail-count" data-count="next" hidden></span>
     </button>
     <button data-go="work" data-icon="orbit">
       <span class="rail-mark" aria-hidden="true">◔</span><span>Work</span>
@@ -52,32 +53,19 @@
       <span class="rail-mark" aria-hidden="true">▣</span><span>Tour</span>
     </button>
     <span class="rail-group">Prove</span>
-    <button data-go="tests" data-icon="diamond">
-      <span class="rail-mark" aria-hidden="true">◈</span><span>Tests</span>
-      <span class="rail-count" data-count="tests" hidden></span>
-    </button>
-    <button data-go="library" data-icon="page">
-      <span class="rail-mark" aria-hidden="true">▤</span><span>Artifacts</span>
-      <span class="rail-count" data-count="library" hidden></span>
-    </button>
-    <button data-go="evidence" data-icon="seal">
-      <span class="rail-mark" aria-hidden="true">◇</span><span>Evidence</span>
-      <span class="rail-count" data-count="evidence" hidden></span>
+    <button data-go="proof" data-icon="diamond">
+      <span class="rail-mark" aria-hidden="true">◈</span><span>Proof</span>
+      <span class="rail-count" data-count="proof" hidden></span>
     </button>
     <span class="rail-group">Explore</span>
-    <button data-go="timeline" data-icon="history">
-      <span class="rail-mark" aria-hidden="true">⋮</span><span>History</span>
+    <button data-go="time" data-icon="history">
+      <span class="rail-mark" aria-hidden="true">⋮</span><span>Time</span>
     </button>
-    <button data-go="compare" data-icon="history">
-      <span class="rail-mark" aria-hidden="true">⇄</span><span>Compare</span>
-    </button>
-    <button data-go="map" data-icon="map">
-      <span class="rail-mark" aria-hidden="true">▦</span><span>Map</span>
-    </button>
-    <button data-go="mri" data-icon="mri" class="rail-mri">
-      <span class="rail-mark" aria-hidden="true">◉</span><span>MRI</span>
+    <button data-go="structure" data-icon="map">
+      <span class="rail-mark" aria-hidden="true">▦</span><span>Structure</span>
       <span class="rail-live" data-live hidden></span>
     </button>
+    <p class="rail-foot">One graph, one voice.<br>Eyes never writes.</p>
   </nav>
 
   <!--SPRITE-->
@@ -86,20 +74,8 @@
     <p class="loading">Reading the graph…</p>
   </main>
 
-  <aside class="inspector" id="inspector" hidden aria-label="Inspector">
-    <div class="inspector-head">
-      <span class="glyph" id="inspector-glyph"></span>
-      <div>
-        <p class="inspector-kind" id="inspector-kind"></p>
-        <h2 id="inspector-title"></h2>
-      </div>
-      <button class="ghost" id="inspector-close" aria-label="Close">✕</button>
-    </div>
-    <div class="inspector-body" id="inspector-body"></div>
-  </aside>
-
   <div class="finder-overlay" id="find-overlay" hidden>
-    <div class="finder-panel" role="dialog" aria-label="Search or ask">
+    <div class="finder-panel" role="dialog" aria-label="Search">
       <input id="find-input" type="search"
              placeholder="Search names, paths and titles…"
              autocomplete="off" spellcheck="false">
