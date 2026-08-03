@@ -177,14 +177,22 @@ is generated and nothing is written.
 in a serif; what was literally recorded — paths, hashes, commands, counts
 — is monospace; the interface itself is sans. You can see which parts of a
 screen are interpretation and which are evidence before reading a word.
+The serif is Source Serif 4, self-hosted and served by Eyes itself — no
+CDN is ever contacted; the system serifs stand in while it loads.
+
+The visual system is the designer's: one elevation recipe for every
+card, a violet accent that glows faintly at the page's top corners, and
+tone worn only where a reading earned it — the verdict band washes in
+fault ink and stands up its accent bar only while something is broken,
+a trend row tints only while it is falling, and the pressure ranking
+draws its measured churn, reach and coverage as marks beside each name.
 
 Colour is never load-bearing: state is a shape too. Violet marks the state
 that matters most here — *claimed, but nothing establishes it*.
 
 Every list filters in place, with facet counts that respect the other
-filters. Three ways down, kept distinct: **peek** a row to open the
-inspector beside it, **push** it (Enter) for the full page, **expand** it
-to see its parts in the same grid.
+filters. Two ways down, kept distinct: **push** a row for its full
+dossier page, or **expand** it to see its parts in the same grid.
 
 ## What Eyes deliberately does not do
 
