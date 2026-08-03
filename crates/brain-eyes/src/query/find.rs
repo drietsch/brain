@@ -1,8 +1,10 @@
 //! "Take me to X."
 //!
-//! Structured search over what the graph knows: names, paths, titles and
-//! slugs. No answer is composed — every hit says plainly why it matched
-//! and opens the thing itself.
+//! Structured search over what the graph knows: names, paths, titles,
+//! slugs — and through the graph's own ranking, the symbols a file
+//! declares, the notes sessions left on it, and how widely it is
+//! imported. No answer is composed — every hit says plainly why it
+//! matched and opens the thing itself.
 
 use crate::dto::*;
 use crate::query;
@@ -67,21 +69,47 @@ pub fn build(loaded: &Loaded, raw: &str, limit: usize) -> Result<FindView, Strin
         }
     }
 
-    // Files: matched on their path.
-    for (path, sid) in query::present_files(index, store, prefix)? {
-        if !path.to_lowercase().contains(&needle) || covered_paths.contains(&path) {
-            continue;
-        }
+    // Graph-ranked: paths, symbol names, doc titles and notes, weighted
+    // by how widely a file is imported — the same answer `brain find`
+    // gives, so eyes and the CLI never disagree about where a thing is.
+    let graph_hits =
+        brain_observe::find::find_with(store, index, prefix, &query_text, loaded.insights())
+            .map_err(|e| e.to_string())?;
+    for hit in graph_hits {
+        let sid = match hit.kind.as_str() {
+            "file" => {
+                if covered_paths.contains(&hit.label) {
+                    continue;
+                }
+                brain_core::ids::StableId::derive(&["file", &hit.label])
+            }
+            "decision" => brain_core::ids::StableId::derive(&["decision", prefix, &hit.label]),
+            "plan" => brain_core::ids::StableId::derive(&["plan", prefix, &hit.label]),
+            _ => continue,
+        };
         if !seen.insert(sid.to_string()) {
             continue;
         }
-        let score = if path.to_lowercase() == needle { 100 } else { 60 };
+        let because = hit
+            .why
+            .iter()
+            .map(|why| say::find_reason(why))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        let state = if hit.kind == "file" {
+            None
+        } else {
+            let (state, why) = lifecycle::of(index, store, &sid).map_err(|e| e.to_string())?;
+            say::lifecycle(state.as_str(), &why)
+        };
+        // Exact-named entities keep the top; a strong graph match can
+        // still outrank a weak title mention.
         scored.push((
-            score,
+            40 + hit.score.min(50),
             FindHit {
                 target: query::make_ref(index, store, &sid),
-                because: "matches this file's path".to_string(),
-                state: None,
+                because,
+                state,
                 features: query::features_of(loaded, &sid),
             },
         ));

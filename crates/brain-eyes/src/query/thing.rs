@@ -568,6 +568,16 @@ fn extras(
                 .map_err(|e| e.to_string())?;
             extras.after_text =
                 twin::latest(index, store, sid, "content").map_err(|e| e.to_string())?;
+            if let Some(after) = extras.after_text.clone() {
+                let created = extras.before_text.is_none();
+                let (rows, gone, added, note) = super::work::diff_rows(
+                    extras.before_text.as_deref().unwrap_or(""),
+                    &after,
+                );
+                extras.diff = rows;
+                extras.diff_summary = Some(say::change_summary(gone, added, created));
+                extras.diff_note = note;
+            }
             extras.audit = audit(loaded, sid, slug, &current)?;
         }
         "feature" => {
@@ -749,7 +759,7 @@ fn feature_reach(loaded: &Loaded, slug: &str) -> Option<FeatureReachView> {
 
 /// The pre-edit briefing, in concern rows: the same answer agents get
 /// from `brain before`, composed here in the human voice.
-fn briefing_rows(
+pub(crate) fn briefing_rows(
     loaded: &Loaded,
     sid: &StableId,
     rel: &str,

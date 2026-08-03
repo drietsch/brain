@@ -30,6 +30,11 @@ const LENSES: &[(&str, &str, &str)] = &[
         "What moved recently",
         "Modules that changed since the last consolidated session.",
     ),
+    (
+        "risk",
+        "Where it breaks next",
+        "Files edited often and imported widely, with no test to catch them.",
+    ),
 ];
 
 struct Block {
@@ -41,6 +46,10 @@ struct Block {
     recent: usize,
     attention: u32,
     stale_docs: usize,
+    /// Sum over uncovered files of edits x (importers + 1) — risk is a
+    /// product, and a test that touches a file quiets it entirely.
+    risk: f64,
+    risky_files: usize,
 }
 
 pub fn build(loaded: &Loaded, lens: &str) -> Result<MapView, String> {
@@ -65,6 +74,17 @@ pub fn build(loaded: &Loaded, lens: &str) -> Result<MapView, String> {
         .and_then(|value| value.parse().ok())
         .unwrap_or(0);
 
+    let churn_by_path: BTreeMap<&str, usize> = insights
+        .churn
+        .iter()
+        .map(|(path, versions)| (path.as_str(), *versions))
+        .collect();
+    let hubs_by_path: BTreeMap<&str, usize> = insights
+        .hubs
+        .iter()
+        .map(|(path, importers)| (path.as_str(), *importers))
+        .collect();
+
     // ---- gather files into modules --------------------------------------
     let files = query::present_files(index, store, prefix)?;
     let mut blocks: BTreeMap<String, Block> = BTreeMap::new();
@@ -82,6 +102,8 @@ pub fn build(loaded: &Loaded, lens: &str) -> Result<MapView, String> {
             recent: 0,
             attention: 0,
             stale_docs: 0,
+            risk: 0.0,
+            risky_files: 0,
         });
         block.files.push((path.clone(), sid.clone()));
         block.symbols += twin::live_from(index, store, sid, "contains")
@@ -97,6 +119,14 @@ pub fn build(loaded: &Loaded, lens: &str) -> Result<MapView, String> {
                 .is_empty();
         if covered {
             block.covered += 1;
+        } else {
+            let edits = churn_by_path.get(path.as_str()).copied().unwrap_or(0);
+            let reach = hubs_by_path.get(path.as_str()).copied().unwrap_or(0);
+            let contribution = edits * (reach + 1);
+            if contribution > 0 {
+                block.risk += contribution as f64;
+                block.risky_files += 1;
+            }
         }
         if let Some((at, _)) =
             twin::latest_at(index, store, sid, "content_b3").map_err(|e| e.to_string())?
@@ -146,6 +176,14 @@ pub fn build(loaded: &Loaded, lens: &str) -> Result<MapView, String> {
 
     // ---- render ---------------------------------------------------------
     let max_attention = blocks.values().map(|b| b.attention).max().unwrap_or(0).max(1);
+    // Doc drift weights risk up: an untested hot spot whose document is
+    // also wrong is worse than one whose document at least tells the truth.
+    let weighted_risk = |b: &Block| b.risk * (1.0 + b.stale_docs as f64 * 0.25);
+    let max_risk = blocks
+        .values()
+        .map(&weighted_risk)
+        .fold(0.0_f64, f64::max)
+        .max(1.0);
     let mut out: Vec<MapBlock> = blocks
         .values()
         .map(|block| {
@@ -189,6 +227,23 @@ pub fn build(loaded: &Loaded, lens: &str) -> Result<MapView, String> {
                         )
                     };
                     (percent, sentence, if percent > 50 { "watch" } else { "quiet" })
+                }
+                "risk" => {
+                    let percent = ((weighted_risk(block) * 100.0 / max_risk) as u32).min(100);
+                    let tone = match percent {
+                        0..=33 => "quiet",
+                        34..=66 => "watch",
+                        _ => "bad",
+                    };
+                    let sentence = if block.risky_files == 0 {
+                        "nothing here is both busy and unproven".to_string()
+                    } else {
+                        format!(
+                            "{} changing here with no test to catch a break",
+                            say::count(block.risky_files as u64, "file is", "files are")
+                        )
+                    };
+                    (percent, sentence, tone)
                 }
                 _ => {
                     let percent = (block.attention * 100 / max_attention).min(100);

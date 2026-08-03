@@ -23,9 +23,16 @@ behind. A generated screenshot names the command that drew it. The
 narrated tour plays, with its chapters, its script, and an honest note
 when the recording no longer matches the graph.
 
-**It shows the shape of the system.** The Map answers where the risk is;
-the MRI draws the whole anatomy in three dimensions, stacked by what
-depends on what.
+**It shows the shape of the system.** The Map answers where the risk is —
+its risk lens composes how often a file changes, how widely it is
+imported, and whether any test would catch a break, weighted up when the
+documents about it have drifted too; the MRI draws the whole anatomy in
+three dimensions, stacked by what depends on what.
+
+**Search** ranks with the graph, not just labels: a symbol's name finds
+the file that declares it, a session's note vouches for its subject, and
+a widely imported file outranks a leaf — the same answer `brain find`
+gives, with every hit saying why it matched.
 
 **Everything relates to a feature, and the path is checkable.** A feature
 declares its files; the twin already records that a test covers them, a
@@ -68,10 +75,15 @@ small to mean anything read flat. Readings accrue in the graph only when
 a refresh or a sleep found the numbers moved, so the series is bounded by
 change, not by time.
 
-**Work** shows the coding-agent sessions that ran in this workspace: what
-each was asked to do, which model, how long, which files it edited, and
-what it produced. This is the graph's only record of a principal
-(ADR-025); import it with `brain sessions import`.
+**Work** opens with the approvals desk when a governed change is waiting:
+the recorded diff (unfolding beneath its one-line summary), the pre-apply
+briefing of the target file — what an apply would reach, what covers it,
+what past sessions learned there — and the exact `brain change apply`
+command to copy. Eyes renders the decision; the CLI executes it, so the
+audit trail never forks. Below it: the coding-agent sessions that ran in
+this workspace — what each was asked to do, which model, how long, which
+files it edited, and what it produced. This is the graph's only record
+of a principal (ADR-025); import it with `brain sessions import`.
 
 **Roadmap** reads down the spine: each stage, the features planned for
 it, and the work in flight against each one. A stage's state is never

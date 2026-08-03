@@ -250,6 +250,33 @@ a:hover { text-decoration: underline; }
 .quality-dot { fill: currentColor; }
 .quality-now { margin: 0; font-size: 11.5px; color: var(--meta); }
 
+/* ------------------------------------------------------- approvals desk
+   A waiting decision leads Work. The diff unfolds beneath its one-line
+   summary; removed reads in fault ink, added in proof ink, context dim. */
+.approvals { display: flex; flex-direction: column; gap: 12px; margin: 0 0 26px; }
+.approval {
+  padding: 12px 14px; border: 1px solid var(--signal-edge); border-radius: 4px;
+  background: var(--paper);
+}
+.approval-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  margin: 0 0 4px;
+}
+.approval-when { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.approval-reason { margin: 0 0 8px; font-size: 13px; color: var(--body); max-width: 70ch; }
+.approval-diff { margin: 0 0 10px; }
+.approval-diff summary { font-size: 12.5px; color: var(--meta); cursor: pointer; }
+.diff { margin: 8px 0 0; }
+.diff-lines {
+  margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--sunk); font: 12px/1.5 var(--record);
+  overflow-x: auto; white-space: pre;
+}
+.diff-line { display: block; color: var(--meta); }
+.diff-line.gone { color: var(--fault); background: var(--fault-fill); }
+.diff-line.new { color: var(--proof); background: var(--proof-fill); }
+.diff-hidden { margin: 6px 0 0; font-size: 11.5px; color: var(--muted); }
+
 /* ------------------------------------------------------------- compare
    Two moments side by side. The banner is the loud part: a past view
    restates its own moment before anything else. Regressions render

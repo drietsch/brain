@@ -635,6 +635,51 @@ pub fn change_stage(status: &str) -> (&'static str, &'static str) {
     }
 }
 
+/// The reasons the graph's search gives, said without machine
+/// vocabulary. Unknown reasons pass through — "declares foo" already
+/// reads as a sentence.
+pub fn find_reason(why: &str) -> String {
+    if why == "path matches" {
+        return "the path matches".to_string();
+    }
+    if why == "a note mentions it" {
+        return "a session's note mentions it".to_string();
+    }
+    if let Some(n) = why.strip_prefix("hub ") {
+        return format!(
+            "imported by {}",
+            count(n.parse().unwrap_or(0), "file", "files")
+        );
+    }
+    if why.starts_with("decision: ") || why.starts_with("plan: ") {
+        return "its title or name matches".to_string();
+    }
+    why.to_string()
+}
+
+/// What a recorded change does to its file, in one clause.
+pub fn change_summary(gone: usize, added: usize, created: bool) -> String {
+    if created {
+        format!("creates the file with {}", count(added as u64, "line", "lines"))
+    } else if gone == 0 && added == 0 {
+        "records no difference".to_string()
+    } else if gone == 0 {
+        format!("adds {}", count(added as u64, "line", "lines"))
+    } else if added == 0 {
+        format!("removes {}", count(gone as u64, "line", "lines"))
+    } else {
+        format!(
+            "replaces {} with {added}",
+            count(gone as u64, "line", "lines")
+        )
+    }
+}
+
+/// A move proposal, said as what it does.
+pub fn change_moves(target: &str, to: &str) -> String {
+    format!("moves {target} to {to}")
+}
+
 /// A moment named by its cause: "as it was 2 days ago, when commit
 /// 4f2a91c was current". Cause over clock — a bare timestamp answers
 /// nothing a person actually asked.

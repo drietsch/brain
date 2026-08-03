@@ -759,6 +759,13 @@ views.thing = async (params) => {
         h("span", { text: step.when ? `${step.when} — ${step.note}` : step.note })))));
   }
 
+  // A governed change: the recorded diff, exactly as proposed.
+  if (data.extras.diff.length) {
+    parts.push(h("h2", { class: "section", text: "What changes" }));
+    if (data.extras.diff_summary) parts.push(h("p", { class: "sub", text: data.extras.diff_summary }));
+    parts.push(diffBlock(data.extras.diff, data.extras.diff_note));
+  }
+
   // A feature: the strip at its third and largest scale, then the parts
   // themselves, each answering for itself.
   const feature = data.extras.feature;
@@ -1129,6 +1136,12 @@ views.work = async () => {
     h("p", { class: "sub", text: "Agent sessions, governed changes, and plans still open." }),
   ];
 
+  // The desk leads: a decision that is waiting outranks history.
+  if (data.approvals.length) {
+    parts.push(h("h2", { class: "section", text: "Waiting for your decision" }));
+    parts.push(h("div", { class: "approvals" }, data.approvals.map(approvalCard)));
+  }
+
   if (data.sessions_hint) {
     parts.push(h("p", { class: "empty", text: data.sessions_hint }));
     if (data.sessions_hint_command) parts.push(commandLine(data.sessions_hint_command));
@@ -1155,6 +1168,43 @@ views.work = async () => {
   }
   stage.replaceChildren(h("div", { class: "page" }, ...parts));
 };
+
+/* One proposed change: what it does, what applying it would reach, and
+   the command that applies it. The diff unfolds — a summary you cannot
+   unfold is a summary you cannot check. */
+function approvalCard(approval) {
+  const head = h("div", { class: "approval-head" },
+    h("button", { class: "row-link", text: approval.target, onclick: () => openThing(approval.id) }),
+    h("span", { class: "approval-when", text: `proposed ${approval.when}` }));
+  const body = [
+    h("p", { class: "approval-reason", text: approval.reason }),
+    approval.diff.length
+      ? h("details", { class: "approval-diff" },
+          h("summary", { text: approval.summary }),
+          diffBlock(approval.diff, approval.diff_note))
+      : h("p", { class: "approval-reason", text: approval.summary }),
+  ];
+  if (approval.briefing.length) {
+    body.push(h("div", { class: "concerns" }, approval.briefing.map((item) =>
+      h("div", { class: `concern ${item.severity}` },
+        h("i", { class: `mark ${({ act: "bad", watch: "watch" })[item.severity] ?? "quiet"}` }),
+        h("div", {},
+          h("h3", { text: item.title }),
+          item.reason ? h("p", { text: item.reason }) : null)))));
+  }
+  body.push(commandLine(approval.apply_command));
+  body.push(featureTag(approval.features, (f) => openThing(f.id)));
+  return h("div", { class: "approval" }, head, ...body);
+}
+
+/* The recorded diff, line by line: removed above added, context dim. */
+function diffBlock(rows, note) {
+  return h("div", { class: "diff" },
+    h("pre", { class: "diff-lines" }, rows.map((row) =>
+      h("span", { class: `diff-line ${row.kind}`,
+        text: `${({ gone: "- ", new: "+ " })[row.kind] ?? "  "}${row.text}\n` }))),
+    note ? h("p", { class: "diff-hidden", text: note }) : null);
+}
 
 function sessionCard(session) {
   const head = h("div", { class: "session-head" },

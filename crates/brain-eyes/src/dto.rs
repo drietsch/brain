@@ -514,10 +514,44 @@ pub struct WorkItem {
     pub features: Vec<Ref>,
 }
 
+/// One line of a recorded change's diff: "same" | "gone" | "new".
+#[derive(Debug, Clone, Serialize)]
+pub struct DiffRow {
+    pub kind: String,
+    pub text: String,
+}
+
+/// A proposed governed change waiting for a person: the recorded diff,
+/// what an apply would reach, and the command that applies it. Eyes
+/// renders the decision; the CLI executes it — the audit trail never
+/// forks.
+#[derive(Debug, Clone, Serialize)]
+pub struct Approval {
+    /// The change entity, for the dossier.
+    pub id: String,
+    pub target: String,
+    pub reason: String,
+    pub when: String,
+    pub at_ms: u64,
+    /// What the change does, in one sentence.
+    pub summary: String,
+    pub diff: Vec<DiffRow>,
+    /// What the shown diff hid, if anything.
+    pub diff_note: Option<String>,
+    /// The pre-apply briefing of the target file: blast radius,
+    /// coverage, what past sessions learned there.
+    pub briefing: Vec<Concern>,
+    pub apply_command: String,
+    pub features: Vec<Ref>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkView {
     pub snapshot: Snapshot,
     pub headline: String,
+    /// Proposed changes waiting for a decision, oldest first — the
+    /// longest-waiting decision leads.
+    pub approvals: Vec<Approval>,
     pub sessions: Vec<Session>,
     pub changes: Vec<WorkItem>,
     pub plans: Vec<WorkItem>,
@@ -786,6 +820,10 @@ pub struct ThingExtras {
     /// Governed change: the recorded before/after text.
     pub before_text: Option<String>,
     pub after_text: Option<String>,
+    /// Governed change: the recorded diff, line by line.
+    pub diff: Vec<DiffRow>,
+    pub diff_summary: Option<String>,
+    pub diff_note: Option<String>,
     /// Governed change: the audit record, in the order it happened.
     pub audit: Vec<AuditEntry>,
     /// Test case: attachments the run produced about it.

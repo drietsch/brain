@@ -116,6 +116,18 @@ fn fixture() -> Fixture {
     std::thread::sleep(std::time::Duration::from_millis(5));
     twin::refresh(&store, root, "twin/app").unwrap();
 
+    // A governed change waiting for a decision: the approvals desk has
+    // one real customer in every test.
+    brain_observe::govern::propose(
+        &store,
+        root,
+        "twin/app",
+        "crates/app/src/lib.rs",
+        "use core_lib::core_thing;\npub fn app_thing() { core_thing() }\n",
+        "call into the core instead of stubbing",
+    )
+    .unwrap();
+
     let state = AppState::new(Config {
         store_root: store_dir.path().to_path_buf(),
         content_root: root.to_path_buf(),
@@ -255,6 +267,136 @@ fn now_carries_quality_lines() {
     assert_eq!(first.id, "tests", "the regression leads the strip");
     assert_eq!(first.tone, "bad");
     assert_eq!(first.trend, "falling");
+}
+
+/// A symbol's name finds the file that declares it — the graph's
+/// ranking, not a label match, and the reason says so in words.
+#[test]
+fn find_reaches_through_symbols_to_the_declaring_file() {
+    let f = fixture();
+    let view = f
+        .state
+        .read(|loaded| crate::query::find::build(loaded, "core_thing", 20))
+        .unwrap();
+    let hit = view
+        .hits
+        .iter()
+        .find(|h| h.target.label.contains("core-lib"))
+        .expect("the declaring file is found");
+    assert!(
+        hit.because.contains("declares core_thing"),
+        "{}",
+        hit.because
+    );
+    for hit in &view.hits {
+        assert!(!hit.because.is_empty());
+        assert!(!hit.because.contains("hub "), "raw ranking leaked: {}", hit.because);
+    }
+}
+
+/// Risk is a product, not a sum: a file edited often and imported
+/// widely with no test to catch it lights its module; a test that
+/// touches it puts the light out.
+#[test]
+fn the_risk_lens_names_the_unproven_hot_spots() {
+    let f = fixture();
+    let view = f
+        .state
+        .read(|loaded| crate::query::map::build(loaded, "risk"))
+        .unwrap();
+    // core-lib was edited across refreshes, is imported by app, and no
+    // test touches it: its module must speak.
+    let hot = view
+        .blocks
+        .iter()
+        .find(|b| b.path.contains("core-lib"))
+        .expect("the core module is on the map");
+    assert!(
+        hot.sentence.contains("no test to catch"),
+        "{}",
+        hot.sentence
+    );
+    assert!(hot.value > 0, "risk registered: {}", hot.value);
+    for block in &view.blocks {
+        assert!(!block.sentence.is_empty());
+    }
+}
+
+/// A proposed change gets a desk: the recorded diff, the pre-apply
+/// briefing of its target, and the exact command that applies it —
+/// rendered, never executed.
+#[test]
+fn work_shows_the_approvals_desk() {
+    let f = fixture();
+    let view = f.state.read(crate::query::work::build).unwrap();
+    assert_eq!(view.approvals.len(), 1, "{:?}", view.headline);
+    let approval = &view.approvals[0];
+    assert_eq!(approval.target, "crates/app/src/lib.rs");
+    assert!(approval.reason.contains("core"), "{}", approval.reason);
+    assert!(
+        approval.summary.contains("replaces 1 line with 1"),
+        "{}",
+        approval.summary
+    );
+    assert!(
+        approval.diff.iter().any(|r| r.kind == "gone"),
+        "the removed line is shown"
+    );
+    assert!(
+        approval.diff.iter().any(|r| r.kind == "new"
+            && r.text.contains("core_thing()")),
+        "the added line is shown"
+    );
+    assert!(
+        approval
+            .apply_command
+            .starts_with("brain change apply twin/app"),
+        "{}",
+        approval.apply_command
+    );
+    assert!(
+        !approval.briefing.is_empty(),
+        "an approval carries the pre-apply briefing"
+    );
+    // The desk replaces the plain row: a proposed change is not listed
+    // twice.
+    assert!(
+        view.changes.iter().all(|c| c.stage != "proposed"),
+        "{:?}",
+        view.changes.iter().map(|c| &c.stage).collect::<Vec<_>>()
+    );
+
+    // The dossier of the same change shows the same recorded diff.
+    let thing = f
+        .state
+        .read(|loaded| crate::query::thing::build(loaded, &approval.id, None))
+        .unwrap();
+    assert!(!thing.extras.diff.is_empty());
+    assert_eq!(
+        thing.extras.diff_summary.as_deref(),
+        Some(approval.summary.as_str())
+    );
+}
+
+/// The diff trimmer: shared head and tail drop away, hidden lines are
+/// counted out loud, and a created file says so.
+#[test]
+fn the_diff_shows_what_moved_and_counts_what_it_hides() {
+    use crate::query::work::diff_rows;
+    let before = "a\nb\nc\nd\n";
+    let after = "a\nb\nX\nd\n";
+    let (rows, gone, added, note) = diff_rows(before, after);
+    assert_eq!((gone, added), (1, 1));
+    assert!(note.is_none());
+    let kinds: Vec<&str> = rows.iter().map(|r| r.kind.as_str()).collect();
+    // Only one shared trailing line exists, so only one renders.
+    assert_eq!(kinds, vec!["same", "same", "gone", "new", "same"]);
+
+    // A hundred added lines: the cap hides some and says how many.
+    let big: String = (0..100).map(|i| format!("line {i}\n")).collect();
+    let (_, _, added, note) = diff_rows("", &big);
+    assert_eq!(added, 100);
+    assert!(note.unwrap().contains("40"), "60 shown, 40 hidden");
 }
 
 /// The diff between two moments ranks regressions first, a done-flip
@@ -531,7 +673,13 @@ fn work_names_who_did_something_and_stays_quiet_when_nobody_did() {
         Some("brain sessions import . --prefix twin/app"),
         "and the command lives in a command field, not in the sentence"
     );
-    assert!(view.headline.contains("Nothing is in flight"));
+    // The fixture's proposed change outranks the quiet default: a
+    // waiting decision is the loudest thing on an idle surface.
+    assert!(
+        view.headline.contains("waiting for your decision"),
+        "{}",
+        view.headline
+    );
 }
 
 #[test]
@@ -894,6 +1042,25 @@ fn prose_of(f: &Fixture) -> String {
         prose.push(group.label.clone());
         prose.extend(group.cells.iter().map(|cell| cell.text.clone()));
     }
+    let work = f.state.read(crate::query::work::build).unwrap();
+    prose.push(work.headline.clone());
+    for approval in &work.approvals {
+        prose.push(approval.reason.clone());
+        prose.push(approval.summary.clone());
+        for item in &approval.briefing {
+            prose.push(item.title.clone());
+            prose.push(item.reason.clone());
+        }
+        prose.extend(approval.diff_note.clone());
+    }
+    let found = f
+        .state
+        .read(|loaded| crate::query::find::build(loaded, "core_thing", 20))
+        .unwrap();
+    for hit in &found.hits {
+        prose.push(hit.because.clone());
+        prose.extend(hit.state.clone());
+    }
     let moments = f.state.read(crate::query::compare::moments).unwrap();
     prose.push(moments.headline.clone());
     for moment in &moments.moments {
@@ -942,6 +1109,14 @@ fn prose_of(f: &Fixture) -> String {
     for block in &map.blocks {
         prose.push(block.sentence.clone());
         prose.extend(block.facts.clone());
+    }
+    let risk_map = f
+        .state
+        .read(|loaded| crate::query::map::build(loaded, "risk"))
+        .unwrap();
+    prose.push(risk_map.lens_note.clone());
+    for block in &risk_map.blocks {
+        prose.push(block.sentence.clone());
     }
     let timeline = f
         .state
@@ -1301,7 +1476,7 @@ fn every_surface_is_a_read() {
         .unwrap();
     f.state.read(crate::query::library::concepts).unwrap();
     f.state.read(|loaded| loaded.mri()).unwrap();
-    for lens in ["attention", "tests", "recent"] {
+    for lens in ["attention", "tests", "change", "risk"] {
         f.state
             .read(|loaded| crate::query::map::build(loaded, lens))
             .unwrap();

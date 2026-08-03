@@ -28,6 +28,19 @@ pub fn find(
     prefix: &str,
     query: &str,
 ) -> Result<Vec<Hit>, StoreError> {
+    let ins = twin::insights_with(store, index, prefix)?;
+    find_with(store, index, prefix, query, &ins)
+}
+
+/// The same ranking against an `Insights` the caller already holds —
+/// eyes caches one per graph version and must not pay for a second.
+pub fn find_with(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    query: &str,
+    ins: &twin::Insights,
+) -> Result<Vec<Hit>, StoreError> {
     let terms: Vec<String> = query
         .to_lowercase()
         .split_whitespace()
@@ -37,7 +50,6 @@ pub fn find(
     if terms.is_empty() {
         return Ok(Vec::new());
     }
-    let ins = twin::insights_with(store, index, prefix)?;
     let hubs: BTreeMap<&String, usize> = ins.hubs.iter().map(|(p, n)| (p, *n)).collect();
 
     // Live files under the prefix — deleted files stay findable in

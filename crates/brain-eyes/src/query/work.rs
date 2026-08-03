@@ -7,9 +7,11 @@
 //! principal: what it was asked to do, which model, how long it ran, and
 //! which files it changed.
 //!
-//! What is *not* here: approvals, authorisation queues, and pending
-//! decisions. The graph models none of them, so nothing appears to
-//! explain their absence.
+//! Proposed governed changes are the one approval queue the graph does
+//! model, so they get a desk: the recorded diff, the pre-apply briefing
+//! of the target, and the command that applies it. Eyes still never
+//! writes — the decision renders here, the CLI executes it, and the
+//! audit trail never forks.
 
 use crate::dto::*;
 use crate::query;
@@ -120,7 +122,13 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
         });
     }
 
-    let changes = changes(loaded)?;
+    let approvals = approvals(loaded)?;
+    // The desk shows proposed changes in full; listing them again below
+    // would be the same decision twice.
+    let changes: Vec<WorkItem> = changes(loaded)?
+        .into_iter()
+        .filter(|c| c.stage != "proposed")
+        .collect();
     let plans = plans(loaded)?;
 
     let live_count = sessions_out.iter().filter(|s| s.live).count();
@@ -128,6 +136,11 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
         format!(
             "{} working here right now.",
             say::count(live_count as u64, "agent is", "agents are")
+        )
+    } else if !approvals.is_empty() {
+        format!(
+            "{} waiting for your decision.",
+            say::count(approvals.len() as u64, "change is", "changes are")
         )
     } else if !changes.is_empty() {
         format!(
@@ -175,6 +188,7 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
     Ok(WorkView {
         snapshot: loaded.snapshot.clone(),
         headline,
+        approvals,
         sessions: sessions_out,
         changes,
         plans,
@@ -182,6 +196,121 @@ pub fn build(loaded: &Loaded) -> Result<WorkView, String> {
         sessions_hint_command,
         rework,
     })
+}
+
+/// Proposed changes waiting for a person, oldest first — the decision
+/// that has waited longest leads. Each carries the recorded diff, the
+/// pre-apply briefing of its target, and the command that applies it:
+/// eyes shows the decision, the CLI executes it.
+pub(crate) fn approvals(loaded: &Loaded) -> Result<Vec<Approval>, String> {
+    let store = &loaded.store;
+    let index = &loaded.index;
+    let prefix = loaded.prefix();
+    let now = loaded.snapshot.generated_at_ms;
+
+    let mut out = Vec::new();
+    for (sid, labels) in query::scoped(index, store, prefix, "change")? {
+        let (at_ms, status) = twin::latest_at(index, store, &sid, "status")
+            .map_err(|e| e.to_string())?
+            .unwrap_or((0, String::new()));
+        if status != "proposed" {
+            continue;
+        }
+        let slug = labels.get("slug").cloned().unwrap_or_default();
+        let target = labels.get("target").cloned().unwrap_or_default();
+        let reason = twin::latest(index, store, &sid, "reason")
+            .map_err(|e| e.to_string())?
+            .or_else(|| labels.get("title").cloned())
+            .unwrap_or_default();
+        let move_to = twin::latest(index, store, &sid, "move_to").map_err(|e| e.to_string())?;
+        let before = twin::latest(index, store, &sid, "before_content").map_err(|e| e.to_string())?;
+        let after = twin::latest(index, store, &sid, "content").map_err(|e| e.to_string())?;
+
+        let (summary, diff, diff_note) = if let Some(to) = move_to {
+            (say::change_moves(&target, &to), Vec::new(), None)
+        } else {
+            let after = after.unwrap_or_default();
+            let created = before.is_none();
+            let (rows, gone, added, note) = diff_rows(before.as_deref().unwrap_or(""), &after);
+            (say::change_summary(gone, added, created), rows, note)
+        };
+
+        let file_sid = brain_core::ids::StableId::derive(&["file", &target]);
+        let briefing =
+            super::thing::briefing_rows(loaded, &file_sid, &target, now).unwrap_or_default();
+
+        out.push(Approval {
+            id: sid.to_string(),
+            target,
+            reason,
+            when: say::ago(now, at_ms),
+            at_ms,
+            summary,
+            diff,
+            diff_note,
+            briefing,
+            apply_command: format!("brain change apply {prefix} {slug} --cap fs"),
+            features: query::features_of(loaded, &sid),
+        });
+    }
+    out.sort_by(|a, b| a.at_ms.cmp(&b.at_ms).then(a.target.cmp(&b.target)));
+    Ok(out)
+}
+
+/// The recorded diff of a change, trimmed to what moved: the shared
+/// head and tail are dropped (two lines of each kept for footing), the
+/// middle renders removed-then-added, and anything the cap hides is
+/// counted out loud. Returns (rows, lines gone, lines added, note).
+pub(crate) fn diff_rows(before: &str, after: &str) -> (Vec<DiffRow>, usize, usize, Option<String>) {
+    const CONTEXT: usize = 2;
+    const CAP: usize = 60;
+    let b: Vec<&str> = before.lines().collect();
+    let a: Vec<&str> = after.lines().collect();
+    let mut head = 0;
+    while head < b.len() && head < a.len() && b[head] == a[head] {
+        head += 1;
+    }
+    let mut tail = 0;
+    while tail < b.len() - head && tail < a.len() - head && b[b.len() - 1 - tail] == a[a.len() - 1 - tail]
+    {
+        tail += 1;
+    }
+    let gone = &b[head..b.len() - tail];
+    let added = &a[head..a.len() - tail];
+
+    let row = |kind: &str, text: &str| DiffRow {
+        kind: kind.to_string(),
+        text: text.to_string(),
+    };
+    let mut rows = Vec::new();
+    for line in &b[head.saturating_sub(CONTEXT)..head] {
+        rows.push(row("same", line));
+    }
+    let mut hidden = 0;
+    for (i, line) in gone.iter().enumerate() {
+        if i < CAP {
+            rows.push(row("gone", line));
+        } else {
+            hidden += 1;
+        }
+    }
+    for (i, line) in added.iter().enumerate() {
+        if i < CAP {
+            rows.push(row("new", line));
+        } else {
+            hidden += 1;
+        }
+    }
+    for line in &a[a.len() - tail..(a.len() - tail + CONTEXT).min(a.len())] {
+        rows.push(row("same", line));
+    }
+    let note = (hidden > 0).then(|| {
+        format!(
+            "{} of the changed lines are not shown here",
+            hidden
+        )
+    });
+    (rows, gone.len(), added.len(), note)
 }
 
 /// Governed changes that have not reached a settled state.
