@@ -13,7 +13,7 @@
 //! between intent and receipt leaves the change *indeterminate* — marked
 //! by reconcile, never blindly retried.
 
-use crate::twin::{latest, observe_src, relate};
+use crate::twin::{latest, latest_at, observe_src, relate};
 use brain_core::ids::{NodeId, StableId};
 use brain_core::object::Object;
 use brain_index::{replay, Index, MemIndex};
@@ -392,6 +392,91 @@ pub fn verify(
     })
 }
 
+/// The reflex arc for applied changes: evidence the graph already holds
+/// settles them, without anyone typing the command. The judgment mirrors
+/// `verify` — the newest recorded run after the apply decides, linked as
+/// `verified_by` — plus one guard `verify` never needed: a content
+/// change settles itself only while the file still carries exactly what
+/// the change wrote; anything else keeps a person in the call. A move
+/// has no single hash to hold, so run evidence alone decides, as it
+/// would under `verify`. Stamps carry source `"reflex"`: the audit
+/// trail says the machine decided, and the link says through which run.
+/// Called from `twin refresh`, so every commit sweeps the ledger.
+pub fn reconcile_applied(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    now: u64,
+) -> Result<Vec<String>, StoreError> {
+    // Every recorded run, newest first: (at, sid, total, failed).
+    let mut runs: Vec<(u64, StableId, usize, usize)> = Vec::new();
+    let mut seen_runs = BTreeSet::new();
+    for node in index.entities_by_kind("test_run") {
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
+        if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen_runs.insert(id.clone())
+        {
+            continue;
+        }
+        let Some((at, total)) = latest_at(index, store, &id, "total")? else {
+            continue;
+        };
+        let failed: usize = latest(index, store, &id, "failed")?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        runs.push((at, id, total.parse().unwrap_or(0), failed));
+    }
+    runs.sort_by(|a, b| b.0.cmp(&a.0));
+
+    let mut written = BTreeSet::new();
+    let mut settled = Vec::new();
+    let mut seen = BTreeSet::new();
+    for node in index.entities_by_kind("change") {
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
+        if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
+            continue;
+        }
+        let Some((applied_at, status)) = latest_at(index, store, &id, "status")? else {
+            continue;
+        };
+        if status != "applied" {
+            continue;
+        }
+        // The newest run since the apply is the same evidence `verify`
+        // would produce on demand; a run of nothing vouches for nothing.
+        let Some((_, run_sid, total, failed)) = runs
+            .iter()
+            .find(|(at, _, total, _)| *at > applied_at && *total > 0)
+            .map(|(at, sid, total, failed)| (*at, sid.clone(), *total, *failed))
+        else {
+            continue;
+        };
+        let _ = total;
+        if latest(index, store, &id, "move_to")?.is_none() {
+            let Some(target) = labels.get("target") else {
+                continue;
+            };
+            let file_sid = StableId::derive(&["file", target]);
+            if latest(index, store, &file_sid, "content_b3")?
+                != latest(index, store, &id, "after_b3")?
+            {
+                continue;
+            }
+        }
+        let verdict = if failed == 0 { "verified" } else { "broken" };
+        relate(store, index, &mut written, &id, "verified_by", &run_sid, now)?;
+        observe_src(store, &id, "status", verdict, "reflex", now)?;
+        settled.push(format!(
+            "{} {verdict}",
+            labels.get("slug").cloned().unwrap_or_default()
+        ));
+    }
+    Ok(settled)
+}
+
 /// Reconciliation after recovery: changes whose intent the log marked
 /// indeterminate get an indeterminate status observation. Marks only —
 /// never re-executes; deciding what really happened is the caller's
@@ -436,6 +521,115 @@ mod tests {
         let store = Store::open(store_dir.path()).unwrap();
         refresh(&store, src.path(), "twin/app").unwrap();
         (src, store_dir, store)
+    }
+
+    /// The reflex: a green run recorded after the apply settles the
+    /// change on the next refresh; nobody types the command. A file
+    /// that moved on after the write keeps a person in the call, and a
+    /// red run breaks the change instead of blessing it.
+    #[test]
+    fn applied_changes_settle_themselves_when_evidence_lands() {
+        let (src, _sd, store) = setup();
+        let p = propose(
+            &store,
+            src.path(),
+            "twin/app",
+            "src/main.rs",
+            "pub fn main() { improved() }\n",
+            "improve main",
+        )
+        .unwrap();
+        apply(&store, src.path(), "twin/app", &p.slug, &["fs".to_string()]).unwrap();
+
+        // No evidence yet: a refresh leaves the change applied — the
+        // runs recorded before the apply do not vouch for it.
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+        let sid = change_sid("twin/app", &p.slug);
+        assert_eq!(
+            latest(&index, &store, &sid, "status").unwrap().as_deref(),
+            Some("applied")
+        );
+
+        // A green run lands after the apply: the next refresh settles it,
+        // stamped by the reflex and linked to its evidence.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let run = "test a ... ok\n";
+        crate::testing::record_run(&store, "twin/app", &crate::testing::parse_report(run), run)
+            .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+        assert_eq!(
+            latest(&index, &store, &sid, "status").unwrap().as_deref(),
+            Some("verified")
+        );
+        assert_eq!(
+            crate::twin::live_from(&index, &store, &sid, "verified_by")
+                .unwrap()
+                .len(),
+            1,
+            "the verdict names its evidence"
+        );
+
+        // A second change whose file moved on after the write: evidence
+        // or not, the reflex keeps a person in the call.
+        let p2 = propose(
+            &store,
+            src.path(),
+            "twin/app",
+            "src/main.rs",
+            "pub fn main() { improved_again() }\n",
+            "improve again",
+        )
+        .unwrap();
+        apply(&store, src.path(), "twin/app", &p2.slug, &["fs".to_string()]).unwrap();
+        fs::write(
+            src.path().join("src/main.rs"),
+            "pub fn main() { hand_edited() }\n",
+        )
+        .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let run2 = "test a ... ok\ntest b ... ok\n";
+        crate::testing::record_run(&store, "twin/app", &crate::testing::parse_report(run2), run2)
+            .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+        let sid2 = change_sid("twin/app", &p2.slug);
+        assert_eq!(
+            latest(&index, &store, &sid2, "status").unwrap().as_deref(),
+            Some("applied"),
+            "a hand-edited file is not the reflex's call"
+        );
+    }
+
+    #[test]
+    fn a_red_run_breaks_an_applied_change_instead_of_blessing_it() {
+        let (src, _sd, store) = setup();
+        let p = propose(
+            &store,
+            src.path(),
+            "twin/app",
+            "src/main.rs",
+            "pub fn main() { improved() }\n",
+            "improve main",
+        )
+        .unwrap();
+        apply(&store, src.path(), "twin/app", &p.slug, &["fs".to_string()]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let run = "test a ... ok\ntest b ... FAILED\n";
+        crate::testing::record_run(&store, "twin/app", &crate::testing::parse_report(run), run)
+            .unwrap();
+        refresh(&store, src.path(), "twin/app").unwrap();
+        let mut index = MemIndex::new();
+        replay(&store, &mut index).unwrap();
+        let sid = change_sid("twin/app", &p.slug);
+        assert_eq!(
+            latest(&index, &store, &sid, "status").unwrap().as_deref(),
+            Some("broken")
+        );
     }
 
     #[test]

@@ -380,7 +380,11 @@ body.plain .fix { display: none; }
 .journey-step.missing { color: var(--faint); }
 .journey-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .journey-step.missing .journey-dot { background: transparent; border: 1.5px dashed currentColor; }
+.chip-fold { margin: 9px 0 2px; }
+.chip-fold summary { color: var(--meta); font-size: 11.5px; cursor: pointer; }
+.chip-fold[open] summary { margin-bottom: 7px; }
 .concern-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0 2px; }
+.chip-fold .concern-chips { margin: 0; }
 .chip-ref {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
   border: 1px solid var(--line); border-radius: 999px; background: var(--sunk);

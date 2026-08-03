@@ -493,6 +493,15 @@ brain change revert twin/app config.rs-3fa2b1c9 --cap fs   # governed undo
 brain change list twin/app                                 # the ledger
 ```
 
+`verify` is rarely needed by hand: applied changes settle themselves
+when the evidence lands (ADR-031). Every `twin refresh` — and so every
+commit — checks each applied change against the newest recorded run
+since its apply: green stamps `verified`, red stamps `broken`, both
+linked `verified_by` to the run and sourced `"reflex"` so the audit
+trail says the machine decided. A content change only settles while its
+file still carries exactly what the change wrote — a hand-edited target
+stays a person's call.
+
 - **Propose is pure**: reason, target, full before/after content and
   hashes land in the graph; disk is untouched until apply.
 - **Apply is crash-safe**: the Intent is durably logged *before* the

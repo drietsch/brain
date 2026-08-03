@@ -336,6 +336,30 @@ fn run_event(
         report.docs.len()
     );
 
+    // The workforce picture refreshes itself: transcripts that ran in
+    // this workspace are imported on every commit, so the live and
+    // collision signals on Work are at most one commit stale. Fail-open
+    // like every sense organ — a hook must never block a commit.
+    if event == "post-commit" {
+        if let Some(home) = std::env::var_os("HOME") {
+            if let Ok(out) = brain_observe::sessions::import(
+                &store,
+                Path::new(&home),
+                Path::new(dir),
+                prefix,
+                None,
+                0,
+            ) {
+                if out.imported > 0 {
+                    println!(
+                        "brain[{event}]: {} session transcript(s) imported",
+                        out.imported
+                    );
+                }
+            }
+        }
+    }
+
     // Opt-in: run the graph-configured test command and import the
     // protocol, so every commit carries its test results automatically.
     if opts.tests && event == "post-commit" {

@@ -298,14 +298,9 @@ views.now = async () => {
                   step.when ? `${step.label} ${step.when}` : step.label)))
             : null,
           // The subjects themselves, each openable — the card shows what
-          // it is about instead of asking the reader to imagine it.
-          concern.chips.length
-            ? h("div", { class: "concern-chips" }, concern.chips.map((ref) =>
-                h("button", {
-                  class: "chip-ref", title: `a ${ref.noun}`,
-                  onclick: (event) => { event.stopPropagation(); openThing(ref.id); },
-                }, glyph(ref.glyph), h("span", { text: ref.label }))))
-            : null,
+          // it is about instead of asking the reader to imagine it. A
+          // long shelf folds; a short one stands open.
+          concern.chips.length ? chipFold(concern.chips) : null,
           fixLine(concern.fix_command),
           ackButton(concern)));
       if (concern.target) {
@@ -361,6 +356,26 @@ function census(proof) {
         h("p", { class: "census-label" },
           h("span", { text: group.label }),
           h("span", { class: "census-count", text: `${group.proven}/${group.total}` }))))));
+}
+
+/* A concern's subjects as a foldable shelf of openable chips. Short
+   shelves stand open; long ones fold behind an honest count. */
+function chipFold(chips) {
+  const summary = h("summary", {});
+  const fold = h("details", { class: "chip-fold", onclick: (event) => event.stopPropagation() },
+    summary,
+    h("div", { class: "concern-chips" }, chips.map((ref) =>
+      h("button", {
+        class: "chip-ref", title: `a ${ref.noun}`,
+        onclick: (event) => { event.stopPropagation(); openThing(ref.id); },
+      }, glyph(ref.glyph), h("span", { text: ref.label })))));
+  const speak = () => {
+    summary.textContent = fold.open ? "fold them away" : `show all ${chips.length}`;
+  };
+  fold.open = chips.length <= 6;
+  fold.addEventListener("toggle", speak);
+  speak();
+  return fold;
 }
 
 /* Direction of travel: the quality lines, already judged by the server

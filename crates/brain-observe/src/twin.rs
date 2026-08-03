@@ -556,6 +556,10 @@ fn run(
             }
         }
         record_quality(store, &index, prefix, &repo_sid, &ins, now, true)?;
+        // The reflex arc: applied changes whose evidence has since
+        // arrived settle themselves — nobody should have to type the
+        // command for a verdict the graph can already derive.
+        crate::govern::reconcile_applied(store, &index, prefix, now)?;
     }
 
     Ok(report)
