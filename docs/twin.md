@@ -299,8 +299,21 @@ without touching the hooks, and it replicates with the graph:
 cargo test 2>&1 | brain testrun import - --prefix twin/app
 npx playwright test --reporter=json | brain testrun import - --prefix twin/app
 brain testrun list twin/app
+brain testrun purge twin/app --dry-run   # cases no code declares any more
 brain twin tests twin/app        # files, frameworks, covers, failing cases
 ```
+
+A renamed or deleted test keeps answering for code that is gone, and
+recency cannot find it: a result is recorded under a guard, so a test
+that keeps passing never writes a second observation. What finds it is
+the declaring link — the twin records every function a file declares and
+retracts it when the function goes, so a case whose function exists
+nowhere was renamed or deleted. `brain testrun purge` retires those by
+recording `present=false`, exactly as a file that left the workspace is
+recorded: every past result and every run that named it stays readable,
+readers stop counting it, and a later run that names the test again
+brings it back on its own. Browser tests are titled in prose rather than
+declared as functions, so the command says nothing about them.
 
 What the graph gives you:
 
