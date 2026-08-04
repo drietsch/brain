@@ -243,6 +243,14 @@ body.in-now .readonly { display: none; }
 @keyframes breathe { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
 @keyframes lift { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
 
+/* The wait says what it is waiting for, once it has waited long enough
+   to be worth explaining. */
+.loading-why { display: block; margin-top: 8px; max-width: 62ch; color: var(--faint); font-size: 12px; }
+/* Nothing is answering: the reading on screen was true when it was
+   taken, and the page stops implying it is still being checked. */
+body.adrift .verdict .stamp, body.adrift .freshness { color: var(--signal); }
+body.adrift .rail-live { animation: none; opacity: .3; }
+
 .stage { grid-area: stage; overflow-y: auto; padding: 28px 36px 80px; }
 .stage.dark { background: var(--night); padding: 0; }
 .page { max-width: 1240px; margin: 0 auto; animation: fadeup var(--t-settle) both; }

@@ -114,6 +114,7 @@ pub const COMMANDS: &[Cmd] = &[
 
     Cmd { group: "Tests", name: "testrun import", args: "<report|-> --prefix <p> [--dir <d>]", summary: "ingest cargo-test output, JUnit XML, or Playwright JSON as a content-addressed protocol; Playwright's screenshots, videos and traces become assets owned by the case that produced them" },
     Cmd { group: "Tests", name: "testrun list", args: "<prefix>", summary: "imported protocols, newest first" },
+    Cmd { group: "Tests", name: "testrun purge", args: "<prefix> [--dry-run]", summary: "retire test cases no file declares any more — a renamed or deleted test stops answering for code that is gone; nothing is deleted, and a run that names it again brings it back" },
 
     Cmd { group: "Sessions", name: "sessions import", args: "[dir] [--prefix p] [--agent claude|codex] [--since 2h]", summary: "record the coding-agent sessions that ran in this workspace: objective, model, turns, tools, and the files they edited (never the conversation)" },
     Cmd { group: "Sessions", name: "sessions list", args: "<prefix> [--json]", summary: "who worked here and what they were trying to do, most recent first" },

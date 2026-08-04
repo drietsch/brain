@@ -248,7 +248,7 @@ async function render() {
   document.body.classList.toggle("in-now", route.view === "now");
   if (!inMri && mriHandle) { mriHandle.destroy(); mriHandle = null; }
   stopSpeaking();
-  stage.replaceChildren(h("p", { class: "loading", text: "Reading the graph…" }));
+  stage.replaceChildren(waiting());
   try {
     const renderer = views[route.view] || views.now;
     await renderer(route.params);
@@ -261,6 +261,26 @@ async function render() {
   stage.scrollTop = 0;
 }
 
+
+/**
+ * The wait, told honestly.
+ *
+ * Almost every read is a stat and a lock and lands before this is seen.
+ * The exception is the first read of a graph version — the index and
+ * every derived judgment are built once, then shared — and a blank
+ * screen that says nothing for twenty seconds looks like a hang. So the
+ * line waits a moment, and then says which of the two is happening.
+ */
+function waiting() {
+  const node = h("p", { class: "loading", text: "Reading the graph…" });
+  // A resolved view replaces this node, so a late append lands on
+  // something nobody is looking at. No cleanup needed, and none faked.
+  setTimeout(() => {
+    node.append(h("span", { class: "loading-why",
+      text: "This is the first read of this version of the graph, so the index and everything derived from it are being built. Every later read shares that work." }));
+  }, 1200);
+  return node;
+}
 
 /* -------------------------------------------------------------------- now */
 
@@ -1486,13 +1506,24 @@ window.addEventListener("hashchange", render);
 setInterval(async () => {
   try {
     const snapshot = await api("/api/snapshot");
+    document.body.classList.remove("adrift");
     if (state.snapshot && snapshot.cursor !== state.snapshot.cursor) {
       shelfCache = null;
       render();
     } else {
       paintChrome(snapshot);
     }
-  } catch (_) { /* the server went away; keep showing the last view */ }
+  } catch (_) {
+    // The last view stays — it was true when it was read — but a page
+    // that goes on looking live while nothing is answering is lying by
+    // omission, so the stamp says what it is now looking at.
+    document.body.classList.add("adrift");
+    const freshness = document.getElementById("freshness");
+    if (freshness) {
+      freshness.textContent = "eyes is not answering — this is the last reading";
+      freshness.dataset.tone = "signal";
+    }
+  }
 }, 6000);
 
 /* =====================================================================

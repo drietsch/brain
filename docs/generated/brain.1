@@ -159,6 +159,9 @@ ingest cargo\-test output, JUnit XML, or Playwright JSON as a content\-addressed
 .TP
 .B brain testrun list \fI<prefix>\fR
 imported protocols, newest first
+.TP
+.B brain testrun purge \fI<prefix> [\-\-dry\-run]\fR
+retire test cases no file declares any more \(em a renamed or deleted test stops answering for code that is gone; nothing is deleted, and a run that names it again brings it back
 .SH SESSIONS
 Who worked here: the coding\-agent sessions that ran in this workspace, with their objective, model, tools and blast radius \(em the graph's only record of a principal.
 .TP
