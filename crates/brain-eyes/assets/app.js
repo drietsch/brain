@@ -834,26 +834,30 @@ views.time = async (params) => {
   ]);
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
+  // Batches cluster by the day they happened on. The day is a record,
+  // so it is stamped as one; the row keeps the server's own phrasing of
+  // how long ago it was.
+  const days = [];
+  for (const episode of data.episodes) {
+    // Pinned to the language the rest of the cockpit speaks: say.rs
+    // writes English, so a weekday in the viewer's own locale would be
+    // the one foreign word on the page.
+    const day = new Date(episode.at_ms).toLocaleDateString("en-GB",
+      { weekday: "long", day: "numeric", month: "long" });
+    if (!days.length || days[days.length - 1].day !== day) days.push({ day, episodes: [] });
+    days[days.length - 1].episodes.push(episode);
+  }
+  for (const day of days) day.rows = foldRuns(day.episodes);
+
   stage.replaceChildren(h("div", { class: "page" },
     h("p", { class: "kicker" }, icon("history"), "Explore · Time"),
-    h("div", { class: "page-head" }, h("h1", { text: "Timeline" })),
+    h("h1", { class: "lede", text: "Timeline" }),
     h("p", { class: "page-note",
       text: "Everything the graph recorded, grouped into the batches it actually happened in. Pick a moment below to hold it against the present." }),
-    data.episodes.length
-      ? h("div", { class: "episodes" }, data.episodes.map((episode) =>
-          h("div", { class: "episode" },
-            h("time", { text: episode.when }),
-            h("div", {},
-              h("strong", { text: episode.title }),
-              episode.facts.map((fact) => h("p", { text: fact })),
-              episode.items.length
-                ? h("p", {}, episode.items.map((item, index) => [
-                    index ? ", " : "",
-                    h("button", { class: "row-link", text: item.label, onclick: () => openThing(item.id) }),
-                  ]).flat(), episode.more ? ` and ${episode.more} more` : "")
-                : null,
-              // What that batch of work was on.
-              featureTag(episode.features, (f) => openThing(f.id))))))
+    days.length
+      ? days.map((day) => h("section", { class: "day" },
+          h("p", { class: "day-head", text: day.day }),
+          h("div", { class: "panel episodes" }, day.rows.map(timelineRow))))
       : h("p", { class: "empty", text: "Nothing recorded yet." }),
     moments
       ? [
@@ -868,6 +872,54 @@ views.time = async (params) => {
         ]
       : null));
 };
+
+/* What kind of batch this was, as the shape the kind already carries
+   everywhere else. Nothing here is a verdict — the mark says which
+   register the batch belongs to, not whether it went well. */
+const EPISODE_MARK = {
+  observation: "block", session: "orbit", review: "shield",
+  tests: "diamond", change: "chevron",
+};
+
+/* A run of identical batches — six documents each confirmed still
+   accurate in the same minute — is one thing that happened six times,
+   not six things. Only batches with nothing of their own to show fold,
+   so no file, fact or feature is ever collapsed away. */
+function foldRuns(episodes) {
+  const rows = [];
+  for (const episode of episodes) {
+    const bare = !episode.items.length && !episode.facts.length && !episode.features.length;
+    const previous = rows[rows.length - 1];
+    if (bare && previous?.bare
+        && previous.episode.kind === episode.kind
+        && previous.episode.title === episode.title) {
+      previous.repeats += 1;
+      continue;
+    }
+    rows.push({ episode, bare, repeats: 1 });
+  }
+  return rows;
+}
+
+function timelineRow({ episode, repeats }) {
+  return h("div", { class: "episode" },
+    h("time", { text: episode.when }),
+    h("span", { class: "episode-mark", title: episode.kind },
+      icon(EPISODE_MARK[episode.kind] ?? "block", "sm")),
+    h("div", {},
+      h("strong", {},
+        episode.title,
+        repeats > 1 ? h("span", { class: "repeats", text: `×${repeats}` }) : null),
+      episode.facts.map((fact) => h("p", { text: fact })),
+      episode.items.length
+        ? h("p", {}, episode.items.map((item, index) => [
+            index ? ", " : "",
+            h("button", { class: "row-link", text: item.label, onclick: () => openThing(item.id) }),
+          ]).flat(), episode.more ? ` and ${episode.more} more` : "")
+        : null,
+      // What that batch of work was on.
+      featureTag(episode.features, (f) => openThing(f.id))));
+}
 
 async function compareBody(params) {
   const to = params.to || "live";
