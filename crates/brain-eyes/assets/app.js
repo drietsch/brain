@@ -1772,12 +1772,22 @@ async function testsPanel(host, params) {
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
 
-  // Cases are grouped by the file or module that defines them, so a
-  // suite reads as a suite rather than 150 loose rows.
+  // Two hundred cases are unreadable as a list, so they are always
+  // grouped — but by what depends on the question. The suite answers
+  // "where is this written", the area "which part of the system", the
+  // kind "what sort of test", the framework "what ran it".
+  const GROUPINGS = [
+    ["suite", "by suite", (row) => row.group],
+    ["home", "by area", (row) => row.home ?? row.group],
+    ["kind", "by kind", (row) => row.kind_label ?? row.group],
+    ["framework", "by framework", (row) => row.framework ?? row.group],
+  ];
+  const chosen = GROUPINGS.find(([id]) => id === (params.by ?? "suite")) ?? GROUPINGS[0];
   const groups = new Map();
   for (const row of data.cases) {
-    if (!groups.has(row.group)) groups.set(row.group, []);
-    groups.get(row.group).push(row);
+    const key = chosen[2](row);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
   }
   // The flag says `suite`, not `group`: every case already carries a
   // `group` naming its suite, and a truthy string there made each case
@@ -1793,6 +1803,8 @@ async function testsPanel(host, params) {
     // while it is green: it is the one that will wake you.
     restless: cases.some((c) => c.flips >= 3),
     frameworks: [...new Set(cases.map((c) => c.framework).filter(Boolean))],
+    kinds: [...new Set(cases.map((c) => c.kind_label).filter(Boolean))],
+    homes: [...new Set(cases.map((c) => c.home).filter(Boolean))],
   }));
 
   const tableHost = h("div", {});
@@ -1805,6 +1817,9 @@ async function testsPanel(host, params) {
       ? h("div", { class: "chips ledger" }, data.frameworks.map((f) =>
           h("span", { class: "chip quiet" }, f.label, h("em", { text: String(f.declared) }))))
       : null,
+    h("div", { class: "lenses" }, GROUPINGS.map(([id, label]) =>
+      h("button", { class: id === chosen[0] ? "on" : "", text: label,
+        onclick: () => go("proof", { tab: "tests", by: id }) }))),
     tableHost,
   ];
 
@@ -1819,6 +1834,24 @@ async function testsPanel(host, params) {
     parts.push(h("div", { class: "panel runs" },
       runs.map((run) => protocolRow(run, !shared))));
   }
+  // Cases whose function no longer exists anywhere: renamed or deleted
+  // tests still answering for code that is gone. Eyes names them and
+  // renders the command; the CLI decides, as always.
+  const unseen = data.cases.filter((row) => row.unseen);
+  if (unseen.length) {
+    parts.push(h("h2", { class: "section", text: "No code declares them any more" }));
+    parts.push(h("p", { class: "sub",
+      text: "The twin records every function a file declares and drops the link when it goes, so these tests were renamed or deleted. Retiring one keeps its history, and a run that names it again brings it back." }));
+    parts.push(h("div", { class: "chips" }, unseen.slice(0, 12).map((row) =>
+      h("button", { class: "chip-ref", onclick: () => openThing(row.id) },
+        glyph("diamond"), h("span", { text: row.name }),
+        h("span", { class: "chip-arrow", "aria-hidden": "true", text: "›" })))));
+    if (unseen.length > 12) {
+      parts.push(h("p", { class: "map-hint", text: `${unseen.length - 12} more are not listed here.` }));
+    }
+    parts.push(commandLine(`brain testrun purge ${data.snapshot.prefix} --dry-run`));
+  }
+
   if (data.uncovered.length) {
     parts.push(h("h2", { class: "section", text: "Depended on, but no test touches them" }));
     parts.push(h("div", { class: "chips" }, data.uncovered.map((item) =>
@@ -1864,7 +1897,9 @@ async function testsPanel(host, params) {
           { value: "passing", label: "passing" },
         ],
       },
+      { id: "kind", get: (row) => (row.suite ? row.kinds : row.kind_label) },
       { id: "framework", get: (row) => (row.suite ? row.frameworks : row.framework) },
+      { id: "area", get: (row) => (row.suite ? row.homes : row.home) },
       { id: "feature", get: (row) => (row.suite ? [] : row.features.map((f) => f.label)) },
       {
         id: "history",
@@ -1925,6 +1960,31 @@ async function testsPanel(host, params) {
 /* Everything one case has to show, opened where it sits: what it is
    called in full, how it went and for how long, what it left behind,
    and which claim it serves. */
+/* What a run left behind, shown rather than named: a screenshot is a
+   picture, a recording plays. The extension is a record, so it decides. */
+const PICTURE = /\.(png|jpe?g|webp|gif|avif)$/i;
+const RECORDING = /\.(webm|mp4|mov|m4v)$/i;
+
+function attachmentView(shot) {
+  const src = `/api/body?id=${encodeURIComponent(shot.id)}`;
+  if (PICTURE.test(shot.path)) {
+    return h("figure", { class: "shot-frame" },
+      h("img", { src, alt: shot.label, loading: "lazy",
+        onclick: (event) => { event.stopPropagation(); openThing(shot.id); } }),
+      h("figcaption", { text: shot.noun }));
+  }
+  if (RECORDING.test(shot.path)) {
+    return h("figure", { class: "shot-frame" },
+      h("video", { src, controls: "controls", preload: "metadata",
+        onclick: (event) => event.stopPropagation() }),
+      h("figcaption", { text: shot.noun }));
+  }
+  return h("button", { class: "chip-ref",
+      onclick: (event) => { event.stopPropagation(); openThing(shot.id); } },
+    glyph("page"), h("span", { text: shot.noun }),
+    h("span", { class: "chip-arrow", "aria-hidden": "true", text: "›" }));
+}
+
 function caseDetail(row) {
   const facts = [];
   if (row.duration) facts.push(h("span", { text: `took ${row.duration}` }));
@@ -1936,15 +1996,22 @@ function caseDetail(row) {
     h("div", { class: "case-open-head" },
       h("code", { class: "case-full", text: row.name }),
       h("span", { class: `chip ${row.tone}`, text: row.result })),
+    // What sort of test it is, what ran it, and where it lives.
+    h("p", { class: "pill-row" },
+      row.kind_label ? h("span", { class: "chip quiet", text: row.kind_label }) : null,
+      row.framework ? h("span", { class: "chip quiet", text: row.framework }) : null,
+      row.home ? h("span", { class: "chip quiet", text: row.home }) : null,
+      row.file
+        ? h("button", { class: "chip-ref",
+            onclick: (event) => { event.stopPropagation(); openThing(row.file.id); } },
+          glyph("block"), h("span", { text: row.file.label }),
+          h("span", { class: "chip-arrow", "aria-hidden": "true", text: "›" }))
+        : null),
     row.error ? h("p", { class: "case-error", text: row.error }) : null,
     row.note ? h("p", { class: "case-note", text: row.note }) : null,
     facts.length ? h("p", { class: "pill-row" }, facts) : null,
-    // What it left behind, shown rather than named.
     row.attachments.length
-      ? h("div", { class: "case-shots" }, row.attachments.map((shot) =>
-          h("button", { class: "chip-ref", onclick: () => openThing(shot.id) },
-            glyph(shot.glyph ?? "frame"), h("span", { text: shot.noun }),
-            h("span", { class: "chip-arrow", "aria-hidden": "true", text: "›" }))))
+      ? h("div", { class: "case-shots" }, row.attachments.map(attachmentView))
       : null,
     row.features.length
       ? h("p", { class: "pill-row" }, "serves ", featureTag(row.features, (f) => openThing(f.id)))

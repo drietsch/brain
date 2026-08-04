@@ -166,6 +166,20 @@ pub fn framework_noun(framework: &str) -> &'static str {
     }
 }
 
+/// What sort of test this is, said the way a person would say it.
+///
+/// The distinction is the file's, not ours: a browser test drives a
+/// browser, a whole file of tests exercises a crate from the outside,
+/// and a test written beside the code it checks is a unit test.
+pub fn test_kind_label(kind: &str) -> &'static str {
+    match kind {
+        "browser" => "browser test",
+        "integration" => "integration test",
+        "unit" => "unit test",
+        _ => "test",
+    }
+}
+
 /// What a run report format is called in conversation.
 pub fn report_format(format: &str) -> &'static str {
     match format {

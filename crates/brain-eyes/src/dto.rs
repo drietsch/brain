@@ -445,6 +445,17 @@ pub struct CaseRow {
     pub when: String,
     pub at_ms: u64,
     pub framework: Option<String>,
+    /// "unit" | "integration" | "browser" — what sort of test this is,
+    /// read off the file that declares it rather than guessed from a
+    /// name.
+    pub kind: Option<String>,
+    /// The same, said for a person: "a unit test", "a browser test".
+    pub kind_label: Option<String>,
+    /// The crate or top-level area the test lives in, for grouping.
+    pub home: Option<String>,
+    /// True when no file declares this case's function any more — what a
+    /// renamed or deleted test looks like from the graph.
+    pub unseen: bool,
     pub duration: Option<String>,
     pub error: Option<String>,
     pub retries: usize,

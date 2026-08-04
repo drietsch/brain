@@ -129,9 +129,27 @@ every imported run with what it named, and every file the twin classified
 as holding tests. A Playwright failure carries its error, its duration,
 its retries and its screenshot. A suite is a grouping, not a thing, so
 its whole row opens what it holds; a case then opens its own detail
-beneath itself — the full name, the verdict, what it took, what it left
-behind, which claim it serves — because a page you have to come back
-from costs you your place in the list. When something is failing or has
+beneath itself — the full name, the verdict, what sort of test it is,
+what ran it, where it lives, the file that declares it, what it took,
+and what it left behind, with screenshots shown and recordings played
+in place rather than named — because a page you have to come back from
+costs you your place in the list.
+
+Two hundred cases are unreadable as a list, so they are always grouped,
+and by what the question asks: **by suite** (where is this written),
+**by area** (which crate), **by kind** (unit, integration or browser),
+or **by framework** (what ran it). None of that is inferred from a
+name: the twin classifies each file as holding tests, and the file
+decides what sort of test its tests are.
+
+A test that was renamed or deleted keeps answering for code that is
+gone. The twin records every function a file declares and drops the
+link when the function does, so Tests can name the cases nothing
+declares any more and render `brain testrun purge`. Retiring one keeps
+its whole history — the graph records `present=false`, the same way a
+file that left the workspace is recorded — and a run that names the
+test again brings it back on its own. Browser tests are titled in prose
+rather than declared as functions, so this says nothing about them. When something is failing or has
 been changing its mind, the suites where everything passes wait behind
 one line; when nothing is, there is no "more interesting" to lead with
 and the whole list stands.

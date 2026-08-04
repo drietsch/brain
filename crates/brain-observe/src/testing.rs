@@ -650,6 +650,11 @@ pub fn record_run_in(
             entity_kind: "test_case".to_string(),
             labels,
         })?;
+        // A retired case that a run names again is back: the code that
+        // declares it returned, so the graph stops calling it gone.
+        if latest(&index, store, &case_sid, "present")?.as_deref() == Some("false") {
+            observe_src(store, &case_sid, "present", "true", "testrun", now)?;
+        }
         let prior = latest(&index, store, &case_sid, "result")?;
         let flipped = prior.is_some() && prior.as_deref() != Some(status.as_str());
         if prior.as_deref() != Some(status.as_str()) {
@@ -856,6 +861,92 @@ pub fn runs(
         .collect())
 }
 
+/// Test cases no code declares any more.
+///
+/// A test result is recorded under a guard, so a test that keeps passing
+/// never writes a second observation — its timestamp says when it last
+/// changed its mind, not when it last ran. Recency therefore proves
+/// nothing here. What does: the twin records every function a file
+/// declares and retracts that link when the function goes, so a case
+/// whose function no longer exists anywhere is a case whose test was
+/// renamed or deleted.
+///
+/// Only cases named after a function can be judged this way. A browser
+/// test is titled in prose rather than declared as a symbol, so this says
+/// nothing about it rather than guessing.
+pub fn unseen_cases(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+) -> Result<Vec<(StableId, String, u64)>, StoreError> {
+    // Every function name still declared by a file the twin can see.
+    let mut declared: BTreeSet<String> = BTreeSet::new();
+    for node in index.entities_by_kind("symbol") {
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
+        // A symbol whose file dropped it has its `contains` retracted;
+        // reading the live side is what makes this current.
+        if crate::twin::live_to(index, store, &id, "contains")?.is_empty() {
+            continue;
+        }
+        if let Some(name) = labels.get("name") {
+            declared.insert(name.clone());
+        }
+    }
+
+    let mut seen: BTreeSet<StableId> = BTreeSet::new();
+    let mut out = Vec::new();
+    for node in index.entities_by_kind("test_case") {
+        let Ok(Object::Entity { id, labels, .. }) = store.get(&node) else {
+            continue;
+        };
+        if labels.get("prefix").map(String::as_str) != Some(prefix) || !seen.insert(id.clone()) {
+            continue;
+        }
+        if latest(index, store, &id, "present")?.as_deref() == Some("false") {
+            continue;
+        }
+        let name = labels
+            .get("name")
+            .cloned()
+            .unwrap_or_else(|| crate::twin::sid_label(index, store, &id));
+        // `module::tests::the_case` — the last segment is the function.
+        // A title with spaces in it is not one, so it is left alone.
+        let Some(function) = name.rsplit("::").next() else {
+            continue;
+        };
+        if function.contains(' ') || function == name || declared.contains(function) {
+            continue;
+        }
+        let at = crate::twin::latest_at(index, store, &id, "result")?
+            .map(|(at, _)| at)
+            .unwrap_or(0);
+        out.push((id, name, at));
+    }
+    out.sort_by(|a, b| a.1.cmp(&b.1));
+    Ok(out)
+}
+
+/// Mark cases the newest run of their kind never mentioned as gone.
+///
+/// Nothing is deleted: the graph records `present=false`, the same way a
+/// file that left the workspace is recorded, so every past result and
+/// every run that named it stays readable. Returns what it retired.
+pub fn purge_unseen(
+    store: &Store,
+    index: &MemIndex,
+    prefix: &str,
+    now: u64,
+) -> Result<Vec<String>, StoreError> {
+    let mut retired = Vec::new();
+    for (sid, name, _) in unseen_cases(store, index, prefix)? {
+        observe_src(store, &sid, "present", "false", "purge", now)?;
+        retired.push(name);
+    }
+    Ok(retired)
+}
+
 /// Test cases whose latest recorded result is `fail`, sorted by name.
 pub fn failing_cases(
     store: &Store,
@@ -887,6 +978,69 @@ mod tests {
         let mut index = MemIndex::new();
         replay(store, &mut index).unwrap();
         index
+    }
+
+    /// A test that was deleted keeps answering for code that is gone
+    /// until it is retired — and comes back on its own if the code does.
+    #[test]
+    fn a_deleted_test_is_retired_and_a_returning_one_is_restored() {
+        use std::fs;
+        let src = tempfile::tempdir().unwrap();
+        fs::create_dir_all(src.path().join("src")).unwrap();
+        fs::write(
+            src.path().join("src/lib.rs"),
+            "pub fn a() {}\n#[test]\nfn still_here() {}\n#[test]\nfn on_its_way_out() {}\n",
+        )
+        .unwrap();
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = Store::open(store_dir.path()).unwrap();
+        crate::twin::refresh(&store, src.path(), "twin/app").unwrap();
+
+        let report = parse_cargo(
+            "test lib::tests::still_here ... ok\ntest lib::tests::on_its_way_out ... ok\n\
+             test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n",
+        );
+        record_run(&store, "twin/app", &report, "raw").unwrap();
+
+        // While both functions exist, neither case is a candidate.
+        let index = fresh_index(&store);
+        assert!(unseen_cases(&store, &index, "twin/app").unwrap().is_empty());
+
+        // The second test is deleted and the twin sees the file again.
+        fs::write(
+            src.path().join("src/lib.rs"),
+            "pub fn a() {}\n#[test]\nfn still_here() {}\n",
+        )
+        .unwrap();
+        crate::twin::refresh(&store, src.path(), "twin/app").unwrap();
+
+        let index = fresh_index(&store);
+        let gone = unseen_cases(&store, &index, "twin/app").unwrap();
+        assert_eq!(gone.len(), 1, "only the deleted test is a candidate");
+        assert!(gone[0].1.ends_with("on_its_way_out"));
+
+        let retired = purge_unseen(&store, &index, "twin/app", now_ms()).unwrap();
+        assert_eq!(retired.len(), 1);
+        let index = fresh_index(&store);
+        assert!(
+            unseen_cases(&store, &index, "twin/app").unwrap().is_empty(),
+            "a retired case is not offered twice"
+        );
+
+        // The test returns, and so does its case: a run that names it
+        // again overrides the retirement.
+        let case = StableId::derive(&["test", "twin/app", "lib::tests::on_its_way_out"]);
+        assert_eq!(
+            latest(&index, &store, &case, "present").unwrap().as_deref(),
+            Some("false")
+        );
+        record_run(&store, "twin/app", &report, "raw again").unwrap();
+        let index = fresh_index(&store);
+        assert_eq!(
+            latest(&index, &store, &case, "present").unwrap().as_deref(),
+            Some("true"),
+            "a run that names a retired case brings it back"
+        );
     }
 
     #[test]

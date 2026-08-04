@@ -3753,7 +3753,7 @@ fn home_dir() -> Option<std::path::PathBuf> {
 /// `brain testrun ...` — test protocols in the graph.
 fn cmd_testrun(args: &[String]) -> Result<(), String> {
     use brain_observe::testing;
-    let usage = "usage: brain testrun import <report-file|-> --prefix <p> [--dir <d>] | brain testrun list <prefix>";
+    let usage = "usage: brain testrun import <report-file|-> --prefix <p> [--dir <d>] | brain testrun list <prefix> | brain testrun purge <prefix> [--dry-run]";
     match args.first().map(String::as_str) {
         Some("import") => {
             let mut file = None;
@@ -3830,6 +3830,47 @@ fn cmd_testrun(args: &[String]) -> Result<(), String> {
                 let verdict = if failed == 0 { "ok" } else { "FAILED" };
                 println!("[{age:>6}s ago] {verdict}: {passed}/{total} passed, {failed} failed ({format})");
             }
+            Ok(())
+        }
+        // A test that was renamed or deleted keeps answering for code
+        // that no longer exists. This retires those — as a recorded
+        // fact, not a deletion: every past result stays readable, and a
+        // run that names the test again brings it back.
+        Some("purge") => {
+            let mut prefix = None;
+            let mut dry = false;
+            for arg in &args[1..] {
+                match arg.as_str() {
+                    "--dry-run" => dry = true,
+                    other if prefix.is_none() => prefix = Some(other.to_string()),
+                    other => return Err(format!("unexpected argument '{other}'\n{usage}")),
+                }
+            }
+            let prefix = prefix.ok_or(usage)?;
+            let store = open_store()?;
+            let index = build_index(&store)?;
+            let unseen =
+                testing::unseen_cases(&store, &index, &prefix).map_err(|e| e.to_string())?;
+            if unseen.is_empty() {
+                println!("every recorded case is still declared by code the twin can see");
+                return Ok(());
+            }
+            for (_, name, _) in &unseen {
+                println!("  {name}");
+            }
+            if dry {
+                println!(
+                    "{} case(s) no code declares any more; run without --dry-run to retire them",
+                    unseen.len()
+                );
+                return Ok(());
+            }
+            let retired = testing::purge_unseen(&store, &index, &prefix, now_ms())
+                .map_err(|e| e.to_string())?;
+            println!(
+                "retired {} case(s) under {prefix} — history kept, readers stop counting them",
+                retired.len()
+            );
             Ok(())
         }
         _ => Err(usage.to_string()),

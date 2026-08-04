@@ -139,8 +139,48 @@ pub fn case_rows(loaded: &Loaded) -> Result<Vec<CaseRow>, String> {
     let frameworks = framework_by_file(loaded)?;
     let attachments = attachments_by_owner(loaded)?;
 
+    // The classified test files, so a case with no recorded `defined_in`
+    // can still say which file declares it, and therefore what sort of
+    // test it is and where it lives.
+    let mut test_files = Vec::new();
+    for (path, sid) in query::present_files(index, store, prefix)? {
+        let Some(framework) =
+            twin::latest(index, store, &sid, "test_framework").map_err(|e| e.to_string())?
+        else {
+            continue;
+        };
+        let whole_file = twin::latest(index, store, &sid, "file_role")
+            .map_err(|e| e.to_string())?
+            .as_deref()
+            == Some("test");
+        test_files.push(TestFile {
+            path,
+            sid,
+            framework,
+            whole_file,
+        });
+    }
+
+    // Cases the newest run of their kind never mentioned: renamed or
+    // deleted tests still answering for code they no longer check.
+    let unseen: std::collections::BTreeSet<StableId> =
+        brain_observe::testing::unseen_cases(store, index, prefix)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|(sid, _, _)| sid)
+            .collect();
+
     let mut out = Vec::new();
     for (sid, labels) in query::scoped(index, store, prefix, "test_case")? {
+        // A purged case keeps its history but stops being counted, the
+        // same way a file that left the workspace does.
+        if twin::latest(index, store, &sid, "present")
+            .map_err(|e| e.to_string())?
+            .as_deref()
+            == Some("false")
+        {
+            continue;
+        }
         let name = labels
             .get("name")
             .cloned()
@@ -200,6 +240,17 @@ pub fn case_rows(loaded: &Loaded) -> Result<Vec<CaseRow>, String> {
             None
         };
 
+        // What the graph knows outright, then what the declaring file
+        // can tell us when it does not.
+        let declaring = declaring_file(&test_files, &group);
+        let framework = framework.or_else(|| declaring.map(|f| f.framework.clone()));
+        let file = file.or_else(|| declaring.map(|f| query::make_ref(index, store, &f.sid)));
+        let kind = declaring.map(|f| test_kind(&f.framework, f.whole_file).to_string());
+        let home = file_path
+            .as_deref()
+            .or(declaring.map(|f| f.path.as_str()))
+            .and_then(home_of);
+
         out.push(CaseRow {
             id: sid.to_string(),
             name,
@@ -212,6 +263,10 @@ pub fn case_rows(loaded: &Loaded) -> Result<Vec<CaseRow>, String> {
                 String::new()
             },
             at_ms,
+            kind_label: kind.as_deref().map(|k| say::test_kind_label(k).to_string()),
+            kind,
+            home,
+            unseen: unseen.contains(&sid),
             framework: framework.map(|f| say::framework_noun(&f).to_string()),
             duration: text("duration_ms")
                 .and_then(|v| v.parse::<u64>().ok())
@@ -397,6 +452,59 @@ fn suites(loaded: &Loaded) -> Result<Vec<Suite>, String> {
     }
     out.sort_by(|a, b| b.declared.cmp(&a.declared).then(a.path.cmp(&b.path)));
     Ok(out)
+}
+
+/// A file the twin classified as holding tests, with everything a case
+/// needs to say what sort of test it is.
+struct TestFile {
+    path: String,
+    sid: StableId,
+    framework: String,
+    whole_file: bool,
+}
+
+/// Which classified test file declares a case.
+///
+/// The graph records `defined_in` when an importer knew the file; cargo
+/// output does not carry one. A Rust case is named `module::tests::case`
+/// and a browser case `file.spec.ts::title`, so the leading segment names
+/// the file — matched against the files the twin already classified as
+/// holding tests. An ambiguous match says nothing rather than guessing.
+fn declaring_file<'a>(files: &'a [TestFile], group: &str) -> Option<&'a TestFile> {
+    let head = group.split("::").next().unwrap_or(group);
+    let mut found = None;
+    for file in files {
+        let base = file.path.rsplit('/').next().unwrap_or(&file.path);
+        let stem = base.split('.').next().unwrap_or(base);
+        if base == head || stem == head {
+            if found.is_some() {
+                return None;
+            }
+            found = Some(file);
+        }
+    }
+    found
+}
+
+/// What sort of test a file's tests are: a browser test drives a browser,
+/// a whole file of tests exercises a crate from outside, and tests written
+/// beside the code they check are unit tests.
+fn test_kind(framework: &str, whole_file: bool) -> &'static str {
+    match (framework, whole_file) {
+        ("playwright", _) => "browser",
+        (_, true) => "integration",
+        _ => "unit",
+    }
+}
+
+/// The crate or top-level area a path lives in, so tests can be read by
+/// the part of the system they belong to.
+fn home_of(path: &str) -> Option<String> {
+    let mut parts = path.split('/');
+    match parts.next()? {
+        "crates" => parts.next().map(|name| name.to_string()),
+        top => Some(top.to_string()),
+    }
 }
 
 fn framework_by_file(loaded: &Loaded) -> Result<BTreeMap<String, String>, String> {
