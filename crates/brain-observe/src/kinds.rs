@@ -111,6 +111,21 @@ impl KindDef {
 
 /// The merged registry, keyed by entity kind. Compiled defaults form the
 /// base; every graph template overlays its observed properties on top.
+/// The command that authors a record of this kind, when one exists.
+///
+/// A graph-first kind is authored through the CLI and nowhere else; a
+/// file-first kind is authored by writing its file, which the twin then
+/// captures; a projection is never authored at all. Every surface that
+/// has to tell someone how to add a record — the agent instructions, the
+/// WebDAV mount's refusal — asks here, so none of them can drift from
+/// the placement policy or from each other.
+pub fn author_via(def: &KindDef, prefix: &str) -> Option<String> {
+    match def.placement.as_str() {
+        "graph_first" => Some(format!("brain artifact new {prefix} {} <slug>", def.kind)),
+        _ => None,
+    }
+}
+
 pub fn registry(store: &Store, index: &MemIndex) -> Result<BTreeMap<String, KindDef>, StoreError> {
     let mut out: BTreeMap<String, KindDef> = BTreeMap::new();
     for def in templates::DEFAULTS {

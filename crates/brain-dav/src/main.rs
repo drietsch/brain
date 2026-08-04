@@ -26,6 +26,10 @@ fn read_only_methods() -> DavMethodSet {
     set
 }
 
+/// The verbs this surface answers. Everything else is refused with the
+/// route that would have worked.
+const READS: [&str; 6] = ["GET", "HEAD", "OPTIONS", "PROPFIND", "LOCK", "UNLOCK"];
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = Config::default();
@@ -43,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let state = Arc::new(AppState::new(config)?);
     let handler = DavHandler::builder()
-        .filesystem(brain_dav::GraphFs::new(state))
+        .filesystem(brain_dav::GraphFs::new(state.clone()))
         // GET, HEAD, OPTIONS, PROPFIND — and LOCK, only so the volume can
         // be mounted at all. Every other verb is refused before it reaches
         // the filesystem, and `Allow:` says so rather than advertising a
@@ -61,10 +65,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let (stream, _) = listener.accept().await?;
         let handler = handler.clone();
+        let state = state.clone();
         tokio::spawn(async move {
-            let service = hyper::service::service_fn(move |req| {
+            let service = hyper::service::service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
                 let handler = handler.clone();
-                async move { Ok::<_, std::convert::Infallible>(handler.handle(req).await) }
+                let state = state.clone();
+                async move {
+                    // A refusal that only says "no" teaches nothing. Answer
+                    // the write verbs here, with the command that would
+                    // have done what the caller wanted.
+                    if !READS.contains(&req.method().as_str()) {
+                        let body = brain_dav::refusal(
+                            &state,
+                            req.method().as_str(),
+                            req.uri().path(),
+                        );
+                        let response = hyper::Response::builder()
+                            .status(hyper::StatusCode::METHOD_NOT_ALLOWED)
+                            .header("Allow", "OPTIONS, HEAD, GET, PROPFIND, LOCK, UNLOCK")
+                            .header("Content-Type", "text/plain; charset=utf-8")
+                            .body(dav_server::body::Body::from(body))
+                            .expect("static response");
+                        return Ok::<_, std::convert::Infallible>(response);
+                    }
+                    Ok::<_, std::convert::Infallible>(handler.handle(req).await)
+                }
             });
             let _ = http1::Builder::new()
                 .serve_connection(TokioIo::new(stream), service)

@@ -78,11 +78,12 @@ impl GraphFs {
             .state
             .read(|loaded| brain_eyes::query::library::build(loaded, shelf, ""))
             .map_err(|_| FsError::GeneralFailure)?;
-        Ok(view
+        let items = view
             .items
             .into_iter()
-            .map(|item| (file_name(&item.title, &item.label), item.id))
-            .collect())
+            .map(|item| (item.label, item.id))
+            .collect::<Vec<_>>();
+        Ok(name_records(items))
     }
 
     /// The bytes of one record: the document as the graph holds it.
@@ -111,21 +112,103 @@ enum Node {
     Missing,
 }
 
-/// A record's file name: the title a person would look for, carrying the
-/// extension the document actually has.
-fn file_name(title: &str, label: &str) -> String {
-    let ext = label.rsplit_once('.').map(|(_, e)| e).unwrap_or("md");
-    let stem: String = title
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == ' ' {
-                c
-            } else {
-                '-'
-            }
+/// What to say to something that tried to write here.
+///
+/// A refusal that only says "no" teaches nothing, and an agent that has
+/// just been told "no" will try again. This one names the command that
+/// does what the caller wanted — asked of the kind registry, the same
+/// source the agent instructions are rendered from, so the mount cannot
+/// recommend a route the policy does not have.
+pub fn refusal(state: &AppState, method: &str, path: &str) -> String {
+    let shelf = path
+        .trim_start_matches('/')
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .to_string();
+    let route = state
+        .read(|loaded| {
+            let (_, _, kinds) = brain_eyes::query::library::shelf_kinds(&shelf);
+            let registry = loaded.registry();
+            let prefix = loaded.prefix().to_string();
+            Ok(kinds
+                .into_iter()
+                .filter_map(|kind| registry.get(&kind).map(|def| (kind, def.clone())))
+                .map(|(kind, def)| match brain_observe::kinds::author_via(&def, &prefix) {
+                    Some(command) => format!("  a {kind} is authored with: {command}"),
+                    None if def.placement == "projection" => {
+                        format!("  a {kind} is a rendered query — it is never authored")
+                    }
+                    None => format!(
+                        "  a {kind} is authored by writing its file ({}); the twin captures it",
+                        if def.home.is_empty() {
+                            "in the workspace".to_string()
+                        } else {
+                            def.home.join(", ")
+                        }
+                    ),
+                })
+                .collect::<Vec<_>>())
         })
-        .collect();
-    format!("{}.{ext}", stem.trim())
+        .unwrap_or_default();
+
+    let mut out = String::new();
+    out.push_str("This mount is a read-only projection of the brain graph.\n");
+    out.push_str(&format!("{method} {path} was refused; nothing was written.\n"));
+    if route.is_empty() {
+        out.push_str("\nRecords are authored through the brain CLI, never by writing here.\n");
+    } else {
+        out.push_str("\nWhat you tried to do belongs to the CLI:\n");
+        for line in route {
+            out.push_str(&line);
+            out.push('\n');
+        }
+    }
+    out.push_str("\nWhy: the graph is the system of record, so an artifact that appeared\n");
+    out.push_str("beside the real ones without passing through it would be a claim with\n");
+    out.push_str("no history, no source, and nothing corroborating it.\n");
+    out
+}
+
+/// A record's file name: its slug.
+///
+/// For anything that lives in a file, that is the file's own name, so
+/// `adr-031-evidence-settles-applied-changes.md` on the mount is the same
+/// string as on disk and in every command that names it. For records that
+/// live only in the graph, the slug is the name and `.md` is added.
+///
+/// Two records can share a basename across directories. The slug is a
+/// convenience for reading and typing; identity is the id, so a collision
+/// is disambiguated rather than allowed to hide a record.
+fn file_name(label: &str) -> String {
+    let base = label.rsplit('/').next().unwrap_or(label);
+    if base.contains('.') {
+        base.to_string()
+    } else {
+        format!("{base}.md")
+    }
+}
+
+/// Give every record a name of its own, in a stable order.
+fn name_records(items: Vec<(String, String)>) -> Vec<(String, String)> {
+    let mut seen: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    items
+        .into_iter()
+        .map(|(label, id)| {
+            let wanted = file_name(&label);
+            let count = seen.entry(wanted.clone()).or_insert(0);
+            *count += 1;
+            let name = if *count == 1 {
+                wanted
+            } else {
+                match wanted.rsplit_once('.') {
+                    Some((stem, ext)) => format!("{stem}-{count}.{ext}"),
+                    None => format!("{wanted}-{count}"),
+                }
+            };
+            (name, id)
+        })
+        .collect()
 }
 
 impl DavFileSystem for GraphFs {

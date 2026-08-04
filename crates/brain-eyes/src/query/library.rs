@@ -183,7 +183,7 @@ pub fn build(loaded: &Loaded, shelf: &str, query_text: &str) -> Result<LibraryVi
     })
 }
 
-fn shelf_kinds(shelf: &str) -> (String, String, Vec<String>) {
+pub fn shelf_kinds(shelf: &str) -> (String, String, Vec<String>) {
     for (id, label, note, kinds) in SHELVES {
         if *id == shelf {
             return (

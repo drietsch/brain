@@ -51,10 +51,10 @@ pub fn block(store: &Store, index: &MemIndex, prefix: &str) -> Result<String, St
         } else {
             "in the graph only".to_string()
         };
-        let author = match def.placement.as_str() {
-            "graph_first" => format!("`brain artifact new {prefix} {kind} <slug>`"),
-            "projection" => "rendered query — never authored".to_string(),
-            _ => "write the file; the twin captures it".to_string(),
+        let author = match crate::kinds::author_via(def, prefix) {
+            Some(command) => format!("`{command}`"),
+            None if def.placement == "projection" => "rendered query — never authored".to_string(),
+            None => "write the file; the twin captures it".to_string(),
         };
         out.push_str(&format!(
             "| {kind} | {} | {home} | {author} | {} | {} |\n",
