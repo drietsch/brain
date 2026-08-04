@@ -167,8 +167,16 @@ grid, because comparing them is the point. **Concepts** is the kind
 registry, explaining the brain's own vocabulary with what template
 fitness learned about each contract.
 
-**Evidence** is claim on the left, proof on the right, unsupported first.
-A claim is never shown stronger than what backs it.
+**Evidence** is the claim census of Now, expanded to the scale where you
+can click a mark. The dimensions lead as strips — one cell per claim,
+solid where proven, hollow where not — and clicking one holds the page
+to it. Then what cannot show proof gets a card each: claim on the left,
+proof on the right, and the command that would settle it. Everything
+that can show its proof waits behind one line and unfolds as a row
+apiece — the claim, the single record that establishes it, the
+dimension it belongs to — because a page whose subject is doubt should
+not open with thirty-three reassurances. A claim is never shown
+stronger than what backs it.
 
 **Compare** puts two moments side by side. The picker is keyed by cause,
 not by clock — and when history grows long it trims its commit tail (a

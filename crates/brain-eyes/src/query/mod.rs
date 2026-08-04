@@ -33,13 +33,16 @@ pub fn proof_counts(loaded: &crate::state::Loaded) -> Result<crate::dto::ProofCo
         .last_run
         .map(|(_, total, _, failed)| (failed, total))
         .unwrap_or((0, 0));
-    let claims = loaded.evidence()?.claims.len();
+    let evidence = loaded.evidence()?;
+    let claims = evidence.claims.len();
+    let claims_unproven = evidence.claims.iter().filter(|c| !c.supported).count();
     let artifacts = library::shelves(loaded)?.iter().map(|s| s.count).sum();
     Ok(crate::dto::ProofCounts {
         snapshot: loaded.snapshot.clone(),
         tests_failing,
         tests_total,
         claims,
+        claims_unproven,
         artifacts,
     })
 }

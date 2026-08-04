@@ -613,8 +613,10 @@ views.proof = async (params) => {
       node.textContent = value ? String(value) : "";
       if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
     };
+    // A badge counts what wants a decision, not what exists: silence
+    // where everything is fine, the number where it is not.
     set("tests", counts.tests_failing, counts.tests_failing ? "fault" : null);
-    set("evidence", counts.claims, null);
+    set("evidence", counts.claims_unproven, counts.claims_unproven ? "fault" : null);
     set("artifacts", counts.artifacts, null);
   }).catch(() => {});
   if (tab === "evidence") await evidencePanel(host, params);
@@ -1863,29 +1865,110 @@ views.features = async (params) => {
    Evidence — claim on the left, proof on the right, never the reverse.
    ===================================================================== */
 
+/**
+ * Evidence — the claim census of Now, expanded.
+ *
+ * The band on Now says how many claims can show their proof; this is the
+ * same instrument at reading scale. The dimensions lead, as marks you can
+ * click; what cannot show proof gets a full card each; and everything
+ * that can waits behind one line, because a page whose subject is doubt
+ * should not open with thirty-three reassurances.
+ */
 async function evidencePanel(host, params) {
   const data = await api("/api/evidence");
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
   const only = params.category;
-  const shown = only ? data.claims.filter((claim) => claim.category === only) : data.claims;
+  const view = { text: "", open: false };
 
-  const filters = h("div", { class: "chips" },
-    h("button", { class: `chip${only ? "" : " on"}`, text: "everything",
-      onclick: () => go("proof", { tab: "evidence" }) }),
-    ...data.categories.map((category) =>
-      h("button", {
-        class: `chip${only === category.id ? " on" : ""}`,
-        title: category.note,
-        text: `${category.label} · ${category.unsupported ? `${category.unsupported} unproven` : "all proven"}`,
-        onclick: () => go("proof", { tab: "evidence", category: category.id }),
-      })));
+  const draw = () => {
+    const needle = view.text.trim().toLowerCase();
+    const matches = (claim) =>
+      (!only || claim.category === only)
+      && (!needle || `${claim.claim} ${claim.verdict} ${claim.proof.map((p) => p.text).join(" ")}`
+        .toLowerCase().includes(needle));
 
-  host.replaceChildren(
-    h("h1", { class: "lede", text: data.headline }),
-    h("p", { class: "sub", text: "A claim is never shown stronger than the proof behind it." }),
-    filters,
-    ...shown.map(claimRow));
+    const shown = data.claims.filter(matches);
+    const bare = shown.filter((claim) => !claim.supported);
+    const backed = shown.filter((claim) => claim.supported);
+    const label = (id) => data.categories.find((c) => c.id === id)?.label ?? id;
+
+    const parts = [
+      h("h1", { class: "lede", text: data.headline }),
+      h("p", { class: "sub", text: "A claim is never shown stronger than the proof behind it." }),
+      evidenceSpine(data, only),
+      h("div", { class: "filters" },
+        h("input", { type: "search", placeholder: "Filter claims…", value: view.text,
+          "aria-label": "Filter claims",
+          oninput: (event) => { view.text = event.target.value; draw(); } }),
+        only
+          ? h("button", { class: "chip on", onclick: () => go("proof", { tab: "evidence" }) },
+              label(only), h("em", { text: "×" }))
+          : null,
+        h("span", { class: "tally-bar",
+          text: shown.length === data.claims.length
+            ? `${data.claims.length} claims`
+            : `${shown.length} of ${data.claims.length}` })),
+    ];
+
+    if (bare.length) {
+      parts.push(h("h2", { class: "section", text: "Cannot show proof" }));
+      parts.push(...bare.map(claimRow));
+    } else if (shown.length) {
+      parts.push(h("p", { class: "quiet-verdict", text: "Every claim here can show its proof." }));
+    }
+
+    if (backed.length) {
+      parts.push(h("h2", { class: "section queue-head" },
+        "Backed",
+        h("button", { class: "row-link quiet-toggle",
+          text: view.open
+            ? "fold them away"
+            : `show the ${backed.length} that can show their proof`,
+          onclick: () => { view.open = !view.open; draw(); } })));
+      if (view.open) {
+        // A backed claim needs one line: what it says, and the one
+        // record that establishes it.
+        parts.push(h("div", { class: "backed" }, backed.map((claim) =>
+          h("button", { class: "backed-row",
+              onclick: () => claim.subject && openThing(claim.subject.id) },
+            h("i", { class: "mark good" }),
+            h("span", { class: "backed-claim", text: claim.claim }),
+            h("span", { class: "backed-why",
+              text: claim.proof[0]?.text ?? claim.verdict }),
+            h("span", { class: "backed-kind", text: label(claim.category) })))));
+      }
+    }
+    if (!shown.length) {
+      parts.push(h("p", { class: "empty", text: "No claim matches that." }));
+    }
+    host.replaceChildren(...parts);
+  };
+  draw();
+}
+
+/* The dimensions as marks: one cell per claim, hollow where nothing
+   establishes it — the census from Now, at the scale you can click. */
+function evidenceSpine(data, only) {
+  return h("div", { class: "spine evidence-spine" }, data.categories.map((category) => {
+    const mine = data.claims.filter((claim) => claim.category === category.id);
+    const missing = mine.filter((claim) => !claim.supported).length;
+    return h("button", {
+      class: `spine-group${only === category.id ? " on" : ""}`,
+      title: category.note,
+      onclick: () => go("proof", only === category.id ? { tab: "evidence" } : { tab: "evidence", category: category.id }),
+    },
+      h("div", { class: "census-cells" }, mine.map((claim) =>
+        h("i", { class: "census-cell",
+          "data-cell": claim.supported
+            ? "proven"
+            : ({ bad: "failing", watch: "stale" })[claim.tone] ?? "unproven",
+          title: claim.claim }))),
+      h("p", { class: "census-label" },
+        h("span", { text: category.label }),
+        h("span", { class: "census-count", "data-tone": missing ? "fault" : "calm",
+          text: `${category.supported}/${mine.length}` })));
+  }));
 }
 
 function claimRow(claim) {

@@ -1173,6 +1173,38 @@ button.row:hover { background: var(--accent-tint); }
 .drift del { color: var(--muted); text-decoration-color: var(--signal); }
 .drift ins { color: var(--ink); text-decoration: none; font-weight: 500; }
 
+/* ---------------------------------------------------------- the evidence
+   The claim census from Now, at the scale where you can click a mark.
+   Each dimension is a group; each claim in it is one cell. */
+.evidence-spine { gap: 22px 30px; margin: 0 0 18px; }
+.evidence-spine .spine-group {
+  align-items: flex-start; text-align: left; cursor: pointer;
+  border: 1px solid transparent; border-radius: 8px; padding: 8px 10px;
+  transition: background-color var(--t-nudge), border-color var(--t-nudge);
+}
+.evidence-spine .spine-group:hover { background: var(--hover); border-color: var(--line); }
+.evidence-spine .spine-group.on { background: var(--accent-tint); border-color: var(--accent); }
+.evidence-spine .census-cell { pointer-events: none; }
+.evidence-spine .census-cell[data-cell="proven"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--proof) 82%, white), var(--proof));
+}
+
+/* A backed claim is one line: what it says, and the record that says so. */
+.backed { display: flex; flex-direction: column; background: var(--paper);
+  border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+.backed-row {
+  display: grid; grid-template-columns: 9px minmax(0, 3fr) minmax(0, 3fr) auto;
+  gap: 12px; align-items: baseline; width: 100%; text-align: left;
+  padding: 10px 16px; border-top: 1px solid var(--line);
+}
+.backed-row:first-child { border-top: 0; }
+.backed-row:hover { background: var(--accent-tint); }
+.backed-claim { font: 400 13px/1.45 var(--judgment); color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backed-why { font-size: 11.5px; color: var(--meta);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backed-kind { font: 400 10.5px/1.4 var(--ui); color: var(--faint); white-space: nowrap; }
+
 /* ------------------------------------------------------- the reading list
    A decision is a document a person reads, so the shelf reads like one:
    the title carries the judgment face, the record its own path, and the

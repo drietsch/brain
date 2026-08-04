@@ -668,6 +668,9 @@ pub struct ProofCounts {
     pub tests_failing: usize,
     pub tests_total: usize,
     pub claims: usize,
+    /// Claims nothing establishes — what the badge on the tab counts,
+    /// because a badge that counts everything says nothing.
+    pub claims_unproven: usize,
     pub artifacts: usize,
 }
 
