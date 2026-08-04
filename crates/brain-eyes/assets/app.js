@@ -665,13 +665,159 @@ async function artifactsPanel(host, params) {
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
 
-  const tableHost = h("div", {});
+  const body = h("div", {});
   host.replaceChildren(
     pills(data.shelves, data.shelf),
     h("h1", { class: "lede", text: data.label }),
     h("p", { class: "sub", text: data.note }),
-    tableHost);
-  libraryTable(tableHost, data);
+    body);
+  // A shelf is told the way its contents deserve: writing is read,
+  // pictures are looked at, and records are compared in a grid.
+  if (READ_SHELVES.has(data.shelf)) readingList(body, data);
+  else if (LOOK_SHELVES.has(data.shelf)) gallery(body, data);
+  else libraryTable(body, data);
+}
+
+/* Shelves whose records are writing — you came here to read them. */
+const READ_SHELVES = new Set(["decisions", "plans", "documents", "agents", "stage"]);
+/* Shelves whose records are things to look at. */
+const LOOK_SHELVES = new Set(["media", "assets"]);
+
+/**
+ * The reading list: every record on the shelf as something you can open
+ * and read where it sits.
+ *
+ * A decision is a document a person reads, not a row in a grid. The card
+ * says what it decided, whether it still matches the code, and what it
+ * governs; opening it fetches the document itself and renders it here,
+ * so reading an ADR never costs you the shelf you were browsing.
+ */
+function readingList(host, data) {
+  const state = { text: "", state: null, sort: "changed" };
+  const SORTS = [
+    ["changed", "by last change", (a, b) => b.at_ms - a.at_ms],
+    ["name", "by name", (a, b) => a.title.localeCompare(b.title)],
+    ["state", "by state", (a, b) => (a.state ?? "").localeCompare(b.state ?? "")],
+  ];
+
+  const draw = () => {
+    const needle = state.text.toLowerCase();
+    const shown = data.items
+      .filter((item) => !state.state || item.state === state.state)
+      .filter((item) => !needle
+        || `${item.title} ${item.label} ${item.excerpt ?? ""} ${item.facts.join(" ")}`
+          .toLowerCase().includes(needle))
+      .sort(SORTS.find(([id]) => id === state.sort)[2]);
+
+    // The states this shelf actually holds, with live counts — but only
+    // where "state" is a word. A plan's state is a whole sentence about
+    // how it ended, and thirty sentences are not a filter bar.
+    const states = new Map();
+    for (const item of data.items) {
+      if (item.state) states.set(item.state, (states.get(item.state) ?? 0) + 1);
+    }
+    const filterable = states.size <= 6
+      && [...states.keys()].every((value) => value.length <= 24);
+
+    host.replaceChildren(
+      h("div", { class: "filters" },
+        h("input", { type: "search", placeholder: `Filter ${data.label.toLowerCase()}…`,
+          value: state.text, "aria-label": "Filter this shelf",
+          oninput: (event) => { state.text = event.target.value; draw(); } }),
+        filterable ? h("span", { class: "facet-gap" }) : null,
+        filterable
+          ? [...states].map(([value, count]) =>
+              h("button", {
+                class: `chip${state.state === value ? " on" : ""}`,
+                "aria-pressed": state.state === value ? "true" : "false",
+                onclick: () => { state.state = state.state === value ? null : value; draw(); },
+              }, value, h("em", { text: String(count) })))
+          : null,
+        h("select", { "aria-label": "Sort",
+          onchange: (event) => { state.sort = event.target.value; draw(); } },
+          SORTS.map(([id, label]) =>
+            h("option", { value: id, selected: id === state.sort || null, text: label }))),
+        h("span", { class: "tally-bar",
+          text: shown.length === data.items.length
+            ? `${data.items.length} records`
+            : `${shown.length} of ${data.items.length}` })),
+      shown.length
+        ? h("div", { class: "leaves" }, shown.map(leafCard))
+        : h("p", { class: "empty", text: "Nothing on this shelf matches that." }));
+  };
+  draw();
+}
+
+function leafCard(item) {
+  const body = h("div", { class: "leaf-body" });
+  let open = false;
+  const caret = h("span", { class: "leaf-caret", "aria-hidden": "true", text: "▸" });
+
+  const read = async () => {
+    open = !open;
+    card.classList.toggle("open", open);
+    caret.textContent = open ? "▾" : "▸";
+    if (!open) { body.replaceChildren(); return; }
+    body.replaceChildren(h("p", { class: "loading", text: "Reading it…" }));
+    try {
+      const thing = await api(`/api/thing?id=${encodeURIComponent(item.id)}`);
+      body.replaceChildren(
+        thing.body ? bodyView(thing) : h("p", { class: "empty", text: thing.body_error ?? "" }),
+        h("p", { class: "pill-row" },
+          h("button", { class: "row-link", text: "open its page",
+            onclick: (event) => { event.stopPropagation(); openThing(item.id); } })));
+    } catch (error) {
+      body.replaceChildren(h("p", { class: "empty", text: error.message }));
+    }
+  };
+
+  const card = h("article", { class: "leaf" },
+    h("button", { class: "leaf-head", onclick: read },
+      caret,
+      glyph(item.glyph),
+      h("h3", { text: item.title }),
+      item.state
+        ? h("span", { class: `chip ${item.tone} leaf-state`, title: item.state, text: item.state })
+        : null,
+      h("span", { class: "leaf-when", text: item.when })),
+    item.state_note ? h("p", { class: "leaf-why", text: item.state_note }) : null,
+    item.excerpt ? h("p", { class: "leaf-excerpt", text: item.excerpt }) : null,
+    h("p", { class: "leaf-facts" },
+      h("code", { text: item.label }),
+      item.facts.filter((fact) => fact !== item.label).map((fact) =>
+        h("span", { text: fact }))),
+    item.features.length
+      ? h("p", { class: "pill-row" }, featureTag(item.features, (f) => openThing(f.id), 3))
+      : null,
+    body);
+  return card;
+}
+
+/**
+ * The gallery: shelves you look at rather than read.
+ *
+ * A screenshot is evidence you can only judge by looking, so it is shown
+ * at a size you can judge it at, and a recording plays where it sits.
+ */
+function gallery(host, data) {
+  host.replaceChildren(h("div", { class: "media-grid" }, data.items.map((item) => {
+    const src = `/api/body?id=${encodeURIComponent(item.id)}`;
+    const face = PICTURE.test(item.label)
+      ? h("img", { src, alt: item.title, loading: "lazy" })
+      : RECORDING.test(item.label)
+        ? h("video", { src, controls: "controls", preload: "metadata" })
+        : null;
+    return h("article", { class: "shot" },
+      face ?? h("div", { class: "shot-blank" }, glyph(item.glyph)),
+      h("div", { class: "shot-body" },
+        h("h4", { text: item.title }),
+        h("p", { class: "pill-row" },
+          item.state ? h("span", { class: `chip ${item.tone}`, text: item.state }) : null,
+          h("span", { text: item.when })),
+        item.state_note ? h("p", { class: "item-sub", text: item.state_note }) : null,
+        h("button", { class: "row-link", text: "open its page",
+          onclick: () => openThing(item.id) })));
+  })));
 }
 
 function libraryTable(host, data) {

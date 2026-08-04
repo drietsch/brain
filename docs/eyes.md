@@ -154,10 +154,18 @@ been changing its mind, the suites where everything passes wait behind
 one line; when nothing is, there is no "more interesting" to lead with
 and the whole list stands.
 
-**Artifacts** has a shelf per kind — decisions as a reading list, plans,
-documents, agent rules, **Pictures & recordings** for media and the tour,
-and **Concepts**, the kind registry explaining the brain's own vocabulary
-with what template fitness learned about each contract.
+**Artifacts** has a shelf per kind, and each shelf is told the way its
+records deserve. Writing — decisions, plans, documents, agent rules,
+records — reads as a **reading list**: the title in the judgment face,
+whether it still matches the code, what it governs, and the document
+itself opening under the card, rendered in place, so reading an ADR
+never costs you the shelf you were browsing. **Pictures & recordings**
+and assets are a **gallery**: a screenshot is evidence you can only
+judge by looking, so it is shown at a size you can judge it at and a
+recording plays where it sits. Features and governed changes stay a
+grid, because comparing them is the point. **Concepts** is the kind
+registry, explaining the brain's own vocabulary with what template
+fitness learned about each contract.
 
 **Evidence** is claim on the left, proof on the right, unsupported first.
 A claim is never shown stronger than what backs it.

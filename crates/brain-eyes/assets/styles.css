@@ -1173,6 +1173,61 @@ button.row:hover { background: var(--accent-tint); }
 .drift del { color: var(--muted); text-decoration-color: var(--signal); }
 .drift ins { color: var(--ink); text-decoration: none; font-weight: 500; }
 
+/* ------------------------------------------------------- the reading list
+   A decision is a document a person reads, so the shelf reads like one:
+   the title carries the judgment face, the record its own path, and the
+   whole document opens under the card rather than on another page. */
+.leaves { display: flex; flex-direction: column; gap: 10px; }
+.leaf {
+  background: linear-gradient(180deg, var(--paper), var(--surface-2));
+  border: 1px solid var(--line); border-left-width: 3px; border-left-color: var(--line);
+  border-radius: 10px; box-shadow: var(--shadow); padding: 14px 18px 12px;
+}
+.leaf.open { border-left-color: var(--accent); }
+.leaf-head {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  text-align: left; cursor: pointer; flex-wrap: wrap;
+}
+.leaf-head h3 { margin: 0; font: 400 16px/1.35 var(--judgment); color: var(--ink); flex: 1; min-width: 0; }
+.leaf-head .icon { color: var(--meta); flex: none; }
+.leaf-caret { font: 400 10px/1 var(--record); color: var(--faint); width: 10px; flex: none; }
+.leaf.open .leaf-caret { color: var(--accent); }
+.leaf-when { font: 400 11px/1.4 var(--record); color: var(--faint); white-space: nowrap; }
+/* A plan's state is a sentence about how it ended; the chip shows as
+   much as fits and keeps the rest for its tooltip. */
+.leaf-state { max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+.leaf-why { margin: 6px 0 0 20px; font-size: 12.5px; color: var(--body); }
+.leaf-excerpt {
+  margin: 6px 0 0 20px; font: 400 13px/1.6 var(--judgment); color: var(--meta);
+  max-width: 82ch; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.leaf.open .leaf-excerpt { display: none; }
+.leaf-facts {
+  margin: 8px 0 0 20px; display: flex; gap: 10px; flex-wrap: wrap;
+  font-size: 11px; color: var(--faint);
+}
+.leaf-facts code { font-size: 11px; color: var(--meta); }
+.leaf-body:empty { display: none; }
+.leaf-body { margin: 12px 0 0 20px; border-top: 1px solid var(--line); padding-top: 12px; }
+.leaf-body .body-view { border: 0; box-shadow: none; background: none; padding: 0; max-width: 76ch; }
+
+/* The gallery reserves the frame before the picture arrives: a lazy
+   image with no height never becomes visible enough to be loaded, so
+   without this the shelf shows captions and no pictures — and the cards
+   line up as a grid instead of a ragged wall. */
+.media-grid .shot img, .media-grid .shot video {
+  display: block; width: 100%; height: 180px; max-height: none;
+  object-fit: cover; background: var(--sunk); border-radius: 0;
+}
+.media-grid .shot video { object-fit: contain; }
+
+/* A blank face for a record that has no picture to show. */
+.shot-blank {
+  display: flex; align-items: center; justify-content: center; height: 120px;
+  background: repeating-linear-gradient(45deg, var(--sunk), var(--sunk) 6px, var(--line) 6px, var(--line) 7px);
+  color: var(--meta);
+}
+
 .concepts { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .concept { padding: 17px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; }
 .concept h3 { margin: 0 0 2px; font: 400 15px/1.3 var(--judgment); display: flex; align-items: center; gap: 8px; }

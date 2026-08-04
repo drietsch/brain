@@ -10,6 +10,7 @@ use crate::dto::*;
 use crate::query;
 use crate::say;
 use crate::state::Loaded;
+use brain_core::ids::StableId;
 use brain_observe::{features, lifecycle, twin};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -132,12 +133,31 @@ pub fn build(loaded: &Loaded, shelf: &str, query_text: &str) -> Result<LibraryVi
             .map(|s| s.id.clone())
             .unwrap_or_else(|| "decisions".to_string())
     };
-    let (label, note, kinds) = shelf_kinds(&shelf);
+    let (mut label, mut note, kinds) = shelf_kinds(&shelf);
     // One insights pass for the whole shelf, not one per item.
     let stale = stale_map(loaded)?;
     let mut items = Vec::new();
     for kind in kinds {
         items.extend(items_for_kind(loaded, &kind, &stale)?);
+    }
+
+    // "Pictures & recordings" is a view of the assets, not a kind of its
+    // own: the shelf is offered whenever any asset can be looked at, so
+    // it has to be filled the same way it was counted.
+    if shelf == "media" {
+        label = "Pictures & recordings".to_string();
+        note = "Screenshots, screencasts, and the narrated tour.".to_string();
+        items = items_for_kind(loaded, "asset", &stale)?;
+        items.retain(|item| {
+            let sid = StableId(item.id.clone());
+            matches!(
+                twin::latest(&loaded.index, &loaded.store, &sid, "subtype")
+                    .ok()
+                    .flatten()
+                    .as_deref(),
+                Some("image") | Some("screencast") | Some("audio")
+            )
+        });
     }
 
     if !query_text.trim().is_empty() {
