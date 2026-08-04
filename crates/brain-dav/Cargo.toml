@@ -1,0 +1,15 @@
+[package]
+name = "brain-dav"
+version.workspace = true
+edition.workspace = true
+description = "The graph mounted read-only: a WebDAV projection with no write verb"
+
+[dependencies]
+brain-eyes = { workspace = true }
+brain-observe = { workspace = true }
+dav-server = "0.11"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros"] }
+bytes = "1"
+futures-util = "0.3"

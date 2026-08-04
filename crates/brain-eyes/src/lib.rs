@@ -13,14 +13,20 @@
 
 mod body;
 mod http;
-mod query;
 mod say;
 mod state;
 
 pub mod dto;
+/// The projection layer, shared with the other read-only surfaces.
+///
+/// A WebDAV mount renders the same shelves this crate renders for the
+/// browser, through these same functions — so a decision read from a
+/// mounted file and the same decision read in the cockpit carry the
+/// identical sentences, composed once in [`say`].
+pub mod query;
 
 pub use dto::*;
-pub use state::{AppState, Config};
+pub use state::{AppState, Config, Loaded};
 
 /// Serve Eyes until the process is stopped.
 pub fn serve(config: Config) -> Result<(), String> {

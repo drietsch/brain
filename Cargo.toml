@@ -8,6 +8,7 @@ members = [
     "crates/brain-index",
     "crates/brain-cortex",
     "crates/brain-eyes",
+    "crates/brain-dav",
     "crates/brain-cli",
 ]
 
@@ -28,6 +29,7 @@ brain-runtime = { path = "crates/brain-runtime" }
 brain-observe = { path = "crates/brain-observe" }
 brain-index = { path = "crates/brain-index" }
 brain-cortex = { path = "crates/brain-cortex" }
+brain-dav = { path = "crates/brain-dav" }
 brain-eyes = { path = "crates/brain-eyes" }
 tiny_http = "0.12"
 
