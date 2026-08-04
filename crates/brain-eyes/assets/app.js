@@ -1802,6 +1802,9 @@ async function testsPanel(host, params) {
     // A case that has flipped verdict repeatedly is not quiet, even
     // while it is green: it is the one that will wake you.
     restless: cases.some((c) => c.flips >= 3),
+    // A group is as recent as the case in it that moved last.
+    at_ms: Math.max(...cases.map((c) => c.at_ms ?? 0)),
+    moved: cases.reduce((newest, c) => ((c.at_ms ?? 0) > (newest?.at_ms ?? 0) ? c : newest), null)?.when,
     frameworks: [...new Set(cases.map((c) => c.framework).filter(Boolean))],
     kinds: [...new Set(cases.map((c) => c.kind_label).filter(Boolean))],
     homes: [...new Set(cases.map((c) => c.home).filter(Boolean))],
@@ -1821,6 +1824,10 @@ async function testsPanel(host, params) {
       h("button", { class: id === chosen[0] ? "on" : "", text: label,
         onclick: () => go("proof", { tab: "tests", by: id }) }))),
     tableHost,
+    // The date column is honest about what it is, because the obvious
+    // reading of it would be wrong.
+    h("p", { class: "map-hint",
+      text: "Since is the day a verdict was written, not the last time a test ran: a result is only recorded when it changes, so a test that keeps passing is not written again. The runs below say when things actually ran." }),
   ];
 
   if (data.protocols.length) {
@@ -1911,6 +1918,7 @@ async function testsPanel(host, params) {
       { key: "name", label: "by name", by: (row) => row.name },
       { key: "result", label: "failing first", by: (row) => (verdictOf(row) === "failing" ? 0 : 1) },
       { key: "size", label: "by size", by: (row) => -(row.cases?.length ?? 0) },
+      { key: "when", label: "by last change", by: (row) => -(row.at_ms ?? 0) },
     ],
     columns: [
       { key: "name", label: "Test", width: "minmax(360px, 5fr)",
@@ -1949,6 +1957,12 @@ async function testsPanel(host, params) {
         } },
       { key: "duration", label: "Took", width: "76px", class: "dim num",
         cell: (row) => (row.suite ? "" : row.duration ?? "") },
+      // "Since", not "Last run": a result is recorded under a guard, so
+      // the date is when this verdict was written — the day the test
+      // started passing, not the last time it was exercised. The run
+      // times are in Runs, where they belong.
+      { key: "when", label: "Since", width: "104px", class: "dim num",
+        cell: (row) => (row.suite ? row.moved ?? "" : row.when ?? "") },
     ],
     onPeek: (row) => !row.suite && openThing(row.id),
     onPush: (row) => !row.suite && openThing(row.id),
@@ -1990,7 +2004,7 @@ function caseDetail(row) {
   if (row.duration) facts.push(h("span", { text: `took ${row.duration}` }));
   if (row.retries) facts.push(h("span", { text: `retried ${row.retries}×` }));
   if (row.flips >= 3) facts.push(h("span", { class: "case-note", text: `changed its mind ${row.flips}×` }));
-  if (row.when) facts.push(h("span", { text: row.when }));
+  if (row.when) facts.push(h("span", { text: `${row.result} since ${row.when}` }));
 
   return h("div", { class: "case-open" },
     h("div", { class: "case-open-head" },
