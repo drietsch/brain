@@ -46,9 +46,7 @@ impl GraphFs {
     pub fn new(state: Arc<AppState>) -> Box<GraphFs> {
         Box::new(GraphFs {
             state,
-            // One shelf to begin with; the tree earns the rest once the
-            // shape has been judged on a real mount.
-            shelves: vec!["decisions"],
+            shelves: vec!["decisions", "evidence", "tests"],
         })
     }
 
@@ -73,35 +71,102 @@ impl GraphFs {
     }
 
     /// Every record on a shelf, as (file name, id).
+    ///
+    /// A shelf of writing lists the documents themselves. Evidence and
+    /// tests have no file behind them — they are what the graph
+    /// concluded — so each record is rendered on read, and the id is the
+    /// key the renderer needs rather than an entity id.
     fn records(&self, shelf: &str) -> FsResult<Vec<(String, String)>> {
-        let view = self
-            .state
-            .read(|loaded| brain_eyes::query::library::build(loaded, shelf, ""))
-            .map_err(|_| FsError::GeneralFailure)?;
-        let items = view
-            .items
-            .into_iter()
-            .map(|item| (item.label, item.id))
-            .collect::<Vec<_>>();
-        Ok(name_records(items))
+        match shelf {
+            "evidence" => {
+                let view = self
+                    .state
+                    .read(|loaded| loaded.evidence())
+                    .map_err(|_| FsError::GeneralFailure)?;
+                Ok(name_records(
+                    view.claims
+                        .iter()
+                        .map(|claim| {
+                            // A claim is a document *about* its subject,
+                            // so it takes the subject's name and its own
+                            // extension: a claim about app.js is app.md,
+                            // never app.js.md.
+                            let subject = claim
+                                .subject
+                                .as_ref()
+                                .map(|r| r.label.clone())
+                                .unwrap_or_else(|| claim.category.clone());
+                            let base = subject.rsplit('/').next().unwrap_or(&subject);
+                            let stem = base.rsplit_once('.').map(|(s, _)| s).unwrap_or(base);
+                            (format!("{stem}.md"), claim.id.clone())
+                        })
+                        .collect(),
+                ))
+            }
+            "tests" => {
+                let view = self
+                    .state
+                    .read(brain_eyes::query::tests::build)
+                    .map_err(|_| FsError::GeneralFailure)?;
+                let mut suites: Vec<String> = view
+                    .cases
+                    .iter()
+                    .map(|case| case.group.clone())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect();
+                suites.sort();
+                Ok(name_records(
+                    suites
+                        .into_iter()
+                        .map(|group| (format!("{}.md", group.replace("::", "-")), group))
+                        .collect(),
+                ))
+            }
+            _ => {
+                let view = self
+                    .state
+                    .read(|loaded| brain_eyes::query::library::build(loaded, shelf, ""))
+                    .map_err(|_| FsError::GeneralFailure)?;
+                let items = view
+                    .items
+                    .into_iter()
+                    .map(|item| (item.label, item.id))
+                    .collect::<Vec<_>>();
+                Ok(name_records(items))
+            }
+        }
     }
 
-    /// The bytes of one record: the document as the graph holds it.
+    /// The bytes of one record: the document as the graph holds it, or as
+    /// the graph would say it.
     fn bytes(&self, shelf: &str, name: &str) -> FsResult<Vec<u8>> {
-        let id = self
+        let key = self
             .records(shelf)?
             .into_iter()
             .find(|(file, _)| file == name)
-            .map(|(_, id)| id)
+            .map(|(_, key)| key)
             .ok_or(FsError::NotFound)?;
-        let view = self
-            .state
-            .read(|loaded| brain_eyes::query::thing::build(loaded, &id, None))
-            .map_err(|_| FsError::GeneralFailure)?;
-        view.body
-            .and_then(|body| body.text)
-            .map(String::into_bytes)
-            .ok_or(FsError::NotFound)
+        let text = match shelf {
+            "evidence" => self
+                .state
+                .read(|loaded| Ok(render_claim(&loaded.evidence()?, &key)))
+                .map_err(|_| FsError::GeneralFailure)?
+                .ok_or(FsError::NotFound)?,
+            "tests" => self
+                .state
+                .read(|loaded| Ok(render_suite(&brain_eyes::query::tests::build(loaded)?, &key)))
+                .map_err(|_| FsError::GeneralFailure)?
+                .ok_or(FsError::NotFound)?,
+            _ => self
+                .state
+                .read(|loaded| brain_eyes::query::thing::build(loaded, &key, None))
+                .map_err(|_| FsError::GeneralFailure)?
+                .body
+                .and_then(|body| body.text)
+                .ok_or(FsError::NotFound)?,
+        };
+        Ok(text.into_bytes())
     }
 }
 
@@ -126,6 +191,39 @@ pub fn refusal(state: &AppState, method: &str, path: &str) -> String {
         .next()
         .unwrap_or("")
         .to_string();
+    // The derived shelves are not authored at all, and saying "use the
+    // CLI" to something trying to write a test result would be useless
+    // advice: a run is imported, never typed.
+    let prefix = state
+        .read(|loaded| Ok(loaded.prefix().to_string()))
+        .unwrap_or_else(|_| "<prefix>".to_string());
+    let derived: Vec<String> = match shelf.as_str() {
+        "tests" => vec![
+            format!("  a test result is recorded by importing a run: cargo test 2>&1 | brain testrun import - --prefix {prefix}"),
+            format!("  a case no code declares any more is retired with: brain testrun purge {prefix}"),
+            "  a result cannot be written by hand — it is evidence that something ran".to_string(),
+        ],
+        "evidence" => vec![
+            "  evidence is not authored: a claim appears because some record makes it".to_string(),
+            format!("  a claim is settled by making it true, or acknowledged with: brain artifact ack {prefix} <kind> <slug>"),
+        ],
+        _ => Vec::new(),
+    };
+    if !derived.is_empty() {
+        let mut out = String::new();
+        out.push_str("This mount is a read-only projection of the brain graph.\n");
+        out.push_str(&format!("{method} {path} was refused; nothing was written.\n"));
+        out.push_str("\nWhat you tried to do belongs to the CLI:\n");
+        for line in derived {
+            out.push_str(&line);
+            out.push('\n');
+        }
+        out.push_str("\nWhy: the graph is the system of record, so an artifact that appeared\n");
+        out.push_str("beside the real ones without passing through it would be a claim with\n");
+        out.push_str("no history, no source, and nothing corroborating it.\n");
+        return out;
+    }
+
     let route = state
         .read(|loaded| {
             let (_, _, kinds) = brain_eyes::query::library::shelf_kinds(&shelf);
@@ -168,6 +266,100 @@ pub fn refusal(state: &AppState, method: &str, path: &str) -> String {
     out.push_str("beside the real ones without passing through it would be a claim with\n");
     out.push_str("no history, no source, and nothing corroborating it.\n");
     out
+}
+
+/// One claim, as a document.
+///
+/// Every sentence here was composed by the server for the cockpit; this
+/// arranges them under headings and adds nothing. A claim that cannot
+/// show its proof says so in its own words, and carries the command that
+/// would settle it.
+fn render_claim(view: &brain_eyes::dto::EvidenceView, id: &str) -> Option<String> {
+    let claim = view.claims.iter().find(|c| c.id == id)?;
+    let mut out = String::new();
+    out.push_str(&format!("# {}\n\n", claim.claim));
+    out.push_str(&format!("{}\n\n", claim.verdict));
+    if let Some(subject) = &claim.subject {
+        out.push_str(&format!("About: {} ({})\n\n", subject.label, subject.noun));
+    }
+    out.push_str("## What stands behind it\n\n");
+    if claim.proof.is_empty() {
+        out.push_str("Nothing.\n");
+    }
+    for proof in &claim.proof {
+        let mark = if proof.tone == "good" { "✓" } else { "✗" };
+        out.push_str(&format!("- {mark} {}", proof.text));
+        if let Some(basis) = &proof.basis {
+            out.push_str(&format!(" — {basis}"));
+        }
+        out.push('\n');
+    }
+    if let Some(command) = &claim.fix_command {
+        out.push_str(&format!("\n## What would settle it\n\n    {command}\n"));
+    }
+    out.push_str(&format!(
+        "\n---\nRead from the graph. This file is a projection: {}\n",
+        view.headline
+    ));
+    Some(out)
+}
+
+/// One suite, as a document: every case it holds, with its verdict.
+///
+/// A suite rather than a case, because a case is one line and a suite is
+/// something you can read — and because 214 single-line files would be a
+/// directory nobody opens twice.
+fn render_suite(view: &brain_eyes::dto::TestsView, group: &str) -> Option<String> {
+    let cases: Vec<_> = view.cases.iter().filter(|c| c.group == group).collect();
+    if cases.is_empty() {
+        return None;
+    }
+    let failing = cases.iter().filter(|c| c.result == "failing").count();
+    let mut out = String::new();
+    out.push_str(&format!("# {group}\n\n"));
+    out.push_str(&format!(
+        "{} case{}, {}.\n\n",
+        cases.len(),
+        if cases.len() == 1 { "" } else { "s" },
+        if failing == 0 {
+            "all passing".to_string()
+        } else {
+            format!("{failing} failing")
+        }
+    ));
+    if let Some(kind) = cases.first().and_then(|c| c.kind_label.clone()) {
+        let framework = cases
+            .first()
+            .and_then(|c| c.framework.clone())
+            .unwrap_or_default();
+        out.push_str(&format!("A {kind}, run by {framework}.\n\n"));
+    }
+    for case in &cases {
+        let name = case.name.rsplit("::").next().unwrap_or(&case.name);
+        out.push_str(&format!("## {name}\n\n"));
+        out.push_str(&format!("{}", case.result));
+        if let Some(duration) = &case.duration {
+            out.push_str(&format!(" · took {duration}"));
+        }
+        if !case.when.is_empty() {
+            out.push_str(&format!(" · since {}", case.when));
+        }
+        out.push_str("\n\n");
+        if let Some(error) = &case.error {
+            out.push_str(&format!("{error}\n\n"));
+        }
+        if let Some(note) = &case.note {
+            out.push_str(&format!("{note}\n\n"));
+        }
+        for shot in &case.attachments {
+            out.push_str(&format!("- left behind: {} ({})\n", shot.noun, shot.path));
+        }
+        if !case.attachments.is_empty() {
+            out.push('\n');
+        }
+    }
+    out.push_str(&format!("---\n{}\n", view.headline));
+    Some(out)
 }
 
 /// A record's file name: its slug.
