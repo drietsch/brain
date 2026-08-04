@@ -1779,12 +1779,19 @@ async function testsPanel(host, params) {
     if (!groups.has(row.group)) groups.set(row.group, []);
     groups.get(row.group).push(row);
   }
+  // The flag says `suite`, not `group`: every case already carries a
+  // `group` naming its suite, and a truthy string there made each case
+  // row take the suite branch and read a field it does not have.
   const rows = [...groups.entries()].map(([name, cases]) => ({
-    group: true,
+    suite: true,
     id: `group:${name}`,
     name,
     cases,
     failing: cases.filter((c) => c.result === "failing").length,
+    skipped: cases.filter((c) => c.result === "skipped").length,
+    // A case that has flipped verdict repeatedly is not quiet, even
+    // while it is green: it is the one that will wake you.
+    restless: cases.some((c) => c.flips >= 3),
     frameworks: [...new Set(cases.map((c) => c.framework).filter(Boolean))],
   }));
 
@@ -1793,21 +1800,35 @@ async function testsPanel(host, params) {
     h("h1", { class: "lede", text: data.headline }),
     h("p", { class: "sub",
       text: `${data.declared} tests declared across ${data.files} files; ${data.cases.length} have a recorded result.` }),
+    // What each framework brought, as records rather than a sentence.
+    data.frameworks.length
+      ? h("div", { class: "chips ledger" }, data.frameworks.map((f) =>
+          h("span", { class: "chip quiet" }, f.label, h("em", { text: String(f.declared) }))))
+      : null,
     tableHost,
   ];
 
   if (data.protocols.length) {
     parts.push(h("h2", { class: "section", text: "Runs" }));
-    for (const run of data.protocols.slice(0, 8)) parts.push(protocolRow(run));
+    // Every run carries the same sentence about being run and observed;
+    // said once under the section it is a promise, said eight times it
+    // is wallpaper.
+    const runs = data.protocols.slice(0, 8);
+    const shared = runs.every((run) => run.evidence === runs[0].evidence) ? runs[0].evidence : null;
+    if (shared) parts.push(h("p", { class: "sub", text: shared }));
+    parts.push(h("div", { class: "panel runs" },
+      runs.map((run) => protocolRow(run, !shared))));
   }
   if (data.uncovered.length) {
     parts.push(h("h2", { class: "section", text: "Depended on, but no test touches them" }));
     parts.push(h("div", { class: "chips" }, data.uncovered.map((item) =>
-      h("button", { class: "chip", text: item.label, onclick: () => openThing(item.id) }))));
+      h("button", { class: "chip-ref", onclick: () => openThing(item.id) },
+        glyph(item.glyph), h("span", { text: item.label }),
+        h("span", { class: "chip-arrow", "aria-hidden": "true", text: "›" })))));
   }
   host.replaceChildren(...parts);
 
-  const verdictOf = (row) => (row.group
+  const verdictOf = (row) => (row.suite
     ? (row.failing ? "failing" : "passing")
     : row.result);
 
@@ -1815,9 +1836,23 @@ async function testsPanel(host, params) {
     rows,
     noun: "suites",
     keyOf: (row) => row.id,
-    childrenOf: (row) => (row.group ? row.cases : null),
+    clickExpands: true,
+    childrenOf: (row) => (row.suite ? row.cases : null),
     expandedByDefault: rows.filter((r) => r.failing).map((r) => r.id),
-    search: (row) => (row.group ? row.name : `${row.name} ${row.error ?? ""}`),
+    // When something is failing or restless, the quiet suites wait
+    // behind one line so the trouble leads. When nothing is, there is
+    // no "more interesting" to lead with, so the whole list stands.
+    fold: rows.some((r) => r.failing || r.restless)
+      ? {
+          when: (row) => row.suite && !row.failing && !row.restless,
+          label: (n) => `${n} suite${n === 1 ? "" : "s"} where everything passes — show them`,
+          close: "fold the quiet suites away",
+        }
+      : null,
+    // A case opens where it sits: its own detail, not a page you have
+    // to come back from.
+    detailOf: (row) => (row.suite ? null : caseDetail(row)),
+    search: (row) => (row.suite ? row.name : `${row.name} ${row.error ?? ""}`),
     placeholder: "Filter tests…",
     facets: [
       {
@@ -1829,11 +1864,11 @@ async function testsPanel(host, params) {
           { value: "passing", label: "passing" },
         ],
       },
-      { id: "framework", get: (row) => (row.group ? row.frameworks : row.framework) },
-      { id: "feature", get: (row) => (row.group ? [] : row.features.map((f) => f.label)) },
+      { id: "framework", get: (row) => (row.suite ? row.frameworks : row.framework) },
+      { id: "feature", get: (row) => (row.suite ? [] : row.features.map((f) => f.label)) },
       {
         id: "history",
-        get: (row) => (!row.group && row.flips >= 3 ? "changed its mind" : null),
+        get: (row) => (!row.suite && row.flips >= 3 ? "changed its mind" : null),
         options: [{ value: "changed its mind", label: "changed its mind" }],
       },
     ],
@@ -1843,45 +1878,82 @@ async function testsPanel(host, params) {
       { key: "size", label: "by size", by: (row) => -(row.cases?.length ?? 0) },
     ],
     columns: [
-      { key: "name", label: "Test", width: "minmax(320px, 3fr)",
-        cell: (row) => row.group
+      { key: "name", label: "Test", width: "minmax(360px, 5fr)",
+        cell: (row) => row.suite
           ? h("span", { class: "pill-row" }, kindIcon("diamond"), h("span", { class: "record", text: row.name }))
           : h("span", { class: "case-name", text: row.name.split("::").pop() }) },
       { key: "result", label: "Result", width: "88px",
-        cell: (row) => row.group
+        cell: (row) => row.suite
           ? h("span", { class: "dim", text: `${row.cases.length} case${row.cases.length === 1 ? "" : "s"}` })
           : h("span", { class: `chip ${row.tone}`, text: row.result }) },
-      { key: "detail", label: "Detail", width: "minmax(180px, 2fr)", class: "dim nowrap",
+      // One column for what the row has to say, because four columns
+      // that are empty on every line say only that the table is wrong.
+      { key: "detail", label: "Detail", width: "minmax(200px, 3fr)", class: "dim",
         cell: (row) => {
-          if (row.group) {
-            if (row.failing) return h("span", { class: "case-error", text: `${row.failing} failing` });
-            const extra = row.frameworks.join(", ");
-            return extra ? `all passing · ${extra}` : "all passing";
+          if (row.suite) {
+            const said = [];
+            if (row.failing) said.push(h("span", { class: "case-error", text: `${row.failing} failing` }));
+            else said.push("all passing");
+            if (row.skipped) said.push(h("span", { class: "case-note", text: `${row.skipped} skipped` }));
+            if (row.restless) said.push(h("span", { class: "case-note", text: "one changed its mind" }));
+            return h("span", { class: "detail-row" },
+              said.flatMap((part, index) => (index ? [" · ", part] : [part])));
           }
-          if (row.error) return h("span", { class: "case-error", text: row.error });
-          if (row.note) return h("span", { class: "case-note", text: row.note });
-          return "";
+          const said = [];
+          if (row.error) said.push(h("span", { class: "case-error", text: row.error }));
+          if (row.note) said.push(h("span", { class: "case-note", text: row.note }));
+          if (row.flips >= 3) said.push(h("span", { class: "case-note", text: `changed its mind ×${row.flips}` }));
+          if (row.attachments.length) {
+            said.push(h("span", { class: "chips" }, row.attachments.map((a) =>
+              h("button", { class: "chip", text: a.noun,
+                onclick: (e) => { e.stopPropagation(); openThing(a.id); } }))));
+          }
+          const serves = featureTag(row.features, (f) => openThing(f.id), 2);
+          if (serves) said.push(serves);
+          return said.length ? h("span", { class: "detail-row" }, said) : "";
         } },
-      { key: "evidence", label: "Evidence", width: "110px", class: "dim",
-        cell: (row) => {
-          if (row.group || !row.attachments.length) return "";
-          return h("span", { class: "chips" }, row.attachments.map((a) =>
-            h("button", { class: "chip", text: a.noun,
-              onclick: (e) => { e.stopPropagation(); openThing(a.id); } })));
-        } },
-      { key: "serves", label: "Serves", width: "minmax(120px, 1.4fr)", class: "nowrap",
-        cell: (row) => (row.group ? "" : featureTag(row.features, (f) => openThing(f.id), 2) ?? "") },
       { key: "duration", label: "Took", width: "76px", class: "dim num",
-        cell: (row) => (row.group ? "" : row.duration ?? "") },
+        cell: (row) => (row.suite ? "" : row.duration ?? "") },
     ],
-    onPeek: (row) => !row.group && openThing(row.id),
-    onPush: (row) => !row.group && openThing(row.id),
+    onPeek: (row) => !row.suite && openThing(row.id),
+    onPush: (row) => !row.suite && openThing(row.id),
     empty: "No test matches that.",
   });
   const _ = params;
 }
 
-function protocolRow(run) {
+/* Everything one case has to show, opened where it sits: what it is
+   called in full, how it went and for how long, what it left behind,
+   and which claim it serves. */
+function caseDetail(row) {
+  const facts = [];
+  if (row.duration) facts.push(h("span", { text: `took ${row.duration}` }));
+  if (row.retries) facts.push(h("span", { text: `retried ${row.retries}×` }));
+  if (row.flips >= 3) facts.push(h("span", { class: "case-note", text: `changed its mind ${row.flips}×` }));
+  if (row.when) facts.push(h("span", { text: row.when }));
+
+  return h("div", { class: "case-open" },
+    h("div", { class: "case-open-head" },
+      h("code", { class: "case-full", text: row.name }),
+      h("span", { class: `chip ${row.tone}`, text: row.result })),
+    row.error ? h("p", { class: "case-error", text: row.error }) : null,
+    row.note ? h("p", { class: "case-note", text: row.note }) : null,
+    facts.length ? h("p", { class: "pill-row" }, facts) : null,
+    // What it left behind, shown rather than named.
+    row.attachments.length
+      ? h("div", { class: "case-shots" }, row.attachments.map((shot) =>
+          h("button", { class: "chip-ref", onclick: () => openThing(shot.id) },
+            glyph(shot.glyph ?? "frame"), h("span", { text: shot.noun }),
+            h("span", { class: "chip-arrow", "aria-hidden": "true", text: "›" }))))
+      : null,
+    row.features.length
+      ? h("p", { class: "pill-row" }, "serves ", featureTag(row.features, (f) => openThing(f.id)))
+      : null,
+    h("button", { class: "row-link", text: "open its page",
+      onclick: (event) => { event.stopPropagation(); openThing(row.id); } }));
+}
+
+function protocolRow(run, sayEvidence = true) {
   const width = (n) => `${(n / Math.max(run.total, 1)) * 100}%`;
   return h("button", { class: "protocol", onclick: () => openThing(run.id) },
     h("span", { class: "when", text: run.when }),
@@ -1897,7 +1969,7 @@ function protocolRow(run) {
         ? h("p", { class: "session-meta",
             text: `named: ${run.named.slice(0, 6).map((c) => c.name).join(", ")}` })
         : null,
-      run.evidence ? h("p", { class: "session-meta", text: run.evidence }) : null),
+      run.evidence && sayEvidence ? h("p", { class: "session-meta", text: run.evidence }) : null),
     run.verified_change
       ? h("span", { class: "chip", text: `verified ${run.verified_change.label}` })
       : null);

@@ -1104,6 +1104,37 @@ button.row:hover { background: var(--accent-tint); }
 
 .case-error { color: var(--fault); font-size: 11.5px; margin: 4px 0 0; }
 .case-note { color: var(--signal); font-size: 11.5px; margin: 4px 0 0; }
+/* Everything a row has to say, on one line, in the order it matters. */
+.detail-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.detail-row .case-error, .detail-row .case-note { margin: 0; }
+/* A suite is a grouping, so its whole row is the handle. */
+.trow.holds { cursor: pointer; }
+.trow.holds .name { font-weight: 600; }
+/* A case opens under itself; while it is open it keeps the accent so
+   you can see which row the panel belongs to. */
+.trow.opens { cursor: pointer; }
+.trow.open { background: var(--accent-tint); }
+.trow-detail {
+  padding: 14px 18px 16px 58px; background: var(--sunk);
+  border-bottom: 1px solid var(--line);
+}
+.case-open { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.case-open-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.case-full { font-size: 12px; color: var(--ink); word-break: break-all; }
+.case-open .pill-row { gap: 10px; }
+.case-open .case-error, .case-open .case-note { margin: 0; }
+/* What the fold is holding, and the way back. */
+.fold-line {
+  display: block; width: 100%; text-align: left; padding: 10px 18px;
+  border-top: 1px solid var(--line); color: var(--accent); font-size: 11.5px;
+}
+.fold-line:hover { background: var(--accent-tint); }
+/* Runs share the table's shell rather than floating loose. */
+.runs .protocol { padding: 11px 18px; border-top: 1px solid var(--line); }
+.runs .protocol:first-child { border-top: 0; }
+.runs .protocol:hover { background: var(--accent-tint); }
+/* The frameworks ledger under the headline. */
+.ledger { margin: 0 0 18px; }
 .case-shots { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .case-shots img, .shot img { max-height: 130px; border-radius: 8px; border: 1px solid var(--line); display: block; }
 .bar-split { height: 5px; border-radius: 999px; background: var(--line); overflow: hidden; display: flex; max-width: 420px; margin-top: 6px; }

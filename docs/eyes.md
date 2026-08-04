@@ -127,7 +127,14 @@ record is claimed at all.
 **Tests** lists every recorded case with its verdict and its history,
 every imported run with what it named, and every file the twin classified
 as holding tests. A Playwright failure carries its error, its duration,
-its retries and its screenshot.
+its retries and its screenshot. A suite is a grouping, not a thing, so
+its whole row opens what it holds; a case then opens its own detail
+beneath itself — the full name, the verdict, what it took, what it left
+behind, which claim it serves — because a page you have to come back
+from costs you your place in the list. When something is failing or has
+been changing its mind, the suites where everything passes wait behind
+one line; when nothing is, there is no "more interesting" to lead with
+and the whole list stands.
 
 **Artifacts** has a shelf per kind — decisions as a reading list, plans,
 documents, agent rules, **Pictures & recordings** for media and the tour,

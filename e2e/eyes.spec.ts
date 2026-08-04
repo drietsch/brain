@@ -72,6 +72,23 @@ test("proof holds three registers under one roof", async ({ page }) => {
   await expect(page.locator(".shelves button").first()).toBeVisible();
 });
 
+test("a suite opens its cases, and a case opens itself", async ({ page }) => {
+  // Both of these crashed the client once: every case carries a `group`
+  // naming its suite, and the truthy string made a case row render as
+  // if it were a suite. Nothing expanded a suite until this test, so
+  // the console stayed clean and the bug stayed hidden.
+  await page.goto("/#proof?tab=tests");
+  await settled(page);
+  const suite = page.locator(".trow.holds").first();
+  await suite.click();
+  await expect(page.locator(".trow.child").first()).toBeVisible();
+  await page.locator(".trow.child").first().click();
+  const opened = page.locator(".trow-detail");
+  await expect(opened).toBeVisible();
+  // The case says what it is called in full and how it went.
+  await expect(opened.locator(".case-full")).not.toBeEmpty();
+});
+
 test("search reaches through symbols to the declaring file", async ({ page }) => {
   await page.goto("/");
   await page.locator("#open-find").click();

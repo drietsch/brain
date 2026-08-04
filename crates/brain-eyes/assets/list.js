@@ -108,9 +108,13 @@ export function table(host, spec) {
     sort: spec.sort?.[0]?.key ?? null,
     dir: 1,
     expanded: new Set(spec.expandedByDefault ?? []),
+    opened: new Set(),
+    folded: true,
     active: -1,
   };
   for (const facet of spec.facets ?? []) state.facets[facet.id] = new Set();
+  const anyFacetChosen = () =>
+    Object.values(state.facets).some((chosen) => chosen.size > 0);
 
   const grid = spec.columns.map((c) => c.width ?? "1fr").join(" ");
 
@@ -138,6 +142,13 @@ export function table(host, spec) {
 
   const visibleRoots = () => {
     let rows = spec.rows.filter(survives);
+    // A list of forty identical "all passing" lines answers no question.
+    // Rows the caller marks as uneventful stay behind one honest line
+    // until someone asks for them — unless a filter is already narrowing
+    // the list, in which case the person is doing the asking.
+    if (spec.fold && state.folded && !state.text && !anyFacetChosen()) {
+      rows = rows.filter((row) => !spec.fold.when(row));
+    }
     const sort = spec.sort?.find((s) => s.key === state.sort);
     if (sort) {
       rows = [...rows].sort((a, b) => {
@@ -214,10 +225,14 @@ export function table(host, spec) {
         h("option", { value: s.key, selected: s.key === state.sort || null, text: s.label }))));
     }
     const shown = flat.length;
+    // A fold is a disclosure, not a filter: while nothing is being
+    // filtered the tally counts what exists, so it never reads "0 of 42"
+    // next to a line offering the forty-two.
+    const filtering = Boolean(state.text) || anyFacetChosen();
     controls.push(h("span", {
-      class: "tally-bar", "data-empty": shown === 0 ? "true" : "false",
+      class: "tally-bar", "data-empty": filtering && shown === 0 ? "true" : "false",
       // "1 features" is the kind of sloppiness this product notices.
-      text: shown === total
+      text: !filtering || shown === total
         ? `${total} ${total === 1 ? (spec.one ?? (spec.noun ?? "rows").replace(/s$/, "")) : (spec.noun ?? "rows")}`
         : `${shown} of ${total}`,
     }));
@@ -240,11 +255,33 @@ export function table(host, spec) {
             : null);
       }));
 
-    const body = flat.map((entry, position) => row(entry, position));
-    parts.push(h("div", { class: "panel" }, head,
+    // A leaf that has more to say says it here, under itself, rather
+    // than on a page that costs you your place in the list.
+    const body = flat.flatMap((entry, position) => {
+      const node = row(entry, position);
+      if (!spec.detailOf || !state.opened.has(entry.key)) return [node];
+      const detail = spec.detailOf(entry.row);
+      return detail ? [node, h("div", { class: "trow-detail" }, detail)] : [node];
+    });
+    // What the fold is holding back, said out loud rather than implied
+    // by a number that does not add up.
+    const hidden = spec.fold
+      ? spec.rows.filter(survives).filter((r) => spec.fold.when(r)).length
+      : 0;
+    const foldLine = spec.fold && hidden && !state.text && !anyFacetChosen()
+      ? h("button", { class: "fold-line",
+          onclick: () => { state.folded = !state.folded; draw(); } },
+        state.folded ? spec.fold.label(hidden) : spec.fold.close ?? "fold them away")
+      : null;
+    // Column heads over an empty grid label nothing.
+    parts.push(h("div", { class: "panel" },
+      shown ? head : null,
       shown
         ? body
-        : h("p", { class: "empty", text: spec.empty ?? "Nothing matches that." })));
+        : (state.folded && hidden
+            ? null
+            : h("p", { class: "empty", text: spec.empty ?? "Nothing matches that." })),
+      foldLine));
 
     host.replaceChildren(...parts);
   }
@@ -254,12 +291,28 @@ export function table(host, spec) {
     const expanded = state.expanded.has(key);
 
     const node = h("div", {
-      class: `trow${depth ? " child" : ""}`,
+      // A row that holds other rows opens on its own click: hunting for
+      // a nine-pixel chevron is not an affordance.
+      class: `trow${depth ? " child" : ""}${children.length && spec.clickExpands ? " holds" : ""}`
+        + (!children.length && spec.detailOf ? " opens" : "")
+        + (state.opened.has(key) ? " open" : ""),
       style: `grid-template-columns:${grid}`,
       role: "row", tabindex: "-1",
       "aria-selected": position === state.active ? "true" : "false",
       "aria-expanded": children.length ? String(expanded) : null,
-      onclick: () => { state.active = position; spec.onPeek?.(data); draw(); },
+      onclick: () => {
+        state.active = position;
+        // Where a parent row has no page of its own — a test suite is a
+        // grouping, not a thing — its click opens what it holds.
+        if (children.length && spec.clickExpands) {
+          expanded ? state.expanded.delete(key) : state.expanded.add(key);
+        } else if (!children.length && spec.detailOf) {
+          state.opened.has(key) ? state.opened.delete(key) : state.opened.add(key);
+        } else {
+          spec.onPeek?.(data);
+        }
+        draw();
+      },
       ondblclick: () => spec.onPush?.(data),
     });
 
