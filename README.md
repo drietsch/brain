@@ -125,7 +125,7 @@ cargo run -p brain -- twin insights twin/self   # churn, hubs, growth, notes, de
 cargo run -p brain -- wake twin/self            # orientation: last sleep, the delta since, attention, stale, in-flight
 cargo run -p brain -- attend twin/self          # attention: what matters now, ranked with reasons
 cargo run -p brain -- spine twin/self           # what each feature reaches, what nothing claims, what nothing corroborates
-cargo run -p brain -- related twin/self/crates/brain-observe/src/twin.rs  # association, with why
+cargo run -p brain -- related twin/self/crates/brain-observe/src/twin/reads.rs  # association, with why
 cargo run -p brain -- before twin/self/crates/brain-core/src/object.rs  # pre-edit briefing: write access, blast radius, tests, docs, churn, notes
 cargo run -p brain -- next twin/self            # the future leg: ranked work queue — failing, unsettled, rotting, unfinished
 cargo run -p brain -- find twin/self "effect boundary"   # where is the thing that does X — symbols, docs, notes, ranked by centrality

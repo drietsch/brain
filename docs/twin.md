@@ -53,7 +53,9 @@ brain observations twin/app/src/main.rs      # full observation timeline
 ## The refresh contract
 
 The observer that writes all of this lives in
-`crates/brain-observe/src/twin.rs`.
+`crates/brain-observe/src/twin/` — reading the workspace (`refresh.rs`),
+concluding things from it (`insights.rs`), the observation primitives the
+rest is built on (`reads.rs`), import resolution, notes, and deliverables.
 
 - **Only drift is recorded.** Unchanged files write nothing; an immediately
   repeated refresh writes zero objects. Changed and new files get fresh

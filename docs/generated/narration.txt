@@ -1,7 +1,7 @@
 This is the live tour of twin self, generated directly from the semantic graph.
-The twin currently tracks 222 files, 1503 symbols, and 2024 relations.
+The twin currently tracks 221 files, 1469 symbols, and 2058 relations.
 229 tests are declared; the last imported run had 7 of 7 passing — all passing.
 The feature matrix shows 17 registered features, 17 of them meeting the full definition of done.
 31 architecture decisions are active, each linked to the files it concerns.
-3 document(s) have gone stale and need attention.
+5 document(s) have gone stale and need attention.
 Everything you just heard was a query, not prose — regenerate this tour any time with one command.

@@ -79,12 +79,13 @@ brain feature link twin/self index-and-cortex documented_in architecture --kind 
 
 ```bash
 brain feature add twin/self semantic-twin --title "Semantic twin" --status active --part-of brain
-brain feature link twin/self semantic-twin implemented_by crates/brain-observe/src/twin.rs
+brain feature link twin/self semantic-twin implemented_by crates/brain-observe/src/twin/refresh.rs
+brain feature link twin/self semantic-twin implemented_by crates/brain-observe/src/twin/reads.rs
 brain feature link twin/self semantic-twin implemented_by crates/brain-observe/src/docs.rs
 brain feature link twin/self semantic-twin implemented_by crates/brain-observe/src/symbols.rs
 brain feature link twin/self semantic-twin implemented_by crates/brain-observe/src/backfill.rs
 brain feature link twin/self semantic-twin implemented_by crates/brain-observe/src/baseline.rs
-brain feature link twin/self semantic-twin tested_by crates/brain-observe/src/twin.rs
+brain feature link twin/self semantic-twin tested_by crates/brain-observe/src/twin/tests.rs
 brain feature link twin/self semantic-twin tested_by crates/brain-observe/src/baseline.rs
 brain feature link twin/self semantic-twin tested_by crates/brain-observe/src/docs.rs
 brain feature link twin/self semantic-twin tested_by crates/brain-observe/src/symbols.rs
