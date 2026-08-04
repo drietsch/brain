@@ -731,122 +731,92 @@ views.structure = async (params) => {
   state.snapshot = data.snapshot;
   paintChrome(data.snapshot);
 
+  // A module's dependencies read better as a sentence in its own panel
+  // than as an arc across the whole diagram: the anatomy already says
+  // what depends on what by putting a block above what carries it.
+  const labels = new Map(data.blocks.map((block) => [block.id, block.label]));
+  const carries = new Map();
+  for (const edge of data.edges) {
+    if (!labels.has(edge.from) || !labels.has(edge.to)) continue;
+    if (!carries.has(edge.from)) carries.set(edge.from, []);
+    carries.get(edge.from).push(labels.get(edge.to));
+  }
+
   const detail = h("div", { class: "map-detail", hidden: true });
-  const showBlock = async (block) => {
+  const head = (block) => [
+    h("h2", { text: block.label }),
+    h("p", { text: `${block.sentence}. ${block.facts.join(". ")}.` }),
+    carries.has(block.id)
+      ? h("p", { class: "map-carries",
+          text: `It rests on ${carries.get(block.id).join(", ")}.` })
+      : null,
+  ];
+  const showBlock = async (block, node) => {
+    for (const other of stage.querySelectorAll(".map-block.on")) other.classList.remove("on");
+    node.classList.add("on");
     detail.hidden = false;
-    detail.replaceChildren(
-      h("h2", { text: block.label }),
-      h("p", { text: `${block.sentence}. ${block.facts.join(". ")}.` }),
-      h("p", { class: "loading", text: "Reading its files…" }));
+    detail.replaceChildren(...head(block), h("p", { class: "loading", text: "Reading its files…" }));
     const files = await api(`/api/find?q=${encodeURIComponent(block.path)}&limit=60`);
-    detail.replaceChildren(
-      h("h2", { text: block.label }),
-      h("p", { text: `${block.sentence}. ${block.facts.join(". ")}.` }),
-      h("ul", {}, files.hits
-        .filter((hit) => hit.target.kind === "source_file")
-        .map((hit) => h("li", {}, h("button", {
-          text: hit.target.label.replace(`${block.path}/`, ""),
-          onclick: () => openThing(hit.target.id),
-        })))));
+    const hits = files.hits.filter((hit) => hit.target.kind === "source_file");
+    detail.replaceChildren(...head(block),
+      hits.length
+        ? h("div", { class: "map-files" }, hits.map((hit) =>
+            h("button", { class: "chip-ref", onclick: () => openThing(hit.target.id) },
+              glyph("block"),
+              h("span", { text: hit.target.label.replace(`${block.path}/`, "") }),
+              h("span", { class: "chip-arrow", "aria-hidden": "true", text: "›" }))))
+        : h("p", { class: "map-hint", text: "Nothing under this path is recorded as a file." }));
   };
 
-  stage.replaceChildren(h("div", { class: "map-wrap" },
-    h("div", { class: "map-head" },
-      h("div", {},
-        h("h1", { text: data.lens_label }),
-        h("p", { text: `${data.lens_note} ${data.sentence}` })),
-      h("div", { class: "lenses" },
-        ...data.lenses.map(([id, label]) =>
-          h("button", { class: id === data.lens ? "on" : "", text: label,
-            onclick: () => go("structure", { lens: id }) })),
-        h("button", { text: "3D (MRI)",
-          onclick: () => go("structure", { lens: "mri" }) }))),
-    h("div", { class: "map-field" }, mapSvg(data, showBlock)),
-    detail));
+  stage.replaceChildren(h("div", { class: "page map-wrap" },
+    h("p", { class: "kicker" }, icon("map"), "Explore · Structure"),
+    h("h1", { class: "lede", text: data.lens_label }),
+    h("p", { class: "page-note", text: data.sentence }),
+    h("div", { class: "lenses" },
+      ...data.lenses.map(([id, label]) =>
+        h("button", { class: id === data.lens ? "on" : "", text: label,
+          onclick: () => go("structure", { lens: id }) })),
+      h("button", { text: "3D (MRI)",
+        onclick: () => go("structure", { lens: "mri" }) })),
+    h("p", { class: "map-hint", text: data.lens_note }),
+    mapField(data, showBlock),
+    detail,
+    h("p", { class: "map-hint", text: "Click a block to see what lives in it; its files open their dossiers." })));
 };
 
-function mapSvg(data, onPick) {
+/* The anatomy, laid out rather than drawn: one row per dependency layer,
+   deepest at the bottom, each block sized by how much lives in it and
+   tinted only when the lens found something there. No arcs — a block
+   sits above what carries it, which is the same fact with less ink. */
+function mapField(data, onPick) {
   const layers = new Map();
   for (const block of data.blocks) {
     if (!layers.has(block.layer)) layers.set(block.layer, []);
     layers.get(block.layer).push(block);
   }
-  const ordered = [...layers.keys()].sort((a, b) => b - a); // deepest at the bottom
-  const width = 1000;
-  const rowHeight = 118;
-  const height = Math.max(220, ordered.length * rowHeight + 40);
-  const positions = new Map();
-
-  ordered.forEach((layer, rowIndex) => {
-    const row = layers.get(layer).slice().sort((a, b) => b.files - a.files);
-    const total = row.reduce((sum, block) => sum + Math.max(1, Math.sqrt(block.files)), 0);
-    let x = 40;
-    const usable = width - 80 - (row.length - 1) * 14;
-    for (const block of row) {
-      const w = Math.max(120, (Math.max(1, Math.sqrt(block.files)) / total) * usable);
-      const y = rowIndex * rowHeight + 34;
-      positions.set(block.id, { x, y, w, h: 74, block });
-      x += w + 14;
-    }
-  });
-
-  const tone = (block) => {
-    const base = { good: [46, 125, 91], watch: [168, 106, 18], bad: [176, 58, 52], quiet: [70, 92, 116] }[block.tone] ||
-      [70, 92, 116];
-    const weight = 0.18 + (block.value / 100) * 0.5;
-    return `rgba(${base[0]}, ${base[1]}, ${base[2]}, ${weight.toFixed(2)})`;
-  };
-
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", data.sentence);
-
-  const add = (tag, attrs, textContent) => {
-    const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
-    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
-    if (textContent !== undefined) node.textContent = textContent;
-    return node;
-  };
-
-  for (const edge of data.edges) {
-    const from = positions.get(edge.from);
-    const to = positions.get(edge.to);
-    if (!from || !to) continue;
-    const x1 = from.x + from.w / 2;
-    const y1 = from.y + from.h;
-    const x2 = to.x + to.w / 2;
-    const y2 = to.y;
-    const mid = (y1 + y2) / 2;
-    svg.append(add("path", {
-      class: "mb-edge",
-      d: `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`,
-      "stroke-width": Math.min(3, 0.6 + edge.weight * 0.25),
-    }));
-  }
-
-  ordered.forEach((layer, rowIndex) => {
-    svg.append(add("text", {
-      class: "map-layer-label", x: 6, y: rowIndex * rowHeight + 26,
-    }, rowIndex === ordered.length - 1 ? "foundation" : `layer ${layer}`));
-  });
-
-  for (const { x, y, w, h: boxHeight, block } of positions.values()) {
-    const group = add("g", { class: "mb-block", tabindex: "0", role: "button" });
-    group.append(add("rect", { x, y, width: w, height: boxHeight, rx: 8, fill: tone(block) }));
-    group.append(add("text", { class: "name", x: x + 14, y: y + 27 }, block.label));
-    group.append(add("text", { class: "meta", x: x + 14, y: y + 46 },
-      `${block.files} files · ${block.symbols} defs`));
-    group.append(add("text", { class: "meta", x: x + 14, y: y + 62 },
-      block.sentence.length > Math.floor(w / 6.2)
-        ? `${block.sentence.slice(0, Math.floor(w / 6.2))}…`
-        : block.sentence));
-    const pick = () => onPick(block);
-    group.addEventListener("click", pick);
-    group.addEventListener("keydown", (event) => { if (event.key === "Enter") pick(); });
-    svg.append(group);
-  }
-  return svg;
+  const ordered = [...layers.keys()].sort((a, b) => b - a);
+  return h("div", { class: "map-field" }, ordered.map((layer, index) =>
+    h("div", { class: "map-layer" },
+      h("p", { class: "map-layer-name",
+        text: index === ordered.length - 1 ? "foundation" : `layer ${layer}` }),
+      h("div", { class: "map-blocks" }, layers.get(layer)
+        .slice()
+        .sort((a, b) => b.files - a.files)
+        .map((block) => {
+          const node = h("button", {
+            class: "map-block", "data-tone": block.tone,
+            style: `flex-grow:${Math.max(1, Math.sqrt(block.files)).toFixed(2)}`,
+            onclick: () => onPick(block, node),
+          },
+            h("strong", { class: "map-block-name", text: block.label }),
+            h("code", { class: "map-block-meta",
+              // A quiet block says how much it holds; a block the lens
+              // marked says what it found instead.
+              text: block.tone === "quiet"
+                ? `${block.files} files · ${block.symbols} defs`
+                : block.sentence }));
+          return node;
+        })))));
 }
 
 /* --------------------------------------------------------------- timeline */

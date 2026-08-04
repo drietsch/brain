@@ -1258,60 +1258,68 @@ details.details dd { margin: 0; color: var(--body); word-break: break-all; }
 .inflight-why { margin: 4px 0 0; color: var(--faint); font-size: 11px; }
 
 /* ==================================================================== map
-   The v4 rewrite of this stylesheet dropped every rule the Map surface
-   used. The visible result: an SVG <path> fills by default, so each
-   dependency curve rendered as a large black blob across the diagram.
-   Restored here, with the geometry rules that make position mean
-   something (ADR-024): a block's row is its dependency layer, and an
-   edge runs from the module that depends to the one depended on. */
-.map-wrap { display: flex; flex-direction: column; gap: 16px; }
-.map-head { display: flex; gap: 20px; align-items: flex-start; justify-content: space-between; }
-.map-head h1 { font: 400 22px/1.25 var(--judgment); margin: 0 0 6px; }
-.map-head p { margin: 0; color: var(--meta); font-size: 12px; max-width: 78ch; }
-
-.lenses { display: flex; gap: 6px; flex: none; }
+   The anatomy is laid out, not drawn (ADR-024): a block's row is its
+   dependency layer and it never points upward, so position carries the
+   relationship and no arc has to cross the diagram to say it. What a
+   module rests on is a sentence in its own panel instead. */
+.map-wrap { display: flex; flex-direction: column; }
+.lenses { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
 .lenses button {
-  padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px;
   color: var(--meta); font-size: 11.5px; white-space: nowrap;
+  transition: background-color var(--t-nudge), border-color var(--t-nudge), color var(--t-nudge);
 }
 .lenses button:hover { border-color: var(--control); color: var(--ink); }
-.lenses button.on { border-color: var(--trace); color: var(--trace); background: var(--trace-fill); }
+.lenses button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-tint); }
 
 .map-field {
-  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 10px; overflow-x: auto;
+  background: linear-gradient(180deg, var(--paper), var(--surface-2));
+  border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow); padding: 22px 24px; margin: 4px 0 12px;
 }
-.map-field svg { display: block; width: 100%; height: auto; min-width: 720px; }
-
-/* A dependency, not a shape. Without `fill: none` the browser closes the
-   curve and paints the area under it. */
-.mb-edge { fill: none; stroke: var(--line); stroke-opacity: .85; }
-
-.mb-block { cursor: pointer; }
-.mb-block rect { stroke: var(--line); stroke-width: 1; }
-.mb-block:hover rect, .mb-block:focus-visible rect { stroke: var(--trace); stroke-width: 1.5; }
-.mb-block .name { fill: var(--ink); font: 500 13px/1 var(--ui); }
-.mb-block .meta { fill: var(--meta); font: 400 11px/1 var(--ui); }
-.map-layer-label {
-  fill: var(--faint); font: 500 9.5px/1 var(--record);
-  text-transform: uppercase; letter-spacing: .1em;
+/* One row per layer, separated the way a section is: a dashed hairline. */
+.map-layer {
+  display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 16px;
+  align-items: center; padding: 14px 0; border-top: 1px dashed var(--line);
 }
+.map-layer-name {
+  margin: 0; font: 600 10px/1.4 var(--ui); letter-spacing: .06em;
+  text-transform: uppercase; color: var(--faint);
+}
+.map-blocks { display: flex; gap: 10px; flex-wrap: wrap; }
+.map-block {
+  flex: 1 1 0%; min-width: 150px; text-align: left; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+  background: var(--page);
+  transition: background-color var(--t-nudge), border-color var(--t-nudge);
+}
+.map-block:hover { border-color: var(--control); }
+.map-block.on { border-color: var(--accent); background: var(--accent-tint); }
+.map-block[data-tone="watch"] { background: var(--signal-fill); }
+.map-block[data-tone="bad"] { background: var(--fault-fill); }
+.map-block[data-tone="good"] { background: var(--proof-fill); }
+.map-block-name {
+  display: block; font: 600 12.5px/1.4 var(--ui); color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.map-block-meta {
+  display: block; margin-top: 2px; font-size: 10.5px; color: var(--meta);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.map-block[data-tone="watch"] .map-block-meta { color: var(--signal); }
+.map-block[data-tone="bad"] .map-block-meta { color: var(--fault); }
+.map-block[data-tone="good"] .map-block-meta { color: var(--proof); }
+.map-hint { margin: 0 0 6px; font-size: 11.5px; color: var(--faint); }
 
 .map-detail {
-  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 14px 16px;
+  background: linear-gradient(180deg, var(--paper), var(--surface-2));
+  border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow); padding: 16px 20px; margin-bottom: 12px;
 }
 .map-detail h2 { font: 400 16px/1.3 var(--judgment); margin: 0 0 4px; }
 .map-detail > p { margin: 0 0 10px; color: var(--meta); font-size: 12px; }
-.map-detail ul {
-  margin: 0; padding: 0; list-style: none;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px;
-}
-.map-detail li button {
-  width: 100%; text-align: left; padding: 4px 6px; border-radius: 5px;
-  font: 400 11.5px/1.5 var(--record); color: var(--body);
-}
-.map-detail li button:hover { background: var(--wash); color: var(--ink); }
+.map-carries { color: var(--body); }
+.map-files { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* ------------------------------------------------------------ restored
    Other rules the same rewrite dropped. Each is used by a live surface. */

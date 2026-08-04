@@ -27,7 +27,11 @@ when the recording no longer matches the graph.
 its risk lens composes how often a file changes, how widely it is
 imported, and whether any test would catch a break, weighted up when the
 documents about it have drifted too; the MRI draws the whole anatomy in
-three dimensions, stacked by what depends on what.
+three dimensions, stacked by what depends on what. The Map is laid out
+rather than drawn: a module sits on its dependency layer and never above
+what carries it, so the arrangement is the relationship and no arc has
+to cross the diagram to repeat it — what a module rests on is a sentence
+in its own panel, beside the files it holds.
 
 **Search** ranks with the graph, not just labels: a symbol's name finds
 the file that declares it, a session's note vouches for its subject, and
